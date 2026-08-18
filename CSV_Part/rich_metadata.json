@@ -1,0 +1,2254 @@
+[
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "account_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "account_number",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "ACC101801",
+            "ACC100523",
+            "ACC101444",
+            "ACC100281",
+            "ACC100383"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "account_name",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "Commercial Account 1214",
+            "Commercial Account 1479",
+            "Commercial Account 1067",
+            "Commercial Account 0613",
+            "Commercial Account 0561"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "industry_type",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "Technology",
+            "Hospitality",
+            "Construction",
+            "Healthcare",
+            "Transportation"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "state_code",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "IL",
+            "CA",
+            "FL",
+            "NY",
+            "TX"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "account_status",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "CLOSED",
+            "ACTIVE",
+            "INACTIVE"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "created_date",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2022-05-20",
+            "2023-07-07",
+            "2024-02-02",
+            "2021-10-08",
+            "2021-07-28"
+        ]
+    },
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "dataset": "ACCOUNT",
+        "column_name": "updated_timestamp",
+        "datatype": "String",
+        "related_columns": [
+            "account_id",
+            "account_number",
+            "account_name",
+            "industry_type",
+            "state_code",
+            "account_status",
+            "created_date",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2021-08-21 09:00:00",
+            "2024-07-26 09:00:00",
+            "2021-06-04 09:00:00",
+            "2021-12-31 09:00:00",
+            "2023-05-15 09:00:00"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "claim_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "policy_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "claim_number",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "CLM0000353",
+            "CLM0000777",
+            "CLM0001499",
+            "CLM0001102",
+            "CLM0001546"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "claim_date",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "2023-03-01",
+            "2023-04-01",
+            "2022-12-03",
+            "2022-06-20",
+            "2023-12-15"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "claim_status",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "REJECTED",
+            "UNDER_REVIEW",
+            "CLOSED",
+            "OPEN",
+            "APPROVED"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "claim_type",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "Fire",
+            "Windstorm",
+            "Glass",
+            "Collision",
+            "Theft"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "paid_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            10.8,
+            19.22,
+            21.93,
+            23.71,
+            46.27
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "reserve_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            513.3,
+            516.56,
+            524.53,
+            528.2,
+            529.41
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "recovery_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            0.92,
+            3.42,
+            5.43,
+            6.82,
+            7.89
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "incurred_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            -2015.91,
+            -1645.67,
+            -1607.96,
+            -1584.46,
+            -1510.75
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "loss_date",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "2022-02-23",
+            "2023-10-09",
+            "2023-01-28",
+            "2023-02-02",
+            "2023-10-19"
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "dataset": "CLAIMS",
+        "column_name": "reported_date",
+        "datatype": "String",
+        "related_columns": [
+            "claim_id",
+            "policy_id",
+            "claim_number",
+            "claim_date",
+            "claim_status",
+            "claim_type",
+            "paid_amount",
+            "reserve_amount",
+            "recovery_amount",
+            "incurred_amount",
+            "loss_date",
+            "reported_date"
+        ],
+        "sample_values": [
+            "2024-02-07",
+            "2022-05-25",
+            "2022-01-16",
+            "2022-07-02",
+            "2022-12-06"
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "policy_period_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_code",
+        "datatype": "String",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            "CVG413",
+            "CVG1918",
+            "CVG597",
+            "CVG074",
+            "CVG147"
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_name",
+        "datatype": "String",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            "Theft",
+            "Natural Disaster",
+            "Business Interruption",
+            "Comprehensive",
+            "Third Party Liability"
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "limit_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            104018.8,
+            105661.77,
+            106766.61,
+            112683.46,
+            116743.65
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "deductible_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            1863.09,
+            2069.6,
+            2171.71,
+            2376.88,
+            2495.38
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_start_date",
+        "datatype": "String",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            "2023-09-16",
+            "2023-10-15",
+            "2024-01-04",
+            "2024-03-09",
+            "2022-05-28"
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_end_date",
+        "datatype": "String",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            "2024-05-11",
+            "2025-05-05",
+            "2023-01-15",
+            "2023-02-01",
+            "2025-01-16"
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "dataset": "COVERAGE",
+        "column_name": "coverage_status",
+        "datatype": "String",
+        "related_columns": [
+            "coverage_id",
+            "policy_period_id",
+            "coverage_code",
+            "coverage_name",
+            "limit_amount",
+            "deductible_amount",
+            "coverage_start_date",
+            "coverage_end_date",
+            "coverage_status"
+        ],
+        "sample_values": [
+            "CANCELLED",
+            "SUSPENDED",
+            "EXPIRED",
+            "ACTIVE"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "job_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "policy_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "job_type",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "Endorsement",
+            "Renewal",
+            "Reinstatement",
+            "New Business",
+            "Cancellation"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "job_date",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "2022-05-17",
+            "2023-01-09",
+            "2022-04-27",
+            "2024-05-06",
+            "2022-07-10"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "created_ts",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "2022-11-30 09:00:00",
+            "2023-04-19 09:00:00",
+            "2022-08-18 09:00:00",
+            "2024-03-13 09:00:00",
+            "2022-10-05 09:00:00"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "job_number",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "JOB001255",
+            "JOB001285",
+            "JOB001979",
+            "JOB000011",
+            "JOB001365"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "job_status",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "CANCELLED",
+            "IN_PROGRESS",
+            "COMPLETED",
+            "PENDING"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "submission_date",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "2022-08-09",
+            "2023-09-11",
+            "2023-09-28",
+            "2024-06-06",
+            "2022-07-01"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "effective_date",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "2022-06-02",
+            "2022-10-21",
+            "2023-01-21",
+            "2023-03-05",
+            "2023-07-12"
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "dataset": "JOB",
+        "column_name": "expiration_date",
+        "datatype": "String",
+        "related_columns": [
+            "job_id",
+            "policy_id",
+            "job_type",
+            "job_date",
+            "created_ts",
+            "job_number",
+            "job_status",
+            "submission_date",
+            "effective_date",
+            "expiration_date"
+        ],
+        "sample_values": [
+            "2023-02-15",
+            "2025-05-29",
+            "2023-05-07",
+            "2023-01-17",
+            "2025-04-12"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "location_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "policy_period_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "location_number",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "LOC000830",
+            "LOC000919",
+            "LOC001725",
+            "LOC001589",
+            "LOC000724"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "address_line1",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "626 Main Street",
+            "298 Main Street",
+            "221 Main Street",
+            "872 Main Street",
+            "262 Main Street"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "address_line2",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "Suite 16",
+            "Suite 42",
+            "Suite 27",
+            "Suite 24",
+            "Suite 3"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "city",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "Jaipur",
+            "Ahmedabad",
+            "Kochi",
+            "Bengaluru",
+            "Hyderabad"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "state_code",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "DL",
+            "WB",
+            "KA",
+            "KL",
+            "TN"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "zip_code",
+        "datatype": "Int64",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            600002,
+            600003,
+            600004,
+            600005,
+            600006
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "country_code",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "US",
+            "IN"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "occupancy_type",
+        "datatype": "String",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            "TENANT_OCCUPIED",
+            "OWNER_OCCUPIED",
+            "UNDER_CONSTRUCTION",
+            "VACANT"
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "building_value",
+        "datatype": "Float64",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            507915.82,
+            511151.97,
+            513328.18,
+            524982.57,
+            532979.93
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "dataset": "LOCATION",
+        "column_name": "contents_value",
+        "datatype": "Float64",
+        "related_columns": [
+            "location_id",
+            "policy_period_id",
+            "location_number",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state_code",
+            "zip_code",
+            "country_code",
+            "occupancy_type",
+            "building_value",
+            "contents_value"
+        ],
+        "sample_values": [
+            50840.09,
+            53345.86,
+            55377.2,
+            57237.1,
+            67192.81
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "policy_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "account_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "producer_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "policy_number",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "POL100579",
+            "POL100717",
+            "POL101233",
+            "POL101874",
+            "POL100469"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "product_code",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "AUTO",
+            "FIRE",
+            "COMM",
+            "HOME",
+            "LIABILITY"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "policy_status",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "CANCELLED",
+            "EXPIRED",
+            "ACTIVE"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "effective_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2024-07-28",
+            "2024-09-03",
+            "2023-04-28",
+            "2024-11-03",
+            "2023-06-21"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "expiration_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2025-03-07",
+            "2025-05-07",
+            "2024-08-28",
+            "2025-11-08",
+            "2024-07-01"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "cancellation_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2023-07-11",
+            "2024-01-14",
+            "2024-07-20",
+            "2024-04-13",
+            "2024-05-16"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "cancellation_reason",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "Non-payment",
+            "Customer Request",
+            "Underwriting Decision"
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "dataset": "POLICY",
+        "column_name": "updated_timestamp",
+        "datatype": "String",
+        "related_columns": [
+            "policy_id",
+            "account_id",
+            "producer_id",
+            "policy_number",
+            "product_code",
+            "policy_status",
+            "effective_date",
+            "expiration_date",
+            "cancellation_date",
+            "cancellation_reason",
+            "updated_timestamp"
+        ],
+        "sample_values": [
+            "2024-02-06 10:00:00",
+            "2024-07-26 10:00:00",
+            "2024-03-29 10:00:00",
+            "2025-08-26 10:00:00",
+            "2025-11-29 10:00:00"
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "policy_period_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "policy_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "job_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "term_number",
+        "datatype": "Int64",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "effective_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            "2022-12-12",
+            "2023-07-29",
+            "2023-08-06",
+            "2024-05-11",
+            "2022-03-19"
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "expiration_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            "2023-09-19",
+            "2024-11-20",
+            "2023-05-17",
+            "2023-06-22",
+            "2023-12-05"
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "period_status",
+        "datatype": "String",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            "ENDED",
+            "EXPIRED",
+            "CANCELLED",
+            "ACTIVE"
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "written_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            "2022-09-21",
+            "2023-12-29",
+            "2022-03-20",
+            "2022-12-11",
+            "2023-05-22"
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "dataset": "POLICY_PERIOD",
+        "column_name": "transaction_effective_date",
+        "datatype": "String",
+        "related_columns": [
+            "policy_period_id",
+            "policy_id",
+            "job_id",
+            "term_number",
+            "effective_date",
+            "expiration_date",
+            "period_status",
+            "written_date",
+            "transaction_effective_date"
+        ],
+        "sample_values": [
+            "2022-05-01",
+            "2022-10-26",
+            "2023-08-21",
+            "2024-05-13",
+            "2022-08-10"
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "premium_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "policy_period_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "written_premium",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            5041.65,
+            5243.38,
+            5323.97,
+            5354.77,
+            5387.98
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "earned_premium",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            2275.82,
+            2453.24,
+            2714.41,
+            2825.79,
+            2915.52
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "unearned_premium",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            543.07,
+            575.74,
+            619.28,
+            653.73,
+            682.93
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "transaction_date",
+        "datatype": "String",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            "2022-05-20",
+            "2023-03-24",
+            "2022-11-14",
+            "2023-10-16",
+            "2023-08-27"
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "currency_code",
+        "datatype": "String",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            "INR",
+            "USD"
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "commission_rate",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            5.0,
+            5.01,
+            5.03,
+            5.04,
+            5.05
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "commission_amount",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            308.67,
+            382.39,
+            421.27,
+            424.18,
+            443.27
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "operating_expense",
+        "datatype": "Float64",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            169.09,
+            242.15,
+            258.23,
+            271.49,
+            273.4
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "dataset": "PREMIUM",
+        "column_name": "as_of_date",
+        "datatype": "String",
+        "related_columns": [
+            "premium_id",
+            "policy_period_id",
+            "written_premium",
+            "earned_premium",
+            "unearned_premium",
+            "transaction_date",
+            "currency_code",
+            "commission_rate",
+            "commission_amount",
+            "operating_expense",
+            "as_of_date"
+        ],
+        "sample_values": [
+            "2022-10-25",
+            "2022-06-08",
+            "2024-04-17",
+            "2022-11-26",
+            "2024-06-08"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "producer_id",
+        "datatype": "Int64",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            1,
+            2,
+            3,
+            4,
+            5
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "producer_code",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "PRD001747",
+            "PRD000503",
+            "PRD000788",
+            "PRD000826",
+            "PRD001309"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "producer_name",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "Vision Risk",
+            "Infinity Agency",
+            "Pioneer Agency",
+            "Shield Partners",
+            "Prime Brokers"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "commission_rate",
+        "datatype": "Float64",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            2.51,
+            2.52,
+            2.53,
+            2.54,
+            2.56
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "producer_type",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "AGENCY",
+            "AGENT",
+            "INDIVIDUAL",
+            "BROKER"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "state_code",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "AP",
+            "DL",
+            "TS",
+            "TN",
+            "KL"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "producer_status",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "SUSPENDED",
+            "TERMINATED",
+            "ACTIVE",
+            "INACTIVE"
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "dataset": "PRODUCER",
+        "column_name": "created_date",
+        "datatype": "String",
+        "related_columns": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+        ],
+        "sample_values": [
+            "2023-09-21",
+            "2022-07-30",
+            "2024-04-27",
+            "2024-06-09",
+            "2024-07-24"
+        ]
+    }
+]

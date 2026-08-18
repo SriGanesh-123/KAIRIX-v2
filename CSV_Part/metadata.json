@@ -1,0 +1,434 @@
+[
+    {
+        "file_name": "ACCOUNT_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 8,
+        "columns": [
+            {
+                "name": "account_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "account_number",
+                "datatype": "String"
+            },
+            {
+                "name": "account_name",
+                "datatype": "String"
+            },
+            {
+                "name": "industry_type",
+                "datatype": "String"
+            },
+            {
+                "name": "state_code",
+                "datatype": "String"
+            },
+            {
+                "name": "account_status",
+                "datatype": "String"
+            },
+            {
+                "name": "created_date",
+                "datatype": "String"
+            },
+            {
+                "name": "updated_timestamp",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "CLAIMS_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 12,
+        "columns": [
+            {
+                "name": "claim_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "claim_number",
+                "datatype": "String"
+            },
+            {
+                "name": "claim_date",
+                "datatype": "String"
+            },
+            {
+                "name": "claim_status",
+                "datatype": "String"
+            },
+            {
+                "name": "claim_type",
+                "datatype": "String"
+            },
+            {
+                "name": "paid_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "reserve_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "recovery_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "incurred_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "loss_date",
+                "datatype": "String"
+            },
+            {
+                "name": "reported_date",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "COVERAGE_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 9,
+        "columns": [
+            {
+                "name": "coverage_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_period_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "coverage_code",
+                "datatype": "String"
+            },
+            {
+                "name": "coverage_name",
+                "datatype": "String"
+            },
+            {
+                "name": "limit_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "deductible_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "coverage_start_date",
+                "datatype": "String"
+            },
+            {
+                "name": "coverage_end_date",
+                "datatype": "String"
+            },
+            {
+                "name": "coverage_status",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "JOB_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 10,
+        "columns": [
+            {
+                "name": "job_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "job_type",
+                "datatype": "String"
+            },
+            {
+                "name": "job_date",
+                "datatype": "String"
+            },
+            {
+                "name": "created_ts",
+                "datatype": "String"
+            },
+            {
+                "name": "job_number",
+                "datatype": "String"
+            },
+            {
+                "name": "job_status",
+                "datatype": "String"
+            },
+            {
+                "name": "submission_date",
+                "datatype": "String"
+            },
+            {
+                "name": "effective_date",
+                "datatype": "String"
+            },
+            {
+                "name": "expiration_date",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "LOCATION_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 12,
+        "columns": [
+            {
+                "name": "location_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_period_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "location_number",
+                "datatype": "String"
+            },
+            {
+                "name": "address_line1",
+                "datatype": "String"
+            },
+            {
+                "name": "address_line2",
+                "datatype": "String"
+            },
+            {
+                "name": "city",
+                "datatype": "String"
+            },
+            {
+                "name": "state_code",
+                "datatype": "String"
+            },
+            {
+                "name": "zip_code",
+                "datatype": "Int64"
+            },
+            {
+                "name": "country_code",
+                "datatype": "String"
+            },
+            {
+                "name": "occupancy_type",
+                "datatype": "String"
+            },
+            {
+                "name": "building_value",
+                "datatype": "Float64"
+            },
+            {
+                "name": "contents_value",
+                "datatype": "Float64"
+            }
+        ]
+    },
+    {
+        "file_name": "POLICY_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 11,
+        "columns": [
+            {
+                "name": "policy_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "account_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "producer_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_number",
+                "datatype": "String"
+            },
+            {
+                "name": "product_code",
+                "datatype": "String"
+            },
+            {
+                "name": "policy_status",
+                "datatype": "String"
+            },
+            {
+                "name": "effective_date",
+                "datatype": "String"
+            },
+            {
+                "name": "expiration_date",
+                "datatype": "String"
+            },
+            {
+                "name": "cancellation_date",
+                "datatype": "String"
+            },
+            {
+                "name": "cancellation_reason",
+                "datatype": "String"
+            },
+            {
+                "name": "updated_timestamp",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "POLICY_PERIOD_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 9,
+        "columns": [
+            {
+                "name": "policy_period_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "job_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "term_number",
+                "datatype": "Int64"
+            },
+            {
+                "name": "effective_date",
+                "datatype": "String"
+            },
+            {
+                "name": "expiration_date",
+                "datatype": "String"
+            },
+            {
+                "name": "period_status",
+                "datatype": "String"
+            },
+            {
+                "name": "written_date",
+                "datatype": "String"
+            },
+            {
+                "name": "transaction_effective_date",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "PREMIUM_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 11,
+        "columns": [
+            {
+                "name": "premium_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "policy_period_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "written_premium",
+                "datatype": "Float64"
+            },
+            {
+                "name": "earned_premium",
+                "datatype": "Float64"
+            },
+            {
+                "name": "unearned_premium",
+                "datatype": "Float64"
+            },
+            {
+                "name": "transaction_date",
+                "datatype": "String"
+            },
+            {
+                "name": "currency_code",
+                "datatype": "String"
+            },
+            {
+                "name": "commission_rate",
+                "datatype": "Float64"
+            },
+            {
+                "name": "commission_amount",
+                "datatype": "Float64"
+            },
+            {
+                "name": "operating_expense",
+                "datatype": "Float64"
+            },
+            {
+                "name": "as_of_date",
+                "datatype": "String"
+            }
+        ]
+    },
+    {
+        "file_name": "PRODUCER_2000.csv",
+        "file_type": "CSV",
+        "row_count": 2000,
+        "column_count": 8,
+        "columns": [
+            {
+                "name": "producer_id",
+                "datatype": "Int64"
+            },
+            {
+                "name": "producer_code",
+                "datatype": "String"
+            },
+            {
+                "name": "producer_name",
+                "datatype": "String"
+            },
+            {
+                "name": "commission_rate",
+                "datatype": "Float64"
+            },
+            {
+                "name": "producer_type",
+                "datatype": "String"
+            },
+            {
+                "name": "state_code",
+                "datatype": "String"
+            },
+            {
+                "name": "producer_status",
+                "datatype": "String"
+            },
+            {
+                "name": "created_date",
+                "datatype": "String"
+            }
+        ]
+    }
+]

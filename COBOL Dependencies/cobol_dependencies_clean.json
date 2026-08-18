@@ -1,0 +1,179 @@
+[
+    {
+        "file": "EARNPREM.CBL",
+        "program": "EARNPREM",
+        "copy": [],
+        "call": [],
+        "perform": [
+            "CALCULATE-EARNED",
+            "CHECK-LEAP-YEAR",
+            "CLOSE-FILES",
+            "FIND-POLICY",
+            "OPEN-FILES",
+            "PROCESS-PREMIUM",
+            "READ-POLICY",
+            "READ-PREMIUM",
+            "SET-MAX-DAY",
+            "VALIDATE-CALENDAR-DATE",
+            "VALIDATE-DATES",
+            "WRITE-ERROR",
+            "WRITE-RESULT"
+        ],
+        "select": [
+            "ERROR-OUT",
+            "POLICY-IN",
+            "PREMIUM-IN",
+            "PREMIUM-OUT"
+        ],
+        "read": [
+            "POLICY-IN",
+            "PREMIUM-IN"
+        ],
+        "write": [
+            "ER-REC",
+            "PRO-REC"
+        ]
+    },
+    {
+        "file": "KPICALC.CBL",
+        "program": "KPIREPORT",
+        "copy": [],
+        "call": [],
+        "perform": [
+            "CLOSE-FILES",
+            "HANDLE-MISSING-PREMIUM",
+            "HANDLE-ORPHAN-PREMIUM",
+            "OPEN-FILES",
+            "PROCESS-MATCHED",
+            "READ-POLICY",
+            "READ-PREMIUM",
+            "WRITE-ERROR",
+            "WRITE-KPI-LINE",
+            "WRITE-KPI-REPORT"
+        ],
+        "select": [
+            "ERROR-OUT",
+            "KPI-OUT",
+            "POLICY-IN",
+            "PREMIUM-IN"
+        ],
+        "read": [
+            "POLICY-IN",
+            "PREMIUM-IN"
+        ],
+        "write": [
+            "ER-REC",
+            "KPI-REC"
+        ]
+    },
+    {
+        "file": "POLLOAD.CBL",
+        "program": "POLLOAD",
+        "copy": [
+            "POLYMAST"
+        ],
+        "call": [],
+        "perform": [],
+        "select": [
+            "POLICY-IN",
+            "POLICY-MASTER"
+        ],
+        "read": [
+            "POLICY-IN"
+        ],
+        "write": [
+            "POLICY-MASTER-RECORD"
+        ]
+    },
+    {
+        "file": "POLSTATUS.CBL",
+        "program": "POLSTAT",
+        "copy": [],
+        "call": [],
+        "perform": [
+            "CHECK-LEAP-YEAR",
+            "CLOSE-FILES",
+            "DETERMINE-STATUS",
+            "PROCESS-POLICY",
+            "SET-MAX-DAY",
+            "VALIDATE-CALENDAR-DATE",
+            "WRITE-ERROR",
+            "WRITE-POLICY"
+        ],
+        "select": [
+            "ERROR-OUT",
+            "POLICY-IN",
+            "POLICY-OUT"
+        ],
+        "read": [
+            "POLICY-IN"
+        ],
+        "write": [
+            "ER-REC",
+            "PO-REC"
+        ]
+    },
+    {
+        "file": "PREMCALC.CBL",
+        "program": "PREMCALC",
+        "copy": [],
+        "call": [],
+        "perform": [
+            "CALC-AU",
+            "CALC-HO",
+            "CLOSE-FILES",
+            "GET-ALL-COVERAGES",
+            "GET-PROPERTY",
+            "GET-VEHICLE",
+            "OPEN-FILES",
+            "PROCESS-POLICY",
+            "READ-COVERAGE",
+            "READ-POLICY",
+            "READ-PROPERTY",
+            "READ-VEHICLE",
+            "WRITE-ERROR",
+            "WRITE-PREMIUM"
+        ],
+        "select": [
+            "COVERAGE-IN",
+            "ERROR-OUT",
+            "POLICY-IN",
+            "PREMIUM-OUT",
+            "PROPERTY-IN",
+            "VEHICLE-IN"
+        ],
+        "read": [
+            "COVERAGE-IN",
+            "POLICY-IN",
+            "PROPERTY-IN",
+            "VEHICLE-IN"
+        ],
+        "write": [
+            "ER-REC",
+            "PO-REC"
+        ]
+    },
+    {
+        "file": "RPTEXTRACT.CBL",
+        "program": "RPTEXTRACT",
+        "copy": [
+            "RPTEXTRACT"
+        ],
+        "call": [],
+        "perform": [
+            "WRITE-KPI-SUMMARY"
+        ],
+        "select": [
+            "POLICY-IN",
+            "PREMIUM-IN",
+            "REPORT-OUT"
+        ],
+        "read": [
+            "POLICY-IN",
+            "PREMIUM-IN"
+        ],
+        "write": [
+            "REPORT-OUT-REC"
+        ]
+    }
+]
