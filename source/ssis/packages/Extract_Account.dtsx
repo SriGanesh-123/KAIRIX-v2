@@ -1,0 +1,170 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{F4DE3551-2A00-4425-A30A-4BF92D5C9092}"
+    DTS:ObjectName="Extract_Account"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{0130E0FA-24AD-4BB2-82E7-9671EEDC9B02}"
+    DTS:Description="Extracts, cleanses, validates and loads ACCOUNT master data from Guidewire PostgreSQL into the DW."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:Variables>
+    <DTS:Variable DTS:Name="RowsRead"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsInserted"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsRejected"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="PackageName"><DTS:VariableValue DTS:DataType="8">Extract_Account</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="StartTime"><DTS:VariableValue DTS:DataType="7">1900-01-01T00:00:00</DTS:VariableValue></DTS:Variable>
+  </DTS:Variables>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_Guidewire_PG_Source]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{9115364D-372C-4495-9C1E-50DF8A571152}"
+        DTS:ObjectName="CM_Guidewire_PG_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=gw-pg-source.internal;Port=5432;Database=guidewire_policycenter;User Id=etl_reader;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Source: Guidewire PolicyCenter PostgreSQL replica (read-only)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{687226D2-4BD4-4707-A18E-CDBC9918635C}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_LogStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{9BF0F835-F95F-4735-A351-AFB775FF47E0}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_Account&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT_Main" DTS:CreationName="Microsoft.Pipeline" DTS:DTSID="{F6BB6189-3F0E-45CB-9B1A-C96B1B4E7EE7}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT - Extract, Cleanse, Validate, Load account">
+      <DTS:ObjectData>
+    <pipeline version="1">
+      <components>
+      <component name="SRC - account (PostgreSQL)" componentClassID="Microsoft.ADO.NET.PGSource" description="Extracts rows from public.account on CM_Guidewire_PG_Source">
+        <properties>
+          <property name="SqlCommand">SELECT account_id, account_number, account_name, industry_type, state_code, account_status, created_date, updated_timestamp FROM public.account</property>
+          <property name="ConnectionManager">CM_Guidewire_PG_Source</property>
+        </properties>
+        <outputs>
+          <output name="OLE DB Source Output" />
+          <output name="OLE DB Source Error Output" />
+        </outputs>
+      </component>
+      <component name="DER - Data Cleansing" componentClassID="Microsoft.DerivedColumn" description="Trims whitespace, standardizes casing/codes, normalizes nulls">
+        <properties>
+          <property name="Expressions">TRIM(account_name) -&gt; account_name; UPPER(TRIM(state_code)) -&gt; state_code</property>
+        </properties>
+        <inputs>
+          <input name="OLE DB Source Output" />
+        </inputs>
+        <outputs>
+          <output name="Cleansing Output" />
+        </outputs>
+      </component>
+      <component name="DER - Derived / Calculated Columns" componentClassID="Microsoft.DerivedColumn" description="Adds ETL metadata columns and business-calculated fields">
+        <properties>
+          <property name="Expressions">GETDATE() -&gt; etl_load_date; 'Guidewire PolicyCenter' -&gt; etl_source_system</property>
+        </properties>
+        <inputs>
+          <input name="Cleansing Output" />
+        </inputs>
+        <outputs>
+          <output name="Derived Column Output" />
+        </outputs>
+      </component>
+      <component name="CSPL - Business Rule Validation" componentClassID="Microsoft.ConditionalSplit" description="Routes rows failing business rules to error output. Rules: created_date &lt;= GETDATE() (BR: cannot be future-dated) | account_status IN (&apos;ACTIVE&apos;,&apos;INACTIVE&apos;,&apos;CLOSED&apos;) | account_number LIKE &apos;ACC%%&apos; AND LEN(account_number)=9">
+        <properties>
+          <property name="ValidOutputName">Valid Rows</property>
+          <property name="InvalidOutputName">Invalid Rows (-&gt; Error Path)</property>
+          <property name="Conditions">created_date &lt;= GETDATE() (BR: cannot be future-dated) | account_status IN ('ACTIVE','INACTIVE','CLOSED') | account_number LIKE 'ACC%%' AND LEN(account_number)=9</property>
+        </properties>
+        <inputs>
+          <input name="Derived Column Output" />
+        </inputs>
+        <outputs>
+          <output name="Valid Rows" />
+          <output name="Invalid Rows (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="UN - Union All Error Rows" componentClassID="Microsoft.UnionAll" description="Combines all error/no-match/invalid outputs into a single error stream">
+        <properties>
+
+        </properties>
+        <inputs>
+          <input name="Lookup No Match Output (-> Error Path)" />
+          <input name="Invalid Rows (-> Error Path)" />
+          <input name="OLE DB Source Error Output" />
+        </inputs>
+        <outputs>
+          <output name="Unified Error Output" />
+        </outputs>
+      </component>
+      <component name="DST - Error Log (stg.error_quarantine)" componentClassID="Microsoft.OLEDBDestination" description="Writes rejected/invalid rows to the error-quarantine table for review">
+        <properties>
+          <property name="OpenRowset">stg.error_quarantine</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <inputs>
+          <input name="Unified Error Output" />
+        </inputs>
+      </component>
+      <component name="DST - Load account (PostgreSQL DW)" componentClassID="Microsoft.OLEDBDestination" description="Loads validated/cleansed rows into stg.account (upsert via staging + MERGE in post-SQL)">
+        <properties>
+          <property name="OpenRowset">stg.account</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+          <property name="MaximumInsertCommitSize">10000</property>
+        </properties>
+        <inputs>
+          <input name="Valid Rows" />
+        </inputs>
+      </component>
+      </components>
+    </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_LogEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{E7829982-2814-4DBF-A5B7-6A42B794F599}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package End / Row Counts">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos;, rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = &apos;Extract_Account&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[SQL_LogStartToDFT_Main]"
+        DTS:From="Package\SQL_LogStart" DTS:To="Package\DFT_Main" DTS:Value="3" DTS:DTSID="{4BD7DE98-65AF-49AD-A0D6-76DBDBE18262}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[DFT_MainToSQL_LogEnd]"
+        DTS:From="Package\DFT_Main" DTS:To="Package\SQL_LogEnd" DTS:Value="1" DTS:DTSID="{8E2B03D2-CDD3-431A-BB3E-2D1BE83BC48A}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{85364FCD-A0E4-4026-B305-61F641C47EC7}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\EH_LogError" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{420700A6-A552-46D3-AE0E-BE40F361F364}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Error to ETL_ERROR_LOG">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES (&apos;Extract_Account&apos;, ?, ?, ?, now())" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

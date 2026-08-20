@@ -1,0 +1,197 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{C284DE78-E237-41FA-B146-50FA5AABC1C9}"
+    DTS:ObjectName="Extract_Claims"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{4CA2A438-C3CE-42C3-8653-0529F8D3FE87}"
+    DTS:Description="Extracts CLAIMS, validates FK to POLICY, applies incurred-amount reconciliation, pre-aggregates (BR-09) and loads."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:Variables>
+    <DTS:Variable DTS:Name="RowsRead"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsInserted"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsRejected"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="PackageName"><DTS:VariableValue DTS:DataType="8">Extract_Claims</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="StartTime"><DTS:VariableValue DTS:DataType="7">1900-01-01T00:00:00</DTS:VariableValue></DTS:Variable>
+  </DTS:Variables>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_Guidewire_PG_Source]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{9115364D-372C-4495-9C1E-50DF8A571152}"
+        DTS:ObjectName="CM_Guidewire_PG_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=gw-pg-source.internal;Port=5432;Database=guidewire_policycenter;User Id=etl_reader;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Source: Guidewire PolicyCenter PostgreSQL replica (read-only)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{687226D2-4BD4-4707-A18E-CDBC9918635C}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_LogStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{FA3319C7-1B5C-4353-8131-B7EF988576C3}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_Claims&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT_Main" DTS:CreationName="Microsoft.Pipeline" DTS:DTSID="{3E16970D-3E7A-4D70-9EA4-2E3D98E89EED}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT - Extract, Cleanse, Validate, Load claims">
+      <DTS:ObjectData>
+    <pipeline version="1">
+      <components>
+      <component name="SRC - claims (PostgreSQL)" componentClassID="Microsoft.ADO.NET.PGSource" description="Extracts rows from public.claims on CM_Guidewire_PG_Source">
+        <properties>
+          <property name="SqlCommand">SELECT claim_id, policy_id, claim_number, claim_date, claim_status, claim_type, paid_amount, reserve_amount, recovery_amount, incurred_amount, loss_date, reported_date FROM public.claims</property>
+          <property name="ConnectionManager">CM_Guidewire_PG_Source</property>
+        </properties>
+        <outputs>
+          <output name="OLE DB Source Output" />
+          <output name="OLE DB Source Error Output" />
+        </outputs>
+      </component>
+      <component name="LKP - Validate Policy (policy_id)" componentClassID="Microsoft.Lookup" description="Validates policy_id exists in Policy (referential integrity / BR-01, BR-05)">
+        <properties>
+          <property name="SqlCommandParam">SELECT policy_id FROM stg.policy</property>
+          <property name="JoinColumn">policy_id</property>
+          <property name="NoMatchBehavior">RedirectRowsToNoMatchOutput</property>
+          <property name="CacheMode">Full</property>
+        </properties>
+        <inputs>
+          <input name="OLE DB Source Output" />
+        </inputs>
+        <outputs>
+          <output name="Lookup Match Output" />
+          <output name="Lookup No Match Output (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="DER - Data Cleansing" componentClassID="Microsoft.DerivedColumn" description="Trims whitespace, standardizes casing/codes, normalizes nulls">
+        <properties>
+          <property name="Expressions">TRIM(claim_number) -&gt; claim_number; UPPER(claim_type) -&gt; claim_type</property>
+        </properties>
+        <inputs>
+          <input name="Lookup Match Output" />
+        </inputs>
+        <outputs>
+          <output name="Cleansing Output" />
+        </outputs>
+      </component>
+      <component name="DER - Derived / Calculated Columns" componentClassID="Microsoft.DerivedColumn" description="Adds ETL metadata columns and business-calculated fields">
+        <properties>
+          <property name="Expressions">GETDATE() -&gt; etl_load_date; paid_amount + reserve_amount - recovery_amount -&gt; calculated_incurred_amount</property>
+        </properties>
+        <inputs>
+          <input name="Cleansing Output" />
+        </inputs>
+        <outputs>
+          <output name="Derived Column Output" />
+        </outputs>
+      </component>
+      <component name="CSPL - Business Rule Validation" componentClassID="Microsoft.ConditionalSplit" description="Routes rows failing business rules to error output. Rules: paid_amount &gt;= 0.00 AND reserve_amount &gt;= 0.00 AND recovery_amount &gt;= 0.00 | ABS(incurred_amount - calculated_incurred_amount) &lt;= 1.00 (incurred = paid + reserve - recovery) | loss_date &lt;= reported_date AND reported_date &lt;= claim_date (BR-12 lifecycle chronology) | claim_status IN (&apos;OPEN&apos;,&apos;IN_PROGRESS&apos;,&apos;ON_HOLD&apos;,&apos;CLOSED&apos;,&apos;REJECTED&apos;)">
+        <properties>
+          <property name="ValidOutputName">Valid Rows</property>
+          <property name="InvalidOutputName">Invalid Rows (-&gt; Error Path)</property>
+          <property name="Conditions">paid_amount &gt;= 0.00 AND reserve_amount &gt;= 0.00 AND recovery_amount &gt;= 0.00 | ABS(incurred_amount - calculated_incurred_amount) &lt;= 1.00 (incurred = paid + reserve - recovery) | loss_date &lt;= reported_date AND reported_date &lt;= claim_date (BR-12 lifecycle chronology) | claim_status IN ('OPEN','IN_PROGRESS','ON_HOLD','CLOSED','REJECTED')</property>
+        </properties>
+        <inputs>
+          <input name="Derived Column Output" />
+        </inputs>
+        <outputs>
+          <output name="Valid Rows" />
+          <output name="Invalid Rows (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)" componentClassID="Microsoft.Aggregation" description="Pre-aggregates incurred/paid/reserve/recovery per policy_id BEFORE any KPI join, preventing duplicate premium totals when joined downstream.">
+        <properties>
+          <property name="GroupBy">policy_id</property>
+          <property name="Aggregates">SUM(paid_amount), SUM(reserve_amount), SUM(recovery_amount), SUM(incurred_amount), COUNT(claim_id) AS claim_count</property>
+        </properties>
+        <inputs>
+          <input name="Valid Rows" />
+        </inputs>
+        <outputs>
+          <output name="Aggregate Output" />
+        </outputs>
+      </component>
+      <component name="UN - Union All Error Rows" componentClassID="Microsoft.UnionAll" description="Combines all error/no-match/invalid outputs into a single error stream">
+        <properties>
+
+        </properties>
+        <inputs>
+          <input name="Lookup No Match Output (-> Error Path)" />
+          <input name="Invalid Rows (-> Error Path)" />
+          <input name="OLE DB Source Error Output" />
+        </inputs>
+        <outputs>
+          <output name="Unified Error Output" />
+        </outputs>
+      </component>
+      <component name="DST - Error Log (stg.error_quarantine)" componentClassID="Microsoft.OLEDBDestination" description="Writes rejected/invalid rows to the error-quarantine table for review">
+        <properties>
+          <property name="OpenRowset">stg.error_quarantine</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <inputs>
+          <input name="Unified Error Output" />
+        </inputs>
+      </component>
+      <component name="DST - Load claims (PostgreSQL DW)" componentClassID="Microsoft.OLEDBDestination" description="Loads validated/cleansed rows into stg.claims (upsert via staging + MERGE in post-SQL)">
+        <properties>
+          <property name="OpenRowset">stg.claims</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+          <property name="MaximumInsertCommitSize">10000</property>
+        </properties>
+        <inputs>
+          <input name="Aggregate Output" />
+        </inputs>
+      </component>
+      </components>
+    </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_LogEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{323081EF-ECFC-4942-9BFA-A548344FDF8A}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package End / Row Counts">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos;, rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = &apos;Extract_Claims&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[SQL_LogStartToDFT_Main]"
+        DTS:From="Package\SQL_LogStart" DTS:To="Package\DFT_Main" DTS:Value="3" DTS:DTSID="{97018531-68B4-4F91-96EA-7A1E9DDC4DBE}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[DFT_MainToSQL_LogEnd]"
+        DTS:From="Package\DFT_Main" DTS:To="Package\SQL_LogEnd" DTS:Value="1" DTS:DTSID="{5919BE4F-8A1A-4C89-A787-2452582E4A52}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{1FDA477C-C86A-422C-8AB3-DEA7ADBF6786}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\EH_LogError" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{62902F90-F23E-407A-BBFF-02787D3F81B1}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Error to ETL_ERROR_LOG">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES (&apos;Extract_Claims&apos;, ?, ?, ?, now())" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

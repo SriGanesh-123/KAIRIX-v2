@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{6D8CC6FD-E214-4160-99D6-EF516C23153A}"
+    DTS:ObjectName="Master_ETL_Guidewire"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{626CDECA-7506-4AEF-AB7D-894A975BF613}"
+    DTS:Description="Master orchestration package for Source System 3 (Guidewire PolicyCenter PostgreSQL). Executes all child ETL packages in FK-dependency order: Account/Producer -&gt; Policy -&gt; Job/Claims -&gt; Policy_Period -&gt; Location/Coverage/Premium -&gt; KPI Aggregates. Provides audit logging and centralized error handling."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{248FFA76-0389-4A8D-AE39-0CA6BBE7AA83}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_MasterStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{95410872-CA26-481A-8950-C3B115543ACC}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Master Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Master_ETL_Guidewire&apos;, &apos;Full Load&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Account" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{3638264A-5B39-4B5B-B11A-023545357363}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Account">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Account.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Producer" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{29CD4BB2-C492-42EA-9B6F-C928DB3C192E}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Producer">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Producer.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Policy" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{73A05E89-37D9-40A0-94E0-F7B2C77BF17D}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Policy">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Policy.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Job" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{0473D195-38A6-4D24-AB66-82104D7E0865}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Job">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Job.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Claims" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{F3B7352E-E829-44A2-9570-ABB5F56B990D}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Claims">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Claims.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_PolicyPeriod" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{F4AC5934-FC0A-40E3-8000-0EB9C40DE0AD}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run PolicyPeriod">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_PolicyPeriod.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Location" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{4EBE06FE-9DCC-4FFD-966F-EFF38DC8CDA9}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Location">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Location.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Coverage" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{7404E343-65F8-495F-B7D0-97CF469BEAB3}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Coverage">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Coverage.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_Premium" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{A894D81A-5CF4-4AB0-9EE3-80EC31EF0E55}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run Premium">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_Premium.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\EPT_KPIAggregates" DTS:CreationName="Microsoft.ExecutePackageTask" DTS:DTSID="{31B09F66-882A-4301-BE7B-772CE74C035D}" DTS:ExecutableType="Microsoft.ExecutePackageTask" DTS:ObjectName="Run KPIAggregates">
+      <DTS:ObjectData>
+        <ExecutePackageTask:ExecutePackageTaskData
+            xmlns:ExecutePackageTask="www.microsoft.com/sqlserver/dts/tasks/executepackagetask"
+            ExecutePackageTask:PackageNameFromProjectReference="Extract_KPI_Aggregates.dtsx"
+            ExecutePackageTask:ExecuteOutOfProcess="false" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_MasterEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{E51B7CFD-8E53-4DE2-87F7-BC6FF9AB3497}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Master End">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos; WHERE package_name = &apos;Master_ETL_Guidewire&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[StartToG1a]" DTS:From="Package\SQL_MasterStart" DTS:To="Package\EPT_Account" DTS:Value="3" DTS:DTSID="{58F2C58F-80C3-4591-91DA-6A5FF5DA9701}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[StartToG1b]" DTS:From="Package\SQL_MasterStart" DTS:To="Package\EPT_Producer" DTS:Value="3" DTS:DTSID="{5A4CDD7F-AD24-4ED5-8CEF-A7035F76C00E}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[G1toPolicy_a]" DTS:From="Package\EPT_Account" DTS:To="Package\EPT_Policy" DTS:Value="3" DTS:DTSID="{1632958A-0CD7-49AE-8259-0DB12C05789B}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[G1toPolicy_b]" DTS:From="Package\EPT_Producer" DTS:To="Package\EPT_Policy" DTS:Value="3" DTS:DTSID="{310FA1C2-E1F2-4EB0-BEAB-200A475F1EEE}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PolicyToJob]" DTS:From="Package\EPT_Policy" DTS:To="Package\EPT_Job" DTS:Value="3" DTS:DTSID="{79AD5DCE-72FF-4B0A-A3AB-27335B572074}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PolicyToClaims]" DTS:From="Package\EPT_Policy" DTS:To="Package\EPT_Claims" DTS:Value="3" DTS:DTSID="{B7BF25D6-9DAC-4F0D-A1D0-CB0698C8658D}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[JobToPolicyPeriod]" DTS:From="Package\EPT_Job" DTS:To="Package\EPT_PolicyPeriod" DTS:Value="3" DTS:DTSID="{79E9DF89-153E-4D79-858F-3911054847CD}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PolicyPeriodToEPT_Location]" DTS:From="Package\EPT_PolicyPeriod" DTS:To="Package\EPT_Location" DTS:Value="3" DTS:DTSID="{C167B122-8B3F-4AF2-919B-3EEA2C23E1B9}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PolicyPeriodToEPT_Coverage]" DTS:From="Package\EPT_PolicyPeriod" DTS:To="Package\EPT_Coverage" DTS:Value="3" DTS:DTSID="{BA3FA8CA-4BF6-4CCB-A8C0-03E9A4C3418C}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PolicyPeriodToEPT_Premium]" DTS:From="Package\EPT_PolicyPeriod" DTS:To="Package\EPT_Premium" DTS:Value="3" DTS:DTSID="{491691F5-3783-424C-8F45-8F4E282CBB09}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[PremiumToKPI]" DTS:From="Package\EPT_Premium" DTS:To="Package\EPT_KPIAggregates" DTS:Value="3" DTS:DTSID="{04367A3F-B462-4DD6-9964-A49926583C25}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[ClaimsToKPI]" DTS:From="Package\EPT_Claims" DTS:To="Package\EPT_KPIAggregates" DTS:Value="3" DTS:DTSID="{284111FE-A3A2-4E45-800C-78C693901915}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[KPIToEnd]" DTS:From="Package\EPT_KPIAggregates" DTS:To="Package\SQL_MasterEnd" DTS:Value="3" DTS:DTSID="{E28B807D-CEFD-47D6-A5F9-9A1F6F57D7FB}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{7E6CC784-7F74-49B9-8985-FDBFA6FCCA6A}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+        <DTS:Executable DTS:refId="Package\EH_MasterFail" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{68F8D1D3-D7CE-4A84-872A-65225052CC86}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Master Failure">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;FAILED&apos; WHERE package_name = &apos;Master_ETL_Guidewire&apos; AND status = &apos;RUNNING&apos;" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+        <!-- Optional: Send Mail Task / Execute Process Task for on-call notification would be added here (disabled by default). -->
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

@@ -1,0 +1,304 @@
+{
+  "metadata_version": "1.0",
+  "source_type": "SSIS DTSX",
+  "source_directory": "C:\\Users\\GaneshSriKumarMarimu\\legacy-code-agentic-rag\\source\\ssis\\packages",
+  "packages": [
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "package_id": "{6D8CC6FD-E214-4160-99D6-EF516C23153A}",
+      "executable_type": "Microsoft.Package",
+      "creation_name": "Microsoft.Package",
+      "package_type": "5",
+      "version_major": "1",
+      "version_minor": "0",
+      "version_build": "1",
+      "version_guid": "{626CDECA-7506-4AEF-AB7D-894A975BF613}",
+      "description": "Master orchestration package for Source System 3 (Guidewire PolicyCenter PostgreSQL). Executes all child ETL packages in FK-dependency order: Account/Producer -> Policy -> Job/Claims -> Policy_Period -> Location/Coverage/Premium -> KPI Aggregates. Provides audit logging and centralized error handling.",
+      "logging_mode": "UseParentSetting",
+      "source_file": "Master_ETL_Guidewire.dtsx"
+    }
+  ],
+  "tasks": [
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{95410872-CA26-481A-8950-C3B115543ACC}",
+      "task_name": "SQL - Log Master Start",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_MasterStart"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{3638264A-5B39-4B5B-B11A-023545357363}",
+      "task_name": "Run Account",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Account"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{29CD4BB2-C492-42EA-9B6F-C928DB3C192E}",
+      "task_name": "Run Producer",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Producer"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{73A05E89-37D9-40A0-94E0-F7B2C77BF17D}",
+      "task_name": "Run Policy",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Policy"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{0473D195-38A6-4D24-AB66-82104D7E0865}",
+      "task_name": "Run Job",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Job"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{F3B7352E-E829-44A2-9570-ABB5F56B990D}",
+      "task_name": "Run Claims",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Claims"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{F4AC5934-FC0A-40E3-8000-0EB9C40DE0AD}",
+      "task_name": "Run PolicyPeriod",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_PolicyPeriod"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{4EBE06FE-9DCC-4FFD-966F-EFF38DC8CDA9}",
+      "task_name": "Run Location",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Location"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{7404E343-65F8-495F-B7D0-97CF469BEAB3}",
+      "task_name": "Run Coverage",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Coverage"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{A894D81A-5CF4-4AB0-9EE3-80EC31EF0E55}",
+      "task_name": "Run Premium",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_Premium"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{31B09F66-882A-4301-BE7B-772CE74C035D}",
+      "task_name": "Run KPIAggregates",
+      "task_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask",
+      "ref_id": "Package\\EPT_KPIAggregates"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{E51B7CFD-8E53-4DE2-87F7-BC6FF9AB3497}",
+      "task_name": "SQL - Log Master End",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_MasterEnd"
+    }
+  ],
+  "components": [],
+  "component_properties": [],
+  "connections": [
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "connection_name": "CM_DW_PG_Target",
+      "connection_id": "{248FFA76-0389-4A8D-AE39-0CA6BBE7AA83}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_DW_PG_Target]",
+      "object_data": {
+        "Property": "Npgsql PostgreSQL Provider"
+      }
+    }
+  ],
+  "sql": [],
+  "variables": [],
+  "precedence": [
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{58F2C58F-80C3-4591-91DA-6A5FF5DA9701}",
+      "from": "Package\\SQL_MasterStart",
+      "to": "Package\\EPT_Account",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{5A4CDD7F-AD24-4ED5-8CEF-A7035F76C00E}",
+      "from": "Package\\SQL_MasterStart",
+      "to": "Package\\EPT_Producer",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{1632958A-0CD7-49AE-8259-0DB12C05789B}",
+      "from": "Package\\EPT_Account",
+      "to": "Package\\EPT_Policy",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{310FA1C2-E1F2-4EB0-BEAB-200A475F1EEE}",
+      "from": "Package\\EPT_Producer",
+      "to": "Package\\EPT_Policy",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{79AD5DCE-72FF-4B0A-A3AB-27335B572074}",
+      "from": "Package\\EPT_Policy",
+      "to": "Package\\EPT_Job",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{B7BF25D6-9DAC-4F0D-A1D0-CB0698C8658D}",
+      "from": "Package\\EPT_Policy",
+      "to": "Package\\EPT_Claims",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{79E9DF89-153E-4D79-858F-3911054847CD}",
+      "from": "Package\\EPT_Job",
+      "to": "Package\\EPT_PolicyPeriod",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{C167B122-8B3F-4AF2-919B-3EEA2C23E1B9}",
+      "from": "Package\\EPT_PolicyPeriod",
+      "to": "Package\\EPT_Location",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{BA3FA8CA-4BF6-4CCB-A8C0-03E9A4C3418C}",
+      "from": "Package\\EPT_PolicyPeriod",
+      "to": "Package\\EPT_Coverage",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{491691F5-3783-424C-8F45-8F4E282CBB09}",
+      "from": "Package\\EPT_PolicyPeriod",
+      "to": "Package\\EPT_Premium",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{04367A3F-B462-4DD6-9964-A49926583C25}",
+      "from": "Package\\EPT_Premium",
+      "to": "Package\\EPT_KPIAggregates",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{284111FE-A3A2-4E45-800C-78C693901915}",
+      "from": "Package\\EPT_Claims",
+      "to": "Package\\EPT_KPIAggregates",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "id": "{E28B807D-CEFD-47D6-A5F9-9A1F6F57D7FB}",
+      "from": "Package\\EPT_KPIAggregates",
+      "to": "Package\\SQL_MasterEnd",
+      "evaluation_operation": "",
+      "value": "3"
+    }
+  ],
+  "package_links": [
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Account",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Producer",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Policy",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Job",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Claims",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run PolicyPeriod",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Location",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Coverage",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run Premium",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    },
+    {
+      "parent_package": "Master_ETL_Guidewire",
+      "task_name": "Run KPIAggregates",
+      "executable_type": "Microsoft.ExecutePackageTask",
+      "creation_name": "Microsoft.ExecutePackageTask"
+    }
+  ],
+  "relationships": []
+}

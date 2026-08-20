@@ -1,0 +1,498 @@
+{
+  "metadata_version": "1.0",
+  "source_type": "SSIS DTSX",
+  "source_directory": "C:\\Users\\GaneshSriKumarMarimu\\legacy-code-agentic-rag\\source\\ssis\\packages",
+  "packages": [
+    {
+      "package_name": "Extract_Premium",
+      "package_id": "{047831AE-1F7F-4815-BF19-991EF5E4D8AB}",
+      "executable_type": "Microsoft.Package",
+      "creation_name": "Microsoft.Package",
+      "package_type": "5",
+      "version_major": "1",
+      "version_minor": "0",
+      "version_build": "1",
+      "version_guid": "{0DD395A1-9798-4E54-B38C-9B80B775D968}",
+      "description": "Extracts PREMIUM, validates FK to POLICY_PERIOD, applies BR-07/BR-08 financial checks, aggregates and loads.",
+      "logging_mode": "UseParentSetting",
+      "source_file": "Extract_Premium.dtsx"
+    }
+  ],
+  "tasks": [
+    {
+      "package_name": "Extract_Premium",
+      "task_id": "{286C64CD-AAAD-497C-BCD3-FF06E9EE0EDE}",
+      "task_name": "SQL - Log Package Start",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogStart"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_id": "{E213B0A7-4BA7-4DCB-8F4B-9E3BDE1CF3B4}",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "task_type": "Microsoft.Pipeline",
+      "creation_name": "Microsoft.Pipeline",
+      "ref_id": "Package\\DFT_Main"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_id": "{ED06AF64-AE26-40D7-9C4A-A64CC716A817}",
+      "task_name": "SQL - Log Package End / Row Counts",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogEnd"
+    }
+  ],
+  "components": [
+    {
+      "component_id": 1,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "SRC - premium (PostgreSQL)",
+      "component_type": "Microsoft.ADO.NET.PGSource",
+      "description": "Extracts rows from public.premium on CM_Guidewire_PG_Source",
+      "properties": {
+        "SqlCommand": "SELECT premium_id, policy_period_id, written_premium, earned_premium, unearned_premium, transaction_date, currency_code, commission_rate, commission_amount, operating_expense, as_of_date FROM public.premium",
+        "ConnectionManager": "CM_Guidewire_PG_Source"
+      }
+    },
+    {
+      "component_id": 2,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "LKP - Validate Policy_Period (policy_period_id)",
+      "component_type": "Microsoft.Lookup",
+      "description": "Validates policy_period_id exists in Policy_Period (referential integrity / BR-01, BR-05)",
+      "properties": {
+        "SqlCommandParam": "SELECT policy_period_id FROM stg.policy_period",
+        "JoinColumn": "policy_period_id",
+        "NoMatchBehavior": "RedirectRowsToNoMatchOutput",
+        "CacheMode": "Full"
+      }
+    },
+    {
+      "component_id": 3,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "DER - Data Cleansing",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Trims whitespace, standardizes casing/codes, normalizes nulls",
+      "properties": {
+        "Expressions": "UPPER(TRIM(currency_code)) -> currency_code"
+      }
+    },
+    {
+      "component_id": 4,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "DER - Derived / Calculated Columns",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Adds ETL metadata columns and business-calculated fields",
+      "properties": {
+        "Expressions": "GETDATE() -> etl_load_date; commission_rate * written_premium / 100 -> expected_commission_amount"
+      }
+    },
+    {
+      "component_id": 5,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "CSPL - Business Rule Validation",
+      "component_type": "Microsoft.ConditionalSplit",
+      "description": "Routes rows failing business rules to error output. Rules: earned_premium <= written_premium (BR-07) | ABS(written_premium - (earned_premium + unearned_premium)) <= 1.00 (BR-08 rounding tolerance) | written_premium >= 0.00 AND commission_rate BETWEEN 0.00 AND 100.00 | transaction_date <= GETDATE() AND as_of_date <= GETDATE()",
+      "properties": {
+        "ValidOutputName": "Valid Rows",
+        "InvalidOutputName": "Invalid Rows (-> Error Path)",
+        "Conditions": "earned_premium <= written_premium (BR-07) | ABS(written_premium - (earned_premium + unearned_premium)) <= 1.00 (BR-08 rounding tolerance) | written_premium >= 0.00 AND commission_rate BETWEEN 0.00 AND 100.00 | transaction_date <= GETDATE() AND as_of_date <= GETDATE()"
+      }
+    },
+    {
+      "component_id": 6,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "AGG - Premium Summary by Policy Period",
+      "component_type": "Microsoft.Aggregation",
+      "description": "Pre-aggregates written/earned/unearned premium per policy_period_id for KPI/reporting reuse (feeds fact_kpi_summary).",
+      "properties": {
+        "GroupBy": "policy_period_id",
+        "Aggregates": "SUM(written_premium), SUM(earned_premium), SUM(unearned_premium), SUM(commission_amount), SUM(operating_expense)"
+      }
+    },
+    {
+      "component_id": 7,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "UN - Union All Error Rows",
+      "component_type": "Microsoft.UnionAll",
+      "description": "Combines all error/no-match/invalid outputs into a single error stream",
+      "properties": {}
+    },
+    {
+      "component_id": 8,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Writes rejected/invalid rows to the error-quarantine table for review",
+      "properties": {
+        "OpenRowset": "stg.error_quarantine",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 9,
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_name": "DST - Load premium (PostgreSQL DW)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Loads validated/cleansed rows into stg.premium (upsert via staging + MERGE in post-SQL)",
+      "properties": {
+        "OpenRowset": "stg.premium",
+        "ConnectionManager": "CM_DW_PG_Target",
+        "FastLoad": "true",
+        "MaximumInsertCommitSize": "10000"
+      }
+    }
+  ],
+  "component_properties": [
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 1,
+      "component_name": "SRC - premium (PostgreSQL)",
+      "property_name": "SqlCommand",
+      "property_value": "SELECT premium_id, policy_period_id, written_premium, earned_premium, unearned_premium, transaction_date, currency_code, commission_rate, commission_amount, operating_expense, as_of_date FROM public.premium"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 1,
+      "component_name": "SRC - premium (PostgreSQL)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_Guidewire_PG_Source"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy_Period (policy_period_id)",
+      "property_name": "SqlCommandParam",
+      "property_value": "SELECT policy_period_id FROM stg.policy_period"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy_Period (policy_period_id)",
+      "property_name": "JoinColumn",
+      "property_value": "policy_period_id"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy_Period (policy_period_id)",
+      "property_name": "NoMatchBehavior",
+      "property_value": "RedirectRowsToNoMatchOutput"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy_Period (policy_period_id)",
+      "property_name": "CacheMode",
+      "property_value": "Full"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 3,
+      "component_name": "DER - Data Cleansing",
+      "property_name": "Expressions",
+      "property_value": "UPPER(TRIM(currency_code)) -> currency_code"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 4,
+      "component_name": "DER - Derived / Calculated Columns",
+      "property_name": "Expressions",
+      "property_value": "GETDATE() -> etl_load_date; commission_rate * written_premium / 100 -> expected_commission_amount"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "ValidOutputName",
+      "property_value": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "InvalidOutputName",
+      "property_value": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "Conditions",
+      "property_value": "earned_premium <= written_premium (BR-07) | ABS(written_premium - (earned_premium + unearned_premium)) <= 1.00 (BR-08 rounding tolerance) | written_premium >= 0.00 AND commission_rate BETWEEN 0.00 AND 100.00 | transaction_date <= GETDATE() AND as_of_date <= GETDATE()"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 6,
+      "component_name": "AGG - Premium Summary by Policy Period",
+      "property_name": "GroupBy",
+      "property_value": "policy_period_id"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 6,
+      "component_name": "AGG - Premium Summary by Policy Period",
+      "property_name": "Aggregates",
+      "property_value": "SUM(written_premium), SUM(earned_premium), SUM(unearned_premium), SUM(commission_amount), SUM(operating_expense)"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.error_quarantine"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 9,
+      "component_name": "DST - Load premium (PostgreSQL DW)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.premium"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 9,
+      "component_name": "DST - Load premium (PostgreSQL DW)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 9,
+      "component_name": "DST - Load premium (PostgreSQL DW)",
+      "property_name": "FastLoad",
+      "property_value": "true"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "component_id": 9,
+      "component_name": "DST - Load premium (PostgreSQL DW)",
+      "property_name": "MaximumInsertCommitSize",
+      "property_value": "10000"
+    }
+  ],
+  "connections": [
+    {
+      "package_name": "Extract_Premium",
+      "connection_name": "CM_Guidewire_PG_Source",
+      "connection_id": "{9115364D-372C-4495-9C1E-50DF8A571152}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_Guidewire_PG_Source]",
+      "object_data": {
+        "Property": "Source: Guidewire PolicyCenter PostgreSQL replica (read-only)"
+      }
+    },
+    {
+      "package_name": "Extract_Premium",
+      "connection_name": "CM_DW_PG_Target",
+      "connection_id": "{687226D2-4BD4-4707-A18E-CDBC9918635C}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_DW_PG_Target]",
+      "object_data": {
+        "Property": "Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)"
+      }
+    }
+  ],
+  "sql": [
+    {
+      "package_name": "Extract_Premium",
+      "property_name": "SqlCommand",
+      "sql": "SELECT premium_id, policy_period_id, written_premium, earned_premium, unearned_premium, transaction_date, currency_code, commission_rate, commission_amount, operating_expense, as_of_date FROM public.premium"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "property_name": "SqlCommandParam",
+      "sql": "SELECT policy_period_id FROM stg.policy_period"
+    }
+  ],
+  "variables": [
+    {
+      "package_name": "Extract_Premium",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Premium",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Premium",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Premium",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "Extract_Premium"
+      ]
+    },
+    {
+      "package_name": "Extract_Premium",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "1900-01-01T00:00:00"
+      ]
+    }
+  ],
+  "precedence": [
+    {
+      "package_name": "Extract_Premium",
+      "id": "{007C0005-F2C9-4551-9A02-B1247CD8CF8B}",
+      "from": "Package\\SQL_LogStart",
+      "to": "Package\\DFT_Main",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "id": "{59D16C0A-711B-49D6-B47D-84EA4BC1D49D}",
+      "from": "Package\\DFT_Main",
+      "to": "Package\\SQL_LogEnd",
+      "evaluation_operation": "",
+      "value": "1"
+    }
+  ],
+  "package_links": [],
+  "relationships": [
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "SRC - premium (PostgreSQL)",
+      "source_output": "OLE DB Source Output",
+      "target_component": "LKP - Validate Policy_Period (policy_period_id)",
+      "target_input": "OLE DB Source Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "SRC - premium (PostgreSQL)",
+      "source_output": "OLE DB Source Error Output",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "OLE DB Source Error Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "LKP - Validate Policy_Period (policy_period_id)",
+      "source_output": "Lookup Match Output",
+      "target_component": "DER - Data Cleansing",
+      "target_input": "Lookup Match Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "LKP - Validate Policy_Period (policy_period_id)",
+      "source_output": "Lookup No Match Output (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Lookup No Match Output (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "DER - Data Cleansing",
+      "source_output": "Cleansing Output",
+      "target_component": "DER - Derived / Calculated Columns",
+      "target_input": "Cleansing Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "DER - Derived / Calculated Columns",
+      "source_output": "Derived Column Output",
+      "target_component": "CSPL - Business Rule Validation",
+      "target_input": "Derived Column Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Valid Rows",
+      "target_component": "AGG - Premium Summary by Policy Period",
+      "target_input": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Invalid Rows (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "AGG - Premium Summary by Policy Period",
+      "source_output": "Aggregate Output",
+      "target_component": "DST - Load premium (PostgreSQL DW)",
+      "target_input": "Aggregate Output"
+    },
+    {
+      "package_name": "Extract_Premium",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load premium",
+      "source_component": "UN - Union All Error Rows",
+      "source_output": "Unified Error Output",
+      "target_component": "DST - Error Log (stg.error_quarantine)",
+      "target_input": "Unified Error Output"
+    }
+  ]
+}

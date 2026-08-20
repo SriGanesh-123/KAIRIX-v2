@@ -1,0 +1,574 @@
+{
+  "metadata_version": "1.0",
+  "source_type": "SSIS DTSX",
+  "source_directory": "C:\\Users\\GaneshSriKumarMarimu\\legacy-code-agentic-rag\\source\\ssis\\packages",
+  "packages": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "package_id": "{837774F7-6686-4DBA-92D2-C41896752BE6}",
+      "executable_type": "Microsoft.Package",
+      "creation_name": "Microsoft.Package",
+      "package_type": "5",
+      "version_major": "1",
+      "version_minor": "0",
+      "version_build": "1",
+      "version_guid": "{E4C81190-20DD-4B33-AA24-F2282BB17C9B}",
+      "description": "Merges pre-aggregated PREMIUM and CLAIMS summaries with POLICY_PERIOD/JOB to compute Loss Ratio, Commission Ratio, Underwriting Profit and Retention Rate KPIs (BR-09, BR-10, BR-11) and loads the reporting fact tables.",
+      "logging_mode": "UseParentSetting",
+      "source_file": "Extract_KPI_Aggregates.dtsx"
+    }
+  ],
+  "tasks": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_id": "{FBCC2F13-93F0-4EE7-BFA9-C6D240C2A833}",
+      "task_name": "SQL - Log Package Start",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogStart"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_id": "{52CE3B7D-CA4A-4178-87E4-34500F94B2E7}",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "task_type": "Microsoft.Pipeline",
+      "creation_name": "Microsoft.Pipeline",
+      "ref_id": "Package\\DFT_KPI"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_id": "{E2D3516B-2BE6-4E4C-88A8-BD63E289A9FA}",
+      "task_name": "SQL - Log Package End / Row Counts",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogEnd"
+    }
+  ],
+  "components": [
+    {
+      "component_id": 1,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SRC - stg.premium (pre-aggregated by policy_period)",
+      "component_type": "Microsoft.OLEDBSource",
+      "description": "Reads the premium summary produced by Extract_Premium's Aggregate transform.",
+      "properties": {
+        "OpenRowset": "stg.premium_summary_by_period",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 2,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "component_type": "Microsoft.OLEDBSource",
+      "description": "Reads the claims incurred summary produced by Extract_Claims's Aggregate transform.",
+      "properties": {
+        "OpenRowset": "stg.claims_incurred_summary_by_policy",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 3,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SRC - stg.policy_period",
+      "component_type": "Microsoft.OLEDBSource",
+      "description": "Reads policy_period_id to policy_id mapping needed to join premium (by period) with claims (by policy).",
+      "properties": {
+        "OpenRowset": "stg.policy_period",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 4,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SRC - stg.job (for retention rate)",
+      "component_type": "Microsoft.OLEDBSource",
+      "description": "Reads job_type / job_status to classify RENEWAL vs original/expiring policies for Retention Rate KPI.",
+      "properties": {
+        "OpenRowset": "stg.job",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 5,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SORT - Premium by policy_period_id",
+      "component_type": "Microsoft.Sort",
+      "description": "Sorts premium summary for the downstream Merge Join (Merge Join requires sorted inputs).",
+      "properties": {
+        "SortKey": "policy_period_id ASC"
+      }
+    },
+    {
+      "component_id": 6,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SORT - PolicyPeriod by policy_period_id",
+      "component_type": "Microsoft.Sort",
+      "description": "Sorts policy_period for the Merge Join.",
+      "properties": {
+        "SortKey": "policy_period_id ASC"
+      }
+    },
+    {
+      "component_id": 7,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "component_type": "Microsoft.MergeJoin",
+      "description": "INNER JOIN on policy_period_id to resolve policy_id for each premium summary row.",
+      "properties": {
+        "JoinType": "Inner",
+        "JoinKey": "policy_period_id"
+      }
+    },
+    {
+      "component_id": 8,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SORT - Premium+PolicyID by policy_id",
+      "component_type": "Microsoft.Sort",
+      "description": "Re-sorts by policy_id ahead of the second Merge Join against claims.",
+      "properties": {
+        "SortKey": "policy_id ASC"
+      }
+    },
+    {
+      "component_id": 9,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "SORT - Claims by policy_id",
+      "component_type": "Microsoft.Sort",
+      "description": "Sorts the pre-aggregated claims summary for the Merge Join.",
+      "properties": {
+        "SortKey": "policy_id ASC"
+      }
+    },
+    {
+      "component_id": 10,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "component_type": "Microsoft.MergeJoin",
+      "description": "LEFT OUTER JOIN so policies with zero claims still produce a KPI row (incurred defaults to 0).",
+      "properties": {
+        "JoinType": "LeftOuter",
+        "JoinKey": "policy_id"
+      }
+    },
+    {
+      "component_id": 11,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "DER - KPI Calculations (BR-10 / BR-11)",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Computes Loss Ratio, Commission Ratio and Underwriting Profit with divide-by-zero protection.",
+      "properties": {
+        "Expressions": "ISNULL(incurred_amount,0) -> incurred_amount_safe; (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0) -> loss_ratio (BR-10); (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0) -> commission_ratio; earned_premium - incurred_amount_safe - commission_amount - operating_expense -> underwriting_profit (BR-11); GETDATE() -> etl_load_date"
+      }
+    },
+    {
+      "component_id": 12,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "component_type": "Microsoft.Aggregation",
+      "description": "Counts RENEWAL jobs vs total policies reaching expiration, grouped by month, to feed Retention Rate = Renewed / Expiring * 100.",
+      "properties": {
+        "GroupBy": "DATEPART(yyyy,job_date), DATEPART(mm,job_date)",
+        "Aggregates": "COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count, COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count"
+      }
+    },
+    {
+      "component_id": 13,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "DER - Retention Rate (%)",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Retention Rate = Renewed Policies / Expiring Policies * 100, divide-by-zero protected.",
+      "properties": {
+        "Expressions": "(expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0) -> retention_rate"
+      }
+    },
+    {
+      "component_id": 14,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "DST - Load fact_kpi_summary (per policy)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Loads Loss Ratio / Commission Ratio / Underwriting Profit rows into rpt.fact_kpi_summary.",
+      "properties": {
+        "OpenRowset": "rpt.fact_kpi_summary",
+        "ConnectionManager": "CM_DW_PG_Target",
+        "FastLoad": "true"
+      }
+    },
+    {
+      "component_id": 15,
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_name": "DST - Load fact_retention_rate (monthly)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Loads monthly Retention Rate KPI into rpt.fact_retention_rate.",
+      "properties": {
+        "OpenRowset": "rpt.fact_retention_rate",
+        "ConnectionManager": "CM_DW_PG_Target",
+        "FastLoad": "true"
+      }
+    }
+  ],
+  "component_properties": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 1,
+      "component_name": "SRC - stg.premium (pre-aggregated by policy_period)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.premium_summary_by_period"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 1,
+      "component_name": "SRC - stg.premium (pre-aggregated by policy_period)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 2,
+      "component_name": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.claims_incurred_summary_by_policy"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 2,
+      "component_name": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 3,
+      "component_name": "SRC - stg.policy_period",
+      "property_name": "OpenRowset",
+      "property_value": "stg.policy_period"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 3,
+      "component_name": "SRC - stg.policy_period",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 4,
+      "component_name": "SRC - stg.job (for retention rate)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.job"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 4,
+      "component_name": "SRC - stg.job (for retention rate)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 5,
+      "component_name": "SORT - Premium by policy_period_id",
+      "property_name": "SortKey",
+      "property_value": "policy_period_id ASC"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 6,
+      "component_name": "SORT - PolicyPeriod by policy_period_id",
+      "property_name": "SortKey",
+      "property_value": "policy_period_id ASC"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 7,
+      "component_name": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "property_name": "JoinType",
+      "property_value": "Inner"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 7,
+      "component_name": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "property_name": "JoinKey",
+      "property_value": "policy_period_id"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 8,
+      "component_name": "SORT - Premium+PolicyID by policy_id",
+      "property_name": "SortKey",
+      "property_value": "policy_id ASC"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 9,
+      "component_name": "SORT - Claims by policy_id",
+      "property_name": "SortKey",
+      "property_value": "policy_id ASC"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 10,
+      "component_name": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "property_name": "JoinType",
+      "property_value": "LeftOuter"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 10,
+      "component_name": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "property_name": "JoinKey",
+      "property_value": "policy_id"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 11,
+      "component_name": "DER - KPI Calculations (BR-10 / BR-11)",
+      "property_name": "Expressions",
+      "property_value": "ISNULL(incurred_amount,0) -> incurred_amount_safe; (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0) -> loss_ratio (BR-10); (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0) -> commission_ratio; earned_premium - incurred_amount_safe - commission_amount - operating_expense -> underwriting_profit (BR-11); GETDATE() -> etl_load_date"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 12,
+      "component_name": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "property_name": "GroupBy",
+      "property_value": "DATEPART(yyyy,job_date), DATEPART(mm,job_date)"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 12,
+      "component_name": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "property_name": "Aggregates",
+      "property_value": "COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count, COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 13,
+      "component_name": "DER - Retention Rate (%)",
+      "property_name": "Expressions",
+      "property_value": "(expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0) -> retention_rate"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 14,
+      "component_name": "DST - Load fact_kpi_summary (per policy)",
+      "property_name": "OpenRowset",
+      "property_value": "rpt.fact_kpi_summary"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 14,
+      "component_name": "DST - Load fact_kpi_summary (per policy)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 14,
+      "component_name": "DST - Load fact_kpi_summary (per policy)",
+      "property_name": "FastLoad",
+      "property_value": "true"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 15,
+      "component_name": "DST - Load fact_retention_rate (monthly)",
+      "property_name": "OpenRowset",
+      "property_value": "rpt.fact_retention_rate"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 15,
+      "component_name": "DST - Load fact_retention_rate (monthly)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "component_id": 15,
+      "component_name": "DST - Load fact_retention_rate (monthly)",
+      "property_name": "FastLoad",
+      "property_value": "true"
+    }
+  ],
+  "connections": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "connection_name": "CM_DW_PG_Target",
+      "connection_id": "{248FFA76-0389-4A8D-AE39-0CA6BBE7AA83}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_DW_PG_Target]",
+      "object_data": {
+        "Property": "Npgsql PostgreSQL Provider"
+      }
+    }
+  ],
+  "sql": [],
+  "variables": [],
+  "precedence": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "id": "{991C65CF-BB6D-428B-BAB5-AD103CB9D100}",
+      "from": "Package\\SQL_LogStart",
+      "to": "Package\\DFT_KPI",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "id": "{55D605D9-E838-4C13-96C9-E77E07738C04}",
+      "from": "Package\\DFT_KPI",
+      "to": "Package\\SQL_LogEnd",
+      "evaluation_operation": "",
+      "value": "1"
+    }
+  ],
+  "package_links": [],
+  "relationships": [
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SRC - stg.premium (pre-aggregated by policy_period)",
+      "source_output": "Premium Output",
+      "target_component": "SORT - Premium by policy_period_id",
+      "target_input": "Premium Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "source_output": "Claims Output",
+      "target_component": "SORT - Claims by policy_id",
+      "target_input": "Claims Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SRC - stg.policy_period",
+      "source_output": "PolicyPeriod Output",
+      "target_component": "SORT - PolicyPeriod by policy_period_id",
+      "target_input": "PolicyPeriod Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SRC - stg.job (for retention rate)",
+      "source_output": "Job Output",
+      "target_component": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "target_input": "Job Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SORT - Premium by policy_period_id",
+      "source_output": "Sorted Premium",
+      "target_component": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "target_input": "Sorted Premium"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SORT - PolicyPeriod by policy_period_id",
+      "source_output": "Sorted PolicyPeriod",
+      "target_component": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "target_input": "Sorted PolicyPeriod"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "source_output": "Premium+PolicyID Output",
+      "target_component": "SORT - Premium+PolicyID by policy_id",
+      "target_input": "Premium+PolicyID Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SORT - Premium+PolicyID by policy_id",
+      "source_output": "Sorted Premium+PolicyID",
+      "target_component": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "target_input": "Sorted Premium+PolicyID"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "SORT - Claims by policy_id",
+      "source_output": "Sorted Claims",
+      "target_component": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "target_input": "Sorted Claims"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "source_output": "Merged Financials Output",
+      "target_component": "DER - KPI Calculations (BR-10 / BR-11)",
+      "target_input": "Merged Financials Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "DER - KPI Calculations (BR-10 / BR-11)",
+      "source_output": "KPI Output",
+      "target_component": "DST - Load fact_kpi_summary (per policy)",
+      "target_input": "KPI Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "source_output": "Retention Aggregate Output",
+      "target_component": "DER - Retention Rate (%)",
+      "target_input": "Retention Aggregate Output"
+    },
+    {
+      "package_name": "Extract_KPI_Aggregates",
+      "task_name": "DFT - Merge, Aggregate, Calculate KPIs",
+      "source_component": "DER - Retention Rate (%)",
+      "source_output": "Retention Rate Output",
+      "target_component": "DST - Load fact_retention_rate (monthly)",
+      "target_input": "Retention Rate Output"
+    }
+  ]
+}

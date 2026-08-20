@@ -1,0 +1,222 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{837774F7-6686-4DBA-92D2-C41896752BE6}"
+    DTS:ObjectName="Extract_KPI_Aggregates"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{E4C81190-20DD-4B33-AA24-F2282BB17C9B}"
+    DTS:Description="Merges pre-aggregated PREMIUM and CLAIMS summaries with POLICY_PERIOD/JOB to compute Loss Ratio, Commission Ratio, Underwriting Profit and Retention Rate KPIs (BR-09, BR-10, BR-11) and loads the reporting fact tables."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{248FFA76-0389-4A8D-AE39-0CA6BBE7AA83}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_LogStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{FBCC2F13-93F0-4EE7-BFA9-C6D240C2A833}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_KPI_Aggregates&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT_KPI" DTS:CreationName="Microsoft.Pipeline" DTS:DTSID="{52CE3B7D-CA4A-4178-87E4-34500F94B2E7}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT - Merge, Aggregate, Calculate KPIs">
+      <DTS:ObjectData>
+    <pipeline version="1">
+      <components>
+      <component name="SRC - stg.premium (pre-aggregated by policy_period)" componentClassID="Microsoft.OLEDBSource" description="Reads the premium summary produced by Extract_Premium&apos;s Aggregate transform.">
+        <properties>
+          <property name="OpenRowset">stg.premium_summary_by_period</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <outputs>
+          <output name="Premium Output" />
+        </outputs>
+      </component>
+      <component name="SRC - stg.claims (pre-aggregated by policy, BR-09)" componentClassID="Microsoft.OLEDBSource" description="Reads the claims incurred summary produced by Extract_Claims&apos;s Aggregate transform.">
+        <properties>
+          <property name="OpenRowset">stg.claims_incurred_summary_by_policy</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <outputs>
+          <output name="Claims Output" />
+        </outputs>
+      </component>
+      <component name="SRC - stg.policy_period" componentClassID="Microsoft.OLEDBSource" description="Reads policy_period_id to policy_id mapping needed to join premium (by period) with claims (by policy).">
+        <properties>
+          <property name="OpenRowset">stg.policy_period</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <outputs>
+          <output name="PolicyPeriod Output" />
+        </outputs>
+      </component>
+      <component name="SRC - stg.job (for retention rate)" componentClassID="Microsoft.OLEDBSource" description="Reads job_type / job_status to classify RENEWAL vs original/expiring policies for Retention Rate KPI.">
+        <properties>
+          <property name="OpenRowset">stg.job</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <outputs>
+          <output name="Job Output" />
+        </outputs>
+      </component>
+      <component name="SORT - Premium by policy_period_id" componentClassID="Microsoft.Sort" description="Sorts premium summary for the downstream Merge Join (Merge Join requires sorted inputs).">
+        <properties>
+          <property name="SortKey">policy_period_id ASC</property>
+        </properties>
+        <inputs>
+          <input name="Premium Output" />
+        </inputs>
+        <outputs>
+          <output name="Sorted Premium" />
+        </outputs>
+      </component>
+      <component name="SORT - PolicyPeriod by policy_period_id" componentClassID="Microsoft.Sort" description="Sorts policy_period for the Merge Join.">
+        <properties>
+          <property name="SortKey">policy_period_id ASC</property>
+        </properties>
+        <inputs>
+          <input name="PolicyPeriod Output" />
+        </inputs>
+        <outputs>
+          <output name="Sorted PolicyPeriod" />
+        </outputs>
+      </component>
+      <component name="MRG - Join Premium to PolicyPeriod (get policy_id)" componentClassID="Microsoft.MergeJoin" description="INNER JOIN on policy_period_id to resolve policy_id for each premium summary row.">
+        <properties>
+          <property name="JoinType">Inner</property>
+          <property name="JoinKey">policy_period_id</property>
+        </properties>
+        <inputs>
+          <input name="Sorted Premium" />
+          <input name="Sorted PolicyPeriod" />
+        </inputs>
+        <outputs>
+          <output name="Premium+PolicyID Output" />
+        </outputs>
+      </component>
+      <component name="SORT - Premium+PolicyID by policy_id" componentClassID="Microsoft.Sort" description="Re-sorts by policy_id ahead of the second Merge Join against claims.">
+        <properties>
+          <property name="SortKey">policy_id ASC</property>
+        </properties>
+        <inputs>
+          <input name="Premium+PolicyID Output" />
+        </inputs>
+        <outputs>
+          <output name="Sorted Premium+PolicyID" />
+        </outputs>
+      </component>
+      <component name="SORT - Claims by policy_id" componentClassID="Microsoft.Sort" description="Sorts the pre-aggregated claims summary for the Merge Join.">
+        <properties>
+          <property name="SortKey">policy_id ASC</property>
+        </properties>
+        <inputs>
+          <input name="Claims Output" />
+        </inputs>
+        <outputs>
+          <output name="Sorted Claims" />
+        </outputs>
+      </component>
+      <component name="MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)" componentClassID="Microsoft.MergeJoin" description="LEFT OUTER JOIN so policies with zero claims still produce a KPI row (incurred defaults to 0).">
+        <properties>
+          <property name="JoinType">LeftOuter</property>
+          <property name="JoinKey">policy_id</property>
+        </properties>
+        <inputs>
+          <input name="Sorted Premium+PolicyID" />
+          <input name="Sorted Claims" />
+        </inputs>
+        <outputs>
+          <output name="Merged Financials Output" />
+        </outputs>
+      </component>
+      <component name="DER - KPI Calculations (BR-10 / BR-11)" componentClassID="Microsoft.DerivedColumn" description="Computes Loss Ratio, Commission Ratio and Underwriting Profit with divide-by-zero protection.">
+        <properties>
+          <property name="Expressions">ISNULL(incurred_amount,0) -&gt; incurred_amount_safe; (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0) -&gt; loss_ratio (BR-10); (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0) -&gt; commission_ratio; earned_premium - incurred_amount_safe - commission_amount - operating_expense -&gt; underwriting_profit (BR-11); GETDATE() -&gt; etl_load_date</property>
+        </properties>
+        <inputs>
+          <input name="Merged Financials Output" />
+        </inputs>
+        <outputs>
+          <output name="KPI Output" />
+        </outputs>
+      </component>
+      <component name="AGG - Retention Rate Inputs (renewed vs expiring policy counts)" componentClassID="Microsoft.Aggregation" description="Counts RENEWAL jobs vs total policies reaching expiration, grouped by month, to feed Retention Rate = Renewed / Expiring * 100.">
+        <properties>
+          <property name="GroupBy">DATEPART(yyyy,job_date), DATEPART(mm,job_date)</property>
+          <property name="Aggregates">COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count, COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count</property>
+        </properties>
+        <inputs>
+          <input name="Job Output" />
+        </inputs>
+        <outputs>
+          <output name="Retention Aggregate Output" />
+        </outputs>
+      </component>
+      <component name="DER - Retention Rate (%)" componentClassID="Microsoft.DerivedColumn" description="Retention Rate = Renewed Policies / Expiring Policies * 100, divide-by-zero protected.">
+        <properties>
+          <property name="Expressions">(expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0) -&gt; retention_rate</property>
+        </properties>
+        <inputs>
+          <input name="Retention Aggregate Output" />
+        </inputs>
+        <outputs>
+          <output name="Retention Rate Output" />
+        </outputs>
+      </component>
+      <component name="DST - Load fact_kpi_summary (per policy)" componentClassID="Microsoft.OLEDBDestination" description="Loads Loss Ratio / Commission Ratio / Underwriting Profit rows into rpt.fact_kpi_summary.">
+        <properties>
+          <property name="OpenRowset">rpt.fact_kpi_summary</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+        </properties>
+        <inputs>
+          <input name="KPI Output" />
+        </inputs>
+      </component>
+      <component name="DST - Load fact_retention_rate (monthly)" componentClassID="Microsoft.OLEDBDestination" description="Loads monthly Retention Rate KPI into rpt.fact_retention_rate.">
+        <properties>
+          <property name="OpenRowset">rpt.fact_retention_rate</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+        </properties>
+        <inputs>
+          <input name="Retention Rate Output" />
+        </inputs>
+      </component>
+      </components>
+    </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_LogEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{E2D3516B-2BE6-4E4C-88A8-BD63E289A9FA}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package End / Row Counts">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos;, rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = &apos;Extract_KPI_Aggregates&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[StartToKPI]" DTS:From="Package\SQL_LogStart" DTS:To="Package\DFT_KPI" DTS:Value="3" DTS:DTSID="{991C65CF-BB6D-428B-BAB5-AD103CB9D100}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[KPIToEnd]" DTS:From="Package\DFT_KPI" DTS:To="Package\SQL_LogEnd" DTS:Value="1" DTS:DTSID="{55D605D9-E838-4C13-96C9-E77E07738C04}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{2B5C369B-5F4E-4B0C-99BB-5C0D54265FB1}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+        <DTS:Executable DTS:refId="Package\EH_LogError" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{B5AA457C-5A64-4644-AB03-D80BFEA7FC51}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Error to ETL_ERROR_LOG">
+          <DTS:ObjectData>
+            <SQLTask:SqlTaskData SQLTask:Connection="CM_DW_PG_Target" SQLTask:SqlStatementSource="INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES (&apos;Extract_KPI_Aggregates&apos;, ?, ?, ?, now())" />
+          </DTS:ObjectData>
+        </DTS:Executable>
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

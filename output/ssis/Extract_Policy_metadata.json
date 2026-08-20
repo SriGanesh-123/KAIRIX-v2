@@ -1,0 +1,537 @@
+{
+  "metadata_version": "1.0",
+  "source_type": "SSIS DTSX",
+  "source_directory": "C:\\Users\\GaneshSriKumarMarimu\\legacy-code-agentic-rag\\source\\ssis\\packages",
+  "packages": [
+    {
+      "package_name": "Extract_Policy",
+      "package_id": "{4EC70694-CDC4-4631-80BF-18DEE7B21121}",
+      "executable_type": "Microsoft.Package",
+      "creation_name": "Microsoft.Package",
+      "package_type": "5",
+      "version_major": "1",
+      "version_minor": "0",
+      "version_build": "1",
+      "version_guid": "{991D0A86-93FD-4C8A-A1F2-91ED4989ACC6}",
+      "description": "Extracts POLICY, validates FK to ACCOUNT and PRODUCER (BR-01), cleanses and loads.",
+      "logging_mode": "UseParentSetting",
+      "source_file": "Extract_Policy.dtsx"
+    }
+  ],
+  "tasks": [
+    {
+      "package_name": "Extract_Policy",
+      "task_id": "{30C846BB-1546-43D7-8B26-E31E74379975}",
+      "task_name": "SQL - Log Package Start",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogStart"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_id": "{9101BEE4-4A7E-423C-B078-A7B4B528DD90}",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "task_type": "Microsoft.Pipeline",
+      "creation_name": "Microsoft.Pipeline",
+      "ref_id": "Package\\DFT_Main"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_id": "{DC62FAB3-1717-4064-93B0-1C106A5EBF80}",
+      "task_name": "SQL - Log Package End / Row Counts",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogEnd"
+    }
+  ],
+  "components": [
+    {
+      "component_id": 1,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "SRC - policy (PostgreSQL)",
+      "component_type": "Microsoft.ADO.NET.PGSource",
+      "description": "Extracts rows from public.policy on CM_Guidewire_PG_Source",
+      "properties": {
+        "SqlCommand": "SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy",
+        "ConnectionManager": "CM_Guidewire_PG_Source"
+      }
+    },
+    {
+      "component_id": 2,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "LKP - Validate Account (account_id)",
+      "component_type": "Microsoft.Lookup",
+      "description": "Validates account_id exists in Account (referential integrity / BR-01, BR-05)",
+      "properties": {
+        "SqlCommandParam": "SELECT account_id FROM stg.account",
+        "JoinColumn": "account_id",
+        "NoMatchBehavior": "RedirectRowsToNoMatchOutput",
+        "CacheMode": "Full"
+      }
+    },
+    {
+      "component_id": 3,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "LKP - Validate Producer (producer_id)",
+      "component_type": "Microsoft.Lookup",
+      "description": "Validates producer_id exists in Producer (referential integrity / BR-01, BR-05)",
+      "properties": {
+        "SqlCommandParam": "SELECT producer_id FROM stg.producer",
+        "JoinColumn": "producer_id",
+        "NoMatchBehavior": "RedirectRowsToNoMatchOutput",
+        "CacheMode": "Full"
+      }
+    },
+    {
+      "component_id": 4,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "DER - Data Cleansing",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Trims whitespace, standardizes casing/codes, normalizes nulls",
+      "properties": {
+        "Expressions": "TRIM(policy_number) -> policy_number; UPPER(product_code) -> product_code"
+      }
+    },
+    {
+      "component_id": 5,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "DER - Derived / Calculated Columns",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Adds ETL metadata columns and business-calculated fields",
+      "properties": {
+        "Expressions": "GETDATE() -> etl_load_date"
+      }
+    },
+    {
+      "component_id": 6,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "CSPL - Business Rule Validation",
+      "component_type": "Microsoft.ConditionalSplit",
+      "description": "Routes rows failing business rules to error output. Rules: expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)",
+      "properties": {
+        "ValidOutputName": "Valid Rows",
+        "InvalidOutputName": "Invalid Rows (-> Error Path)",
+        "Conditions": "expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)"
+      }
+    },
+    {
+      "component_id": 7,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "UN - Union All Error Rows",
+      "component_type": "Microsoft.UnionAll",
+      "description": "Combines all error/no-match/invalid outputs into a single error stream",
+      "properties": {}
+    },
+    {
+      "component_id": 8,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Writes rejected/invalid rows to the error-quarantine table for review",
+      "properties": {
+        "OpenRowset": "stg.error_quarantine",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 9,
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_name": "DST - Load policy (PostgreSQL DW)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Loads validated/cleansed rows into stg.policy (upsert via staging + MERGE in post-SQL)",
+      "properties": {
+        "OpenRowset": "stg.policy",
+        "ConnectionManager": "CM_DW_PG_Target",
+        "FastLoad": "true",
+        "MaximumInsertCommitSize": "10000"
+      }
+    }
+  ],
+  "component_properties": [
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 1,
+      "component_name": "SRC - policy (PostgreSQL)",
+      "property_name": "SqlCommand",
+      "property_value": "SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 1,
+      "component_name": "SRC - policy (PostgreSQL)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_Guidewire_PG_Source"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 2,
+      "component_name": "LKP - Validate Account (account_id)",
+      "property_name": "SqlCommandParam",
+      "property_value": "SELECT account_id FROM stg.account"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 2,
+      "component_name": "LKP - Validate Account (account_id)",
+      "property_name": "JoinColumn",
+      "property_value": "account_id"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 2,
+      "component_name": "LKP - Validate Account (account_id)",
+      "property_name": "NoMatchBehavior",
+      "property_value": "RedirectRowsToNoMatchOutput"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 2,
+      "component_name": "LKP - Validate Account (account_id)",
+      "property_name": "CacheMode",
+      "property_value": "Full"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 3,
+      "component_name": "LKP - Validate Producer (producer_id)",
+      "property_name": "SqlCommandParam",
+      "property_value": "SELECT producer_id FROM stg.producer"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 3,
+      "component_name": "LKP - Validate Producer (producer_id)",
+      "property_name": "JoinColumn",
+      "property_value": "producer_id"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 3,
+      "component_name": "LKP - Validate Producer (producer_id)",
+      "property_name": "NoMatchBehavior",
+      "property_value": "RedirectRowsToNoMatchOutput"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 3,
+      "component_name": "LKP - Validate Producer (producer_id)",
+      "property_name": "CacheMode",
+      "property_value": "Full"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 4,
+      "component_name": "DER - Data Cleansing",
+      "property_name": "Expressions",
+      "property_value": "TRIM(policy_number) -> policy_number; UPPER(product_code) -> product_code"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 5,
+      "component_name": "DER - Derived / Calculated Columns",
+      "property_name": "Expressions",
+      "property_value": "GETDATE() -> etl_load_date"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 6,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "ValidOutputName",
+      "property_value": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 6,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "InvalidOutputName",
+      "property_value": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 6,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "Conditions",
+      "property_value": "expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.error_quarantine"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 9,
+      "component_name": "DST - Load policy (PostgreSQL DW)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.policy"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 9,
+      "component_name": "DST - Load policy (PostgreSQL DW)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 9,
+      "component_name": "DST - Load policy (PostgreSQL DW)",
+      "property_name": "FastLoad",
+      "property_value": "true"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "component_id": 9,
+      "component_name": "DST - Load policy (PostgreSQL DW)",
+      "property_name": "MaximumInsertCommitSize",
+      "property_value": "10000"
+    }
+  ],
+  "connections": [
+    {
+      "package_name": "Extract_Policy",
+      "connection_name": "CM_Guidewire_PG_Source",
+      "connection_id": "{9115364D-372C-4495-9C1E-50DF8A571152}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_Guidewire_PG_Source]",
+      "object_data": {
+        "Property": "Source: Guidewire PolicyCenter PostgreSQL replica (read-only)"
+      }
+    },
+    {
+      "package_name": "Extract_Policy",
+      "connection_name": "CM_DW_PG_Target",
+      "connection_id": "{687226D2-4BD4-4707-A18E-CDBC9918635C}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_DW_PG_Target]",
+      "object_data": {
+        "Property": "Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)"
+      }
+    }
+  ],
+  "sql": [
+    {
+      "package_name": "Extract_Policy",
+      "property_name": "SqlCommand",
+      "sql": "SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "property_name": "SqlCommandParam",
+      "sql": "SELECT account_id FROM stg.account"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "property_name": "SqlCommandParam",
+      "sql": "SELECT producer_id FROM stg.producer"
+    }
+  ],
+  "variables": [
+    {
+      "package_name": "Extract_Policy",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Policy",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Policy",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Policy",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "Extract_Policy"
+      ]
+    },
+    {
+      "package_name": "Extract_Policy",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "1900-01-01T00:00:00"
+      ]
+    }
+  ],
+  "precedence": [
+    {
+      "package_name": "Extract_Policy",
+      "id": "{6F1C614D-7B4B-4F5E-855B-73FCAF369B01}",
+      "from": "Package\\SQL_LogStart",
+      "to": "Package\\DFT_Main",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "id": "{886C148F-CAB9-418C-8CB7-B6DCFB557765}",
+      "from": "Package\\DFT_Main",
+      "to": "Package\\SQL_LogEnd",
+      "evaluation_operation": "",
+      "value": "1"
+    }
+  ],
+  "package_links": [],
+  "relationships": [
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "SRC - policy (PostgreSQL)",
+      "source_output": "OLE DB Source Output",
+      "target_component": "LKP - Validate Account (account_id)",
+      "target_input": "OLE DB Source Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "SRC - policy (PostgreSQL)",
+      "source_output": "OLE DB Source Error Output",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "OLE DB Source Error Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "LKP - Validate Account (account_id)",
+      "source_output": "Lookup Match Output",
+      "target_component": "LKP - Validate Producer (producer_id)",
+      "target_input": "Lookup Match Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "LKP - Validate Account (account_id)",
+      "source_output": "Lookup Match Output",
+      "target_component": "DER - Data Cleansing",
+      "target_input": "Lookup Match Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "LKP - Validate Account (account_id)",
+      "source_output": "Lookup No Match Output (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Lookup No Match Output (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "LKP - Validate Producer (producer_id)",
+      "source_output": "Lookup Match Output",
+      "target_component": "DER - Data Cleansing",
+      "target_input": "Lookup Match Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "LKP - Validate Producer (producer_id)",
+      "source_output": "Lookup No Match Output (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Lookup No Match Output (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "DER - Data Cleansing",
+      "source_output": "Cleansing Output",
+      "target_component": "DER - Derived / Calculated Columns",
+      "target_input": "Cleansing Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "DER - Derived / Calculated Columns",
+      "source_output": "Derived Column Output",
+      "target_component": "CSPL - Business Rule Validation",
+      "target_input": "Derived Column Output"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Valid Rows",
+      "target_component": "DST - Load policy (PostgreSQL DW)",
+      "target_input": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Invalid Rows (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Policy",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load policy",
+      "source_component": "UN - Union All Error Rows",
+      "source_output": "Unified Error Output",
+      "target_component": "DST - Error Log (stg.error_quarantine)",
+      "target_input": "Unified Error Output"
+    }
+  ]
+}

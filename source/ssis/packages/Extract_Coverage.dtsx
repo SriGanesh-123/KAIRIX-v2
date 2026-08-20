@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{37024C3F-247E-420C-A68C-D26AE3D5A5FA}"
+    DTS:ObjectName="Extract_Coverage"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{BAF160F2-3F0B-4C76-8FE5-38BDBE7F4515}"
+    DTS:Description="Extracts COVERAGE, validates FK to POLICY_PERIOD (BR-05), cleanses and loads."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:Variables>
+    <DTS:Variable DTS:Name="RowsRead"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsInserted"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsRejected"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="PackageName"><DTS:VariableValue DTS:DataType="8">Extract_Coverage</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="StartTime"><DTS:VariableValue DTS:DataType="7">1900-01-01T00:00:00</DTS:VariableValue></DTS:Variable>
+  </DTS:Variables>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_Guidewire_PG_Source]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{9115364D-372C-4495-9C1E-50DF8A571152}"
+        DTS:ObjectName="CM_Guidewire_PG_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=gw-pg-source.internal;Port=5432;Database=guidewire_policycenter;User Id=etl_reader;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Source: Guidewire PolicyCenter PostgreSQL replica (read-only)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{687226D2-4BD4-4707-A18E-CDBC9918635C}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_LogStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{815DFBAB-D1FC-4870-973E-E8E17E9CC761}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_Coverage&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT_Main" DTS:CreationName="Microsoft.Pipeline" DTS:DTSID="{CC93A872-61CB-472C-9F1F-D5DDE895F703}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT - Extract, Cleanse, Validate, Load coverage">
+      <DTS:ObjectData>
+    <pipeline version="1">
+      <components>
+      <component name="SRC - coverage (PostgreSQL)" componentClassID="Microsoft.ADO.NET.PGSource" description="Extracts rows from public.coverage on CM_Guidewire_PG_Source">
+        <properties>
+          <property name="SqlCommand">SELECT coverage_id, policy_period_id, coverage_code, coverage_name, limit_amount, deductible_amount, coverage_start_date, coverage_end_date, coverage_status FROM public.coverage</property>
+          <property name="ConnectionManager">CM_Guidewire_PG_Source</property>
+        </properties>
+        <outputs>
+          <output name="OLE DB Source Output" />
+          <output name="OLE DB Source Error Output" />
+        </outputs>
+      </component>
+      <component name="LKP - Validate Policy_Period (policy_period_id)" componentClassID="Microsoft.Lookup" description="Validates policy_period_id exists in Policy_Period (referential integrity / BR-01, BR-05)">
+        <properties>
+          <property name="SqlCommandParam">SELECT policy_period_id FROM stg.policy_period</property>
+          <property name="JoinColumn">policy_period_id</property>
+          <property name="NoMatchBehavior">RedirectRowsToNoMatchOutput</property>
+          <property name="CacheMode">Full</property>
+        </properties>
+        <inputs>
+          <input name="OLE DB Source Output" />
+        </inputs>
+        <outputs>
+          <output name="Lookup Match Output" />
+          <output name="Lookup No Match Output (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="DER - Data Cleansing" componentClassID="Microsoft.DerivedColumn" description="Trims whitespace, standardizes casing/codes, normalizes nulls">
+        <properties>
+          <property name="Expressions">TRIM(coverage_name) -&gt; coverage_name; UPPER(coverage_code) -&gt; coverage_code</property>
+        </properties>
+        <inputs>
+          <input name="Lookup Match Output" />
+        </inputs>
+        <outputs>
+          <output name="Cleansing Output" />
+        </outputs>
+      </component>
+      <component name="DER - Derived / Calculated Columns" componentClassID="Microsoft.DerivedColumn" description="Adds ETL metadata columns and business-calculated fields">
+        <properties>
+          <property name="Expressions">GETDATE() -&gt; etl_load_date</property>
+        </properties>
+        <inputs>
+          <input name="Cleansing Output" />
+        </inputs>
+        <outputs>
+          <output name="Derived Column Output" />
+        </outputs>
+      </component>
+      <component name="CSPL - Business Rule Validation" componentClassID="Microsoft.ConditionalSplit" description="Routes rows failing business rules to error output. Rules: limit_amount &gt;= 0.00 | deductible_amount &gt;= 0.00 | coverage_end_date &gt; coverage_start_date | coverage_status IN (&apos;ACTIVE&apos;,&apos;EXPIRED&apos;,&apos;CANCELLED&apos;,&apos;SUSPENDED&apos;)">
+        <properties>
+          <property name="ValidOutputName">Valid Rows</property>
+          <property name="InvalidOutputName">Invalid Rows (-&gt; Error Path)</property>
+          <property name="Conditions">limit_amount &gt;= 0.00 | deductible_amount &gt;= 0.00 | coverage_end_date &gt; coverage_start_date | coverage_status IN ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')</property>
+        </properties>
+        <inputs>
+          <input name="Derived Column Output" />
+        </inputs>
+        <outputs>
+          <output name="Valid Rows" />
+          <output name="Invalid Rows (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="UN - Union All Error Rows" componentClassID="Microsoft.UnionAll" description="Combines all error/no-match/invalid outputs into a single error stream">
+        <properties>
+
+        </properties>
+        <inputs>
+          <input name="Lookup No Match Output (-> Error Path)" />
+          <input name="Invalid Rows (-> Error Path)" />
+          <input name="OLE DB Source Error Output" />
+        </inputs>
+        <outputs>
+          <output name="Unified Error Output" />
+        </outputs>
+      </component>
+      <component name="DST - Error Log (stg.error_quarantine)" componentClassID="Microsoft.OLEDBDestination" description="Writes rejected/invalid rows to the error-quarantine table for review">
+        <properties>
+          <property name="OpenRowset">stg.error_quarantine</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <inputs>
+          <input name="Unified Error Output" />
+        </inputs>
+      </component>
+      <component name="DST - Load coverage (PostgreSQL DW)" componentClassID="Microsoft.OLEDBDestination" description="Loads validated/cleansed rows into stg.coverage (upsert via staging + MERGE in post-SQL)">
+        <properties>
+          <property name="OpenRowset">stg.coverage</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+          <property name="MaximumInsertCommitSize">10000</property>
+        </properties>
+        <inputs>
+          <input name="Valid Rows" />
+        </inputs>
+      </component>
+      </components>
+    </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_LogEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{F5B231CC-8DD0-4FF7-9A85-3A30B41DAA99}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package End / Row Counts">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos;, rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = &apos;Extract_Coverage&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[SQL_LogStartToDFT_Main]"
+        DTS:From="Package\SQL_LogStart" DTS:To="Package\DFT_Main" DTS:Value="3" DTS:DTSID="{CDE01D3E-71FC-4FFB-8337-656AE41048F2}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[DFT_MainToSQL_LogEnd]"
+        DTS:From="Package\DFT_Main" DTS:To="Package\SQL_LogEnd" DTS:Value="1" DTS:DTSID="{C5EE97F3-669F-40FE-B7B1-095A73726824}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{2905D6FF-7B18-4F6C-82BA-8F21C0D4216E}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\EH_LogError" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{4D63F958-AE60-4B58-9A2D-898A44428532}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Error to ETL_ERROR_LOG">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES (&apos;Extract_Coverage&apos;, ?, ?, ?, now())" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>

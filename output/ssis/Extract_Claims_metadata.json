@@ -1,0 +1,498 @@
+{
+  "metadata_version": "1.0",
+  "source_type": "SSIS DTSX",
+  "source_directory": "C:\\Users\\GaneshSriKumarMarimu\\legacy-code-agentic-rag\\source\\ssis\\packages",
+  "packages": [
+    {
+      "package_name": "Extract_Claims",
+      "package_id": "{C284DE78-E237-41FA-B146-50FA5AABC1C9}",
+      "executable_type": "Microsoft.Package",
+      "creation_name": "Microsoft.Package",
+      "package_type": "5",
+      "version_major": "1",
+      "version_minor": "0",
+      "version_build": "1",
+      "version_guid": "{4CA2A438-C3CE-42C3-8653-0529F8D3FE87}",
+      "description": "Extracts CLAIMS, validates FK to POLICY, applies incurred-amount reconciliation, pre-aggregates (BR-09) and loads.",
+      "logging_mode": "UseParentSetting",
+      "source_file": "Extract_Claims.dtsx"
+    }
+  ],
+  "tasks": [
+    {
+      "package_name": "Extract_Claims",
+      "task_id": "{FA3319C7-1B5C-4353-8131-B7EF988576C3}",
+      "task_name": "SQL - Log Package Start",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogStart"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_id": "{3E16970D-3E7A-4D70-9EA4-2E3D98E89EED}",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "task_type": "Microsoft.Pipeline",
+      "creation_name": "Microsoft.Pipeline",
+      "ref_id": "Package\\DFT_Main"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_id": "{323081EF-ECFC-4942-9BFA-A548344FDF8A}",
+      "task_name": "SQL - Log Package End / Row Counts",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\SQL_LogEnd"
+    }
+  ],
+  "components": [
+    {
+      "component_id": 1,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "SRC - claims (PostgreSQL)",
+      "component_type": "Microsoft.ADO.NET.PGSource",
+      "description": "Extracts rows from public.claims on CM_Guidewire_PG_Source",
+      "properties": {
+        "SqlCommand": "SELECT claim_id, policy_id, claim_number, claim_date, claim_status, claim_type, paid_amount, reserve_amount, recovery_amount, incurred_amount, loss_date, reported_date FROM public.claims",
+        "ConnectionManager": "CM_Guidewire_PG_Source"
+      }
+    },
+    {
+      "component_id": 2,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "LKP - Validate Policy (policy_id)",
+      "component_type": "Microsoft.Lookup",
+      "description": "Validates policy_id exists in Policy (referential integrity / BR-01, BR-05)",
+      "properties": {
+        "SqlCommandParam": "SELECT policy_id FROM stg.policy",
+        "JoinColumn": "policy_id",
+        "NoMatchBehavior": "RedirectRowsToNoMatchOutput",
+        "CacheMode": "Full"
+      }
+    },
+    {
+      "component_id": 3,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "DER - Data Cleansing",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Trims whitespace, standardizes casing/codes, normalizes nulls",
+      "properties": {
+        "Expressions": "TRIM(claim_number) -> claim_number; UPPER(claim_type) -> claim_type"
+      }
+    },
+    {
+      "component_id": 4,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "DER - Derived / Calculated Columns",
+      "component_type": "Microsoft.DerivedColumn",
+      "description": "Adds ETL metadata columns and business-calculated fields",
+      "properties": {
+        "Expressions": "GETDATE() -> etl_load_date; paid_amount + reserve_amount - recovery_amount -> calculated_incurred_amount"
+      }
+    },
+    {
+      "component_id": 5,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "CSPL - Business Rule Validation",
+      "component_type": "Microsoft.ConditionalSplit",
+      "description": "Routes rows failing business rules to error output. Rules: paid_amount >= 0.00 AND reserve_amount >= 0.00 AND recovery_amount >= 0.00 | ABS(incurred_amount - calculated_incurred_amount) <= 1.00 (incurred = paid + reserve - recovery) | loss_date <= reported_date AND reported_date <= claim_date (BR-12 lifecycle chronology) | claim_status IN ('OPEN','IN_PROGRESS','ON_HOLD','CLOSED','REJECTED')",
+      "properties": {
+        "ValidOutputName": "Valid Rows",
+        "InvalidOutputName": "Invalid Rows (-> Error Path)",
+        "Conditions": "paid_amount >= 0.00 AND reserve_amount >= 0.00 AND recovery_amount >= 0.00 | ABS(incurred_amount - calculated_incurred_amount) <= 1.00 (incurred = paid + reserve - recovery) | loss_date <= reported_date AND reported_date <= claim_date (BR-12 lifecycle chronology) | claim_status IN ('OPEN','IN_PROGRESS','ON_HOLD','CLOSED','REJECTED')"
+      }
+    },
+    {
+      "component_id": 6,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)",
+      "component_type": "Microsoft.Aggregation",
+      "description": "Pre-aggregates incurred/paid/reserve/recovery per policy_id BEFORE any KPI join, preventing duplicate premium totals when joined downstream.",
+      "properties": {
+        "GroupBy": "policy_id",
+        "Aggregates": "SUM(paid_amount), SUM(reserve_amount), SUM(recovery_amount), SUM(incurred_amount), COUNT(claim_id) AS claim_count"
+      }
+    },
+    {
+      "component_id": 7,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "UN - Union All Error Rows",
+      "component_type": "Microsoft.UnionAll",
+      "description": "Combines all error/no-match/invalid outputs into a single error stream",
+      "properties": {}
+    },
+    {
+      "component_id": 8,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Writes rejected/invalid rows to the error-quarantine table for review",
+      "properties": {
+        "OpenRowset": "stg.error_quarantine",
+        "ConnectionManager": "CM_DW_PG_Target"
+      }
+    },
+    {
+      "component_id": 9,
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_name": "DST - Load claims (PostgreSQL DW)",
+      "component_type": "Microsoft.OLEDBDestination",
+      "description": "Loads validated/cleansed rows into stg.claims (upsert via staging + MERGE in post-SQL)",
+      "properties": {
+        "OpenRowset": "stg.claims",
+        "ConnectionManager": "CM_DW_PG_Target",
+        "FastLoad": "true",
+        "MaximumInsertCommitSize": "10000"
+      }
+    }
+  ],
+  "component_properties": [
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 1,
+      "component_name": "SRC - claims (PostgreSQL)",
+      "property_name": "SqlCommand",
+      "property_value": "SELECT claim_id, policy_id, claim_number, claim_date, claim_status, claim_type, paid_amount, reserve_amount, recovery_amount, incurred_amount, loss_date, reported_date FROM public.claims"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 1,
+      "component_name": "SRC - claims (PostgreSQL)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_Guidewire_PG_Source"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy (policy_id)",
+      "property_name": "SqlCommandParam",
+      "property_value": "SELECT policy_id FROM stg.policy"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy (policy_id)",
+      "property_name": "JoinColumn",
+      "property_value": "policy_id"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy (policy_id)",
+      "property_name": "NoMatchBehavior",
+      "property_value": "RedirectRowsToNoMatchOutput"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 2,
+      "component_name": "LKP - Validate Policy (policy_id)",
+      "property_name": "CacheMode",
+      "property_value": "Full"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 3,
+      "component_name": "DER - Data Cleansing",
+      "property_name": "Expressions",
+      "property_value": "TRIM(claim_number) -> claim_number; UPPER(claim_type) -> claim_type"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 4,
+      "component_name": "DER - Derived / Calculated Columns",
+      "property_name": "Expressions",
+      "property_value": "GETDATE() -> etl_load_date; paid_amount + reserve_amount - recovery_amount -> calculated_incurred_amount"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "ValidOutputName",
+      "property_value": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "InvalidOutputName",
+      "property_value": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 5,
+      "component_name": "CSPL - Business Rule Validation",
+      "property_name": "Conditions",
+      "property_value": "paid_amount >= 0.00 AND reserve_amount >= 0.00 AND recovery_amount >= 0.00 | ABS(incurred_amount - calculated_incurred_amount) <= 1.00 (incurred = paid + reserve - recovery) | loss_date <= reported_date AND reported_date <= claim_date (BR-12 lifecycle chronology) | claim_status IN ('OPEN','IN_PROGRESS','ON_HOLD','CLOSED','REJECTED')"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 6,
+      "component_name": "AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)",
+      "property_name": "GroupBy",
+      "property_value": "policy_id"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 6,
+      "component_name": "AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)",
+      "property_name": "Aggregates",
+      "property_value": "SUM(paid_amount), SUM(reserve_amount), SUM(recovery_amount), SUM(incurred_amount), COUNT(claim_id) AS claim_count"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.error_quarantine"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 8,
+      "component_name": "DST - Error Log (stg.error_quarantine)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 9,
+      "component_name": "DST - Load claims (PostgreSQL DW)",
+      "property_name": "OpenRowset",
+      "property_value": "stg.claims"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 9,
+      "component_name": "DST - Load claims (PostgreSQL DW)",
+      "property_name": "ConnectionManager",
+      "property_value": "CM_DW_PG_Target"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 9,
+      "component_name": "DST - Load claims (PostgreSQL DW)",
+      "property_name": "FastLoad",
+      "property_value": "true"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "component_id": 9,
+      "component_name": "DST - Load claims (PostgreSQL DW)",
+      "property_name": "MaximumInsertCommitSize",
+      "property_value": "10000"
+    }
+  ],
+  "connections": [
+    {
+      "package_name": "Extract_Claims",
+      "connection_name": "CM_Guidewire_PG_Source",
+      "connection_id": "{9115364D-372C-4495-9C1E-50DF8A571152}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_Guidewire_PG_Source]",
+      "object_data": {
+        "Property": "Source: Guidewire PolicyCenter PostgreSQL replica (read-only)"
+      }
+    },
+    {
+      "package_name": "Extract_Claims",
+      "connection_name": "CM_DW_PG_Target",
+      "connection_id": "{687226D2-4BD4-4707-A18E-CDBC9918635C}",
+      "creation_name": "ADO.NET:Npgsql",
+      "ref_id": "Package.ConnectionManagers[CM_DW_PG_Target]",
+      "object_data": {
+        "Property": "Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)"
+      }
+    }
+  ],
+  "sql": [
+    {
+      "package_name": "Extract_Claims",
+      "property_name": "SqlCommand",
+      "sql": "SELECT claim_id, policy_id, claim_number, claim_date, claim_status, claim_type, paid_amount, reserve_amount, recovery_amount, incurred_amount, loss_date, reported_date FROM public.claims"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "property_name": "SqlCommandParam",
+      "sql": "SELECT policy_id FROM stg.policy"
+    }
+  ],
+  "variables": [
+    {
+      "package_name": "Extract_Claims",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Claims",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Claims",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "0"
+      ]
+    },
+    {
+      "package_name": "Extract_Claims",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "Extract_Claims"
+      ]
+    },
+    {
+      "package_name": "Extract_Claims",
+      "name": "",
+      "id": "",
+      "data_type": "",
+      "description": "",
+      "values": [
+        "1900-01-01T00:00:00"
+      ]
+    }
+  ],
+  "precedence": [
+    {
+      "package_name": "Extract_Claims",
+      "id": "{97018531-68B4-4F91-96EA-7A1E9DDC4DBE}",
+      "from": "Package\\SQL_LogStart",
+      "to": "Package\\DFT_Main",
+      "evaluation_operation": "",
+      "value": "3"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "id": "{5919BE4F-8A1A-4C89-A787-2452582E4A52}",
+      "from": "Package\\DFT_Main",
+      "to": "Package\\SQL_LogEnd",
+      "evaluation_operation": "",
+      "value": "1"
+    }
+  ],
+  "package_links": [],
+  "relationships": [
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "SRC - claims (PostgreSQL)",
+      "source_output": "OLE DB Source Output",
+      "target_component": "LKP - Validate Policy (policy_id)",
+      "target_input": "OLE DB Source Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "SRC - claims (PostgreSQL)",
+      "source_output": "OLE DB Source Error Output",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "OLE DB Source Error Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "LKP - Validate Policy (policy_id)",
+      "source_output": "Lookup Match Output",
+      "target_component": "DER - Data Cleansing",
+      "target_input": "Lookup Match Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "LKP - Validate Policy (policy_id)",
+      "source_output": "Lookup No Match Output (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Lookup No Match Output (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "DER - Data Cleansing",
+      "source_output": "Cleansing Output",
+      "target_component": "DER - Derived / Calculated Columns",
+      "target_input": "Cleansing Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "DER - Derived / Calculated Columns",
+      "source_output": "Derived Column Output",
+      "target_component": "CSPL - Business Rule Validation",
+      "target_input": "Derived Column Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Valid Rows",
+      "target_component": "AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)",
+      "target_input": "Valid Rows"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "CSPL - Business Rule Validation",
+      "source_output": "Invalid Rows (-> Error Path)",
+      "target_component": "UN - Union All Error Rows",
+      "target_input": "Invalid Rows (-> Error Path)"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "AGG - Claims Incurred Summary by Policy (BR-09 pre-aggregation)",
+      "source_output": "Aggregate Output",
+      "target_component": "DST - Load claims (PostgreSQL DW)",
+      "target_input": "Aggregate Output"
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
+      "source_component": "UN - Union All Error Rows",
+      "source_output": "Unified Error Output",
+      "target_component": "DST - Error Log (stg.error_quarantine)",
+      "target_input": "Unified Error Output"
+    }
+  ]
+}

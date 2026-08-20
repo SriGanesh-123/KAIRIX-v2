@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<DTS:Executable
+    xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+    xmlns:SQLTask="www.microsoft.com/sqlserver/dts/tasks/sqltask"
+    DTS:ExecutableType="Microsoft.Package"
+    DTS:CreationName="Microsoft.Package"
+    DTS:DTSID="{20A0ED99-2914-4460-BECC-815D3E580A02}"
+    DTS:ObjectName="Extract_PolicyPeriod"
+    DTS:PackageType="5"
+    DTS:VersionMajor="1" DTS:VersionMinor="0" DTS:VersionBuild="1"
+    DTS:VersionGUID="{892E3D8A-8C90-4360-A8FB-AA21675158F4}"
+    DTS:Description="Extracts POLICY_PERIOD, validates FK to POLICY and JOB (BR-02/BR-03), cleanses and loads."
+    DTS:LoggingMode="UseParentSetting">
+  <DTS:Variables>
+    <DTS:Variable DTS:Name="RowsRead"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsInserted"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="RowsRejected"><DTS:VariableValue DTS:DataType="3">0</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="PackageName"><DTS:VariableValue DTS:DataType="8">Extract_PolicyPeriod</DTS:VariableValue></DTS:Variable>
+    <DTS:Variable DTS:Name="StartTime"><DTS:VariableValue DTS:DataType="7">1900-01-01T00:00:00</DTS:VariableValue></DTS:Variable>
+  </DTS:Variables>
+  <DTS:ConnectionManagers>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_Guidewire_PG_Source]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{9115364D-372C-4495-9C1E-50DF8A571152}"
+        DTS:ObjectName="CM_Guidewire_PG_Source">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=gw-pg-source.internal;Port=5432;Database=guidewire_policycenter;User Id=etl_reader;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Source: Guidewire PolicyCenter PostgreSQL replica (read-only)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+    <DTS:ConnectionManager DTS:refId="Package.ConnectionManagers[CM_DW_PG_Target]"
+        DTS:CreationName="ADO.NET:Npgsql"
+        DTS:DTSID="{687226D2-4BD4-4707-A18E-CDBC9918635C}"
+        DTS:ObjectName="CM_DW_PG_Target">
+      <DTS:ObjectData>
+        <DTS:ConnectionManager>
+          <DTS:Property DTS:Name="ConnectionString">Server=dw-pg-target.internal;Port=5432;Database=insurance_dw;User Id=etl_writer;Password=[SECURED_BY_PARAMETER];</DTS:Property>
+          <DTS:Property DTS:Name="Provider">Npgsql PostgreSQL Provider</DTS:Property>
+          <DTS:Property DTS:Name="Description">Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)</DTS:Property>
+        </DTS:ConnectionManager>
+      </DTS:ObjectData>
+    </DTS:ConnectionManager>
+  </DTS:ConnectionManagers>
+  <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\SQL_LogStart" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{F27CD748-F63C-4ED5-ACE2-878529C9B429}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package Start">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_PolicyPeriod&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\DFT_Main" DTS:CreationName="Microsoft.Pipeline" DTS:DTSID="{944C8F33-488E-4E3C-AA5E-A0123AEC7BE6}" DTS:ExecutableType="Microsoft.Pipeline" DTS:ObjectName="DFT - Extract, Cleanse, Validate, Load policy_period">
+      <DTS:ObjectData>
+    <pipeline version="1">
+      <components>
+      <component name="SRC - policy_period (PostgreSQL)" componentClassID="Microsoft.ADO.NET.PGSource" description="Extracts rows from public.policy_period on CM_Guidewire_PG_Source">
+        <properties>
+          <property name="SqlCommand">SELECT policy_period_id, policy_id, job_id, term_number, effective_date, expiration_date, period_status, written_date, transaction_effective_date FROM public.policy_period</property>
+          <property name="ConnectionManager">CM_Guidewire_PG_Source</property>
+        </properties>
+        <outputs>
+          <output name="OLE DB Source Output" />
+          <output name="OLE DB Source Error Output" />
+        </outputs>
+      </component>
+      <component name="LKP - Validate Policy (policy_id)" componentClassID="Microsoft.Lookup" description="Validates policy_id exists in Policy (referential integrity / BR-01, BR-05)">
+        <properties>
+          <property name="SqlCommandParam">SELECT policy_id FROM stg.policy</property>
+          <property name="JoinColumn">policy_id</property>
+          <property name="NoMatchBehavior">RedirectRowsToNoMatchOutput</property>
+          <property name="CacheMode">Full</property>
+        </properties>
+        <inputs>
+          <input name="OLE DB Source Output" />
+        </inputs>
+        <outputs>
+          <output name="Lookup Match Output" />
+          <output name="Lookup No Match Output (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="LKP - Validate Job (job_id)" componentClassID="Microsoft.Lookup" description="Validates job_id exists in Job (referential integrity / BR-01, BR-05)">
+        <properties>
+          <property name="SqlCommandParam">SELECT job_id FROM stg.job</property>
+          <property name="JoinColumn">job_id</property>
+          <property name="NoMatchBehavior">RedirectRowsToNoMatchOutput</property>
+          <property name="CacheMode">Full</property>
+        </properties>
+        <inputs>
+          <input name="Lookup Match Output" />
+        </inputs>
+        <outputs>
+          <output name="Lookup Match Output" />
+          <output name="Lookup No Match Output (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="DER - Derived / Calculated Columns" componentClassID="Microsoft.DerivedColumn" description="Adds ETL metadata columns and business-calculated fields">
+        <properties>
+          <property name="Expressions">GETDATE() -&gt; etl_load_date</property>
+        </properties>
+        <inputs>
+          <input name="Lookup Match Output" />
+        </inputs>
+        <outputs>
+          <output name="Derived Column Output" />
+        </outputs>
+      </component>
+      <component name="CSPL - Business Rule Validation" componentClassID="Microsoft.ConditionalSplit" description="Routes rows failing business rules to error output. Rules: expiration_date &gt; effective_date | term_number &gt;= 1 | written_date &lt;= GETDATE() | period_status IN (&apos;ACTIVE&apos;,&apos;EXPIRED&apos;,&apos;CANCELLED&apos;,&apos;ENDED&apos;)">
+        <properties>
+          <property name="ValidOutputName">Valid Rows</property>
+          <property name="InvalidOutputName">Invalid Rows (-&gt; Error Path)</property>
+          <property name="Conditions">expiration_date &gt; effective_date | term_number &gt;= 1 | written_date &lt;= GETDATE() | period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')</property>
+        </properties>
+        <inputs>
+          <input name="Derived Column Output" />
+        </inputs>
+        <outputs>
+          <output name="Valid Rows" />
+          <output name="Invalid Rows (-> Error Path)" />
+        </outputs>
+      </component>
+      <component name="UN - Union All Error Rows" componentClassID="Microsoft.UnionAll" description="Combines all error/no-match/invalid outputs into a single error stream">
+        <properties>
+
+        </properties>
+        <inputs>
+          <input name="Lookup No Match Output (-> Error Path)" />
+          <input name="Invalid Rows (-> Error Path)" />
+          <input name="OLE DB Source Error Output" />
+        </inputs>
+        <outputs>
+          <output name="Unified Error Output" />
+        </outputs>
+      </component>
+      <component name="DST - Error Log (stg.error_quarantine)" componentClassID="Microsoft.OLEDBDestination" description="Writes rejected/invalid rows to the error-quarantine table for review">
+        <properties>
+          <property name="OpenRowset">stg.error_quarantine</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+        </properties>
+        <inputs>
+          <input name="Unified Error Output" />
+        </inputs>
+      </component>
+      <component name="DST - Load policy_period (PostgreSQL DW)" componentClassID="Microsoft.OLEDBDestination" description="Loads validated/cleansed rows into stg.policy_period (upsert via staging + MERGE in post-SQL)">
+        <properties>
+          <property name="OpenRowset">stg.policy_period</property>
+          <property name="ConnectionManager">CM_DW_PG_Target</property>
+          <property name="FastLoad">true</property>
+          <property name="MaximumInsertCommitSize">10000</property>
+        </properties>
+        <inputs>
+          <input name="Valid Rows" />
+        </inputs>
+      </component>
+      </components>
+    </pipeline>
+      </DTS:ObjectData>
+    </DTS:Executable>
+    <DTS:Executable DTS:refId="Package\SQL_LogEnd" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{34F53418-EB9B-4874-ADEC-27359A4AD5EC}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Package End / Row Counts">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="UPDATE etl.etl_audit_log SET end_time = now(), status = &apos;COMPLETED&apos;, rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = &apos;Extract_PolicyPeriod&apos; AND status = &apos;RUNNING&apos;" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+  </DTS:Executables>
+  <DTS:PrecedenceConstraints>
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[SQL_LogStartToDFT_Main]"
+        DTS:From="Package\SQL_LogStart" DTS:To="Package\DFT_Main" DTS:Value="3" DTS:DTSID="{004B34F5-9B9E-4D5D-BCF8-E36DB10707FA}" />
+    <DTS:PrecedenceConstraint DTS:refId="Package.PrecedenceConstraints[DFT_MainToSQL_LogEnd]"
+        DTS:From="Package\DFT_Main" DTS:To="Package\SQL_LogEnd" DTS:Value="1" DTS:DTSID="{D3E960A2-DEC3-45EF-9D88-7F4068CA7DD6}" />
+  </DTS:PrecedenceConstraints>
+  <DTS:EventHandlers>
+    <DTS:EventHandler DTS:EventName="OnError" DTS:DTSID="{285648D8-DEC7-4B6C-B549-55599BA8113E}" DTS:ObjectName="OnError">
+      <DTS:Executables>
+    <DTS:Executable DTS:refId="Package\EH_LogError" DTS:CreationName="Microsoft.ExecuteSQLTask" DTS:DTSID="{F66A0D17-BB69-464A-B4FC-E4EC8EA01507}" DTS:ExecutableType="Microsoft.ExecuteSQLTask" DTS:ObjectName="SQL - Log Error to ETL_ERROR_LOG">
+      <DTS:ObjectData>
+        <SQLTask:SqlTaskData
+            SQLTask:Connection="CM_DW_PG_Target"
+            SQLTask:SqlStatementSource="INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES (&apos;Extract_PolicyPeriod&apos;, ?, ?, ?, now())" />
+      </DTS:ObjectData>
+    </DTS:Executable>
+
+      </DTS:Executables>
+    </DTS:EventHandler>
+  </DTS:EventHandlers>
+</DTS:Executable>
