@@ -1,38 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Virtual environment
 .venv/
-venv/
-env/
-
-# Environment/secrets
+__pycache__/
+*.pyc
 .env
 .env.*
-!.env.example
-
-# IDE
 .vscode/
 .idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
 *.log
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# Test/cache
 .pytest_cache/
-.mypy_cache/
-
-# Temporary
-*.tmp
-*.temp
