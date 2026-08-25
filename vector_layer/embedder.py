@@ -9,7 +9,11 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
+import warnings
+warnings.filterwarnings("ignore")
+
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
