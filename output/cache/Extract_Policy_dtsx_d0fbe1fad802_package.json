@@ -1,0 +1,2017 @@
+{
+  "package_id": "PKG-SSIS-Extract_Policy.dtsx-d20c9705",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Policy.dtsx",
+    "file_name": "Extract_Policy.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 200,
+    "size_bytes": 12075
+  },
+  "summary": {
+    "purpose": "Extracts policy records from the Guidewire PolicyCenter PostgreSQL source, validates foreign‑key relationships to ACCOUNT and PRODUCER, applies data cleansing and business rule checks, and loads the clean rows into the data‑warehouse staging table while quarantining rejected rows and logging audit information.",
+    "high_level_narrative": "When the package runs it first inserts a start record into etl.etl_audit_log (SQL_LogStart). The main data flow (DFT_Main) reads all columns from public.policy via an ADO.NET source. Each row is passed through a Lookup that checks account_id against stg.account; non‑matching rows are redirected to an error stream. Matching rows continue to a second Lookup that validates producer_id against stg.producer, again redirecting non‑matches. Rows that pass both lookups are sent to a Derived Column component that trims whitespace from policy_number and upper‑cases product_code. A second Derived Column adds the ETL load timestamp (etl_load_date). The cleaned rows then flow to a Conditional Split that enforces business rules on dates, status, and cancellation logic; rows that satisfy all conditions are marked as valid, others are sent to the error path. All error streams (lookup failures, conditional‑split failures, and source‑error output) are merged by a Union All component and written to stg.error_quarantine. Valid rows are bulk‑loaded into stg.policy using fast load. After the data flow completes, a second Execute SQL task (SQL_LogEnd) updates the audit log with end time, status, and row counts (rows read, inserted, rejected). An OnError event handler logs any package‑level errors to etl.etl_error_log.",
+    "business_domain": "Policy (Insurance PolicyCenter)",
+    "inputs": [
+      "public.policy (source PostgreSQL table)",
+      "stg.account (staging table for account reference data)",
+      "stg.producer (staging table for producer reference data)"
+    ],
+    "outputs": [
+      "stg.policy (staging table for validated policy records)",
+      "stg.error_quarantine (table for rejected/invalid rows)",
+      "etl.etl_audit_log (audit log updated with start/end timestamps and row counts)",
+      "etl.etl_error_log (error log populated by OnError handler)"
+    ],
+    "key_transformations": [
+      "SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy",
+      "Lookup join on account_id against stg.account (full cache, redirect no‑match)",
+      "Lookup join on producer_id against stg.producer (full cache, redirect no‑match)",
+      "TRIM(policy_number) to remove surrounding whitespace",
+      "UPPER(product_code) to standardize code casing",
+      "Add ETL metadata column etl_load_date with current timestamp",
+      "Conditional split enforcing: expiration_date > effective_date; policy_status in ('ACTIVE','INACTIVE','LAPSED','CANCELLED'); cancellation_date is NULL or falls between effective_date and expiration_date",
+      "Union All to combine all error/no‑match streams",
+      "Fast bulk insert into stg.policy with commit size 10,000"
+    ],
+    "key_dependencies": [
+      "Connection manager CM_Guidewire_PG_Source (Npgsql provider, source DB)",
+      "Connection manager CM_DW_PG_Target (Npgsql provider, target DW)",
+      "SQL Server Integration Services (SSIS) components: ADO.NET Source, Lookup, Derived Column, Conditional Split, Union All, OLE DB Destination",
+      "Tables: public.policy, stg.account, stg.producer, stg.policy, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log"
+    ],
+    "business_rules": [
+      "BR-01: account_id must exist in stg.account (referential integrity)",
+      "BR-01/BR-05: producer_id must exist in stg.producer (referential integrity)",
+      "Expiration date must be later than effective date",
+      "Policy status must be one of: ACTIVE, INACTIVE, LAPSED, CANCELLED",
+      "If cancellation_date is provided it must be after effective_date and before expiration_date; otherwise it may be NULL"
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_Policy.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extracts POLICY rows from the Guidewire PolicyCenter PostgreSQL source, validates foreign‑key references to ACCOUNT and PRODUCER (business rules BR‑01, BR‑05), cleanses and derives additional columns, applies business‑rule validation, routes invalid rows to an error‑quarantine table, loads the clean rows into the staging policy table, and logs audit information for the ETL run.",
+    "inputs_outputs": {
+      "inputs": [
+        "public.policy",
+        "stg.account",
+        "stg.producer"
+      ],
+      "outputs": [
+        "stg.policy",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ]
+    },
+    "key_logic": [
+      "Log package start in etl.etl_audit_log (status RUNNING).",
+      "Read all columns from public.policy via the ADO.NET PostgreSQL source component.",
+      "Lookup account_id against stg.account; rows with no match are redirected to the error path.",
+      "Lookup producer_id against stg.producer; rows with no match are redirected to the error path.",
+      "Trim whitespace from policy_number and uppercase product_code (Data Cleansing).",
+      "Add ETL load timestamp column (etl_load_date).",
+      "Apply business‑rule validation: expiration_date > effective_date, policy_status in allowed list, and cancellation_date logic.",
+      "Route rows that fail any rule to the unified error stream.",
+      "Union all error streams (lookup no‑match, source error, business‑rule failures).",
+      "Write unified error rows to stg.error_quarantine.",
+      "Write valid rows to stg.policy using fast load.",
+      "Update etl.etl_audit_log with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+      "On any package error, insert a record into etl.etl_error_log."
+    ],
+    "entities": [
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows read from source."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows successfully inserted into target."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows rejected (error path)."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "string",
+        "line_number": null,
+        "description": "Name of the SSIS package."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "datetime",
+        "line_number": null,
+        "description": "Package execution start timestamp."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "DATABASE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET connection manager to the Guidewire PostgreSQL source."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET connection manager to the Data Warehouse PostgreSQL target."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Package",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that inserts a row into etl.etl_audit_log with status RUNNING."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Package",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that updates etl.etl_audit_log with end_time, status COMPLETED and row counts."
+      },
+      {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "parent_entity": "OnError EventHandler",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that logs package errors to etl.etl_error_log."
+      },
+      {
+        "name": "SRC - policy (PostgreSQL)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET source component that runs SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy."
+      },
+      {
+        "name": "LKP - Validate Account (account_id)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup transformation that validates account_id against stg.account."
+      },
+      {
+        "name": "LKP - Validate Producer (producer_id)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup transformation that validates producer_id against stg.producer."
+      },
+      {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column transformation that trims policy_number and uppercases product_code."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column transformation that adds etl_load_date = GETDATE()."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Conditional Split that routes rows based on expiration_date, policy_status, and cancellation_date logic."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Union All component that merges all error streams into a single output."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load policy (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that loads valid rows into stg.policy using fast load."
+      },
+      {
+        "name": "public.policy",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Source table containing policy records."
+      },
+      {
+        "name": "stg.account",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table of accounts used for FK validation."
+      },
+      {
+        "name": "stg.producer",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table of producers used for FK validation."
+      },
+      {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Target staging table for validated policy rows."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Error‑quarantine table that stores rejected rows."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log table for ETL package execution."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Error log table for package‑level exceptions."
+      },
+      {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "bigint",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "account_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "bigint",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "producer_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "bigint",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "policy_number",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "product_code",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "policy_status",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "date",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "date",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "cancellation_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "date",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "cancellation_reason",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "updated_timestamp",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy",
+        "data_type": "timestamp",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.policy",
+        "data_type": "datetime",
+        "line_number": null,
+        "description": "ETL load timestamp added by Derived Column."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from policy_number and convert product_code to upper case.",
+        "source_entities": [
+          "policy_number",
+          "product_code"
+        ],
+        "target_entities": [
+          "policy_number",
+          "product_code"
+        ],
+        "expression": "TRIM(policy_number) -> policy_number; UPPER(product_code) -> product_code",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "source_entities": [],
+        "target_entities": [
+          "etl_load_date"
+        ],
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "FILTER",
+        "description": "Validate that account_id exists in stg.account; rows without a match are redirected to error path.",
+        "source_entities": [
+          "account_id",
+          "stg.account.account_id"
+        ],
+        "target_entities": [
+          "Lookup Match Output",
+          "Lookup No Match Output (-> Error Path)"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "FILTER",
+        "description": "Validate that producer_id exists in stg.producer; rows without a match are redirected to error path.",
+        "source_entities": [
+          "producer_id",
+          "stg.producer.producer_id"
+        ],
+        "target_entities": [
+          "Lookup Match Output",
+          "Lookup No Match Output (-> Error Path)"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: expiration_date > effective_date AND policy_status in ('ACTIVE','INACTIVE','LAPSED','CANCELLED') AND (cancellation_date IS NULL OR (cancellation_date > effective_date AND cancellation_date < expiration_date)).",
+        "source_entities": [
+          "expiration_date",
+          "effective_date",
+          "policy_status",
+          "cancellation_date"
+        ],
+        "target_entities": [
+          "Valid Rows",
+          "Invalid Rows (-> Error Path)"
+        ],
+        "expression": "expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "AGGREGATION",
+        "description": "Insert a row into etl.etl_audit_log at package start with status RUNNING.",
+        "source_entities": [],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Update etl.etl_audit_log at package end with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+        "source_entities": [
+          "RowsRead",
+          "RowsInserted",
+          "RowsRejected"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Insert error details into etl.etl_error_log when an OnError event occurs.",
+        "source_entities": [],
+        "target_entities": [
+          "etl.etl_error_log"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.93
+      }
+    ],
+    "business_rules": [
+      "BR-01: Every policy must reference an existing account_id in stg.account.",
+      "BR-05: Every policy must reference an existing producer_id in stg.producer.",
+      "Policy expiration_date must be later than effective_date.",
+      "Policy status must be one of ACTIVE, INACTIVE, LAPSED, CANCELLED.",
+      "If cancellation_date is provided, it must be after effective_date and before expiration_date."
+    ],
+    "dependencies": [
+      "CM_Guidewire_PG_Source (PostgreSQL source connection)",
+      "CM_DW_PG_Target (PostgreSQL target connection)",
+      "public.policy table",
+      "stg.account table",
+      "stg.producer table",
+      "stg.policy table",
+      "stg.error_quarantine table",
+      "etl.etl_audit_log table",
+      "etl.etl_error_log table"
+    ],
+    "relationships": [
+      {
+        "source": "SRC - policy (PostgreSQL)",
+        "target": "LKP - Validate Account (account_id)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Source output feeds into Account lookup input."
+      },
+      {
+        "source": "SRC - policy (PostgreSQL)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Source error output is sent to the unified error stream."
+      },
+      {
+        "source": "LKP - Validate Account (account_id)",
+        "target": "LKP - Validate Producer (producer_id)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Rows that match Account lookup are passed to Producer lookup."
+      },
+      {
+        "source": "LKP - Validate Account (account_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Matched rows flow to data cleansing component."
+      },
+      {
+        "source": "LKP - Validate Account (account_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Account lookup no‑match rows are redirected to error stream."
+      },
+      {
+        "source": "LKP - Validate Producer (producer_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Producer‑matched rows flow to data cleansing."
+      },
+      {
+        "source": "LKP - Validate Producer (producer_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Producer lookup no‑match rows are redirected to error stream."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Cleansed rows are passed to derived column component."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Rows with added etl_load_date are evaluated against business rules."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load policy (PostgreSQL DW)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Valid rows are loaded into stg.policy."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Invalid rows are sent to the unified error stream."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "All error rows are written to the error quarantine table."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Inserts audit record at package start."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Updates audit record with end time and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Logs package errors to error log table."
+      }
+    ],
+    "confidence": 0.92
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 38,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "SQL - Log Package Start",
+      "SQL - Log Package End / Row Counts",
+      "SQL - Log Error to ETL_ERROR_LOG",
+      "SRC - policy (PostgreSQL)",
+      "LKP - Validate Account (account_id)",
+      "LKP - Validate Producer (producer_id)",
+      "DER - Data Cleansing",
+      "DER - Derived / Calculated Columns",
+      "CSPL - Business Rule Validation",
+      "public.policy",
+      "stg.account",
+      "stg.producer",
+      "stg.policy",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "Package",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask 'SQL - Log Package Start' inserts a row with status RUNNING at package start."
+      },
+      {
+        "source": "SRC - policy (PostgreSQL)",
+        "target": "public.policy",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ADO.NET source component selects rows from the source table public.policy."
+      },
+      {
+        "source": "LKP - Validate Account (account_id)",
+        "target": "stg.account",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup transformation validates account_id against staging account table."
+      },
+      {
+        "source": "LKP - Validate Producer (producer_id)",
+        "target": "stg.producer",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup transformation validates producer_id against staging producer table."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "policy_number / product_code",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Derived Column trims whitespace from policy_number and uppercases product_code."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "etl_load_date",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Adds ETL load timestamp column using GETDATE()."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "stg.policy / stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Conditional Split directs rows passing all business rules to stg.policy and failing rows to unified error stream."
+      },
+      {
+        "source": "Unified Error Stream",
+        "target": "stg.error_quarantine",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "All error rows (lookup failures, source errors, rule violations) are written to the error quarantine table."
+      },
+      {
+        "source": "Valid Rows Stream",
+        "target": "stg.policy",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Rows that pass validation are fast‑loaded into the staging policy table."
+      },
+      {
+        "source": "Package",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask 'SQL - Log Package End / Row Counts' updates audit log with end_time, status COMPLETED and row counts."
+      },
+      {
+        "source": "Package",
+        "target": "etl.etl_error_log",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "OnError EventHandler executes 'SQL - Log Error to ETL_ERROR_LOG' to record package errors."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no tables, columns, or file references, whereas the LLM extracted a full set of source/target tables and column‑level logic.",
+      "Parser did not capture any task or variable definitions; all such entities are inferred solely from the LLM profile."
+    ],
+    "gaps_detected": [
+      "Exact column list and data types for public.policy and staging tables are not enumerated; only a high‑level SELECT list is described.",
+      "Business rule definitions (e.g., allowed policy_status values, cancellation_date logic) are mentioned but not detailed.",
+      "Line numbers or component IDs for tasks are missing, limiting traceability to the original SSIS package XML.",
+      "No explicit definition of error‑quarantine schema (primary key, constraints) is provided.",
+      "Potential external procedures or scripts invoked by the ExecuteSQLTasks are not described."
+    ],
+    "overall_confidence": 0.78
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "public.policy",
+        "stg.account",
+        "stg.producer",
+        "stg.policy",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "columns": [
+        "policy_id",
+        "account_id",
+        "producer_id",
+        "policy_number",
+        "product_code",
+        "policy_status",
+        "effective_date",
+        "expiration_date",
+        "cancellation_date",
+        "cancellation_reason",
+        "updated_timestamp",
+        "etl_load_date"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts policy records from the Guidewire PolicyCenter PostgreSQL source, validates foreign‑key relationships to ACCOUNT and PRODUCER, applies data cleansing and business rule checks, and loads the clean rows into the data‑warehouse staging table while quarantining rejected rows and logging audit information.",
+      "narrative": "When the package runs it first inserts a start record into etl.etl_audit_log (SQL_LogStart). The main data flow (DFT_Main) reads all columns from public.policy via an ADO.NET source. Each row is passed through a Lookup that checks account_id against stg.account; non‑matching rows are redirected to an error stream. Matching rows continue to a second Lookup that validates producer_id against stg.producer, again redirecting non‑matches. Rows that pass both lookups are sent to a Derived Column component that trims whitespace from policy_number and upper‑cases product_code. A second Derived Column adds the ETL load timestamp (etl_load_date). The cleaned rows then flow to a Conditional Split that enforces business rules on dates, status, and cancellation logic; rows that satisfy all conditions are marked as valid, others are sent to the error path. All error streams (lookup failures, conditional‑split failures, and source‑error output) are merged by a Union All component and written to stg.error_quarantine. Valid rows are bulk‑loaded into stg.policy using fast load. After the data flow completes, a second Execute SQL task (SQL_LogEnd) updates the audit log with end time, status, and row counts (rows read, inserted, rejected). An OnError event handler logs any package‑level errors to etl.etl_error_log.",
+      "business_domain": "Policy (Insurance PolicyCenter)",
+      "business_rules": [
+        "BR-01: account_id must exist in stg.account (referential integrity)",
+        "BR-01/BR-05: producer_id must exist in stg.producer (referential integrity)",
+        "Expiration date must be later than effective date",
+        "Policy status must be one of: ACTIVE, INACTIVE, LAPSED, CANCELLED",
+        "If cancellation_date is provided it must be after effective_date and before expiration_date; otherwise it may be NULL"
+      ],
+      "key_logic": [
+        "Log package start in etl.etl_audit_log (status RUNNING).",
+        "Read all columns from public.policy via the ADO.NET PostgreSQL source component.",
+        "Lookup account_id against stg.account; rows with no match are redirected to the error path.",
+        "Lookup producer_id against stg.producer; rows with no match are redirected to the error path.",
+        "Trim whitespace from policy_number and uppercase product_code (Data Cleansing).",
+        "Add ETL load timestamp column (etl_load_date).",
+        "Apply business‑rule validation: expiration_date > effective_date, policy_status in allowed list, and cancellation_date logic.",
+        "Route rows that fail any rule to the unified error stream.",
+        "Union all error streams (lookup no‑match, source error, business‑rule failures).",
+        "Write unified error rows to stg.error_quarantine.",
+        "Write valid rows to stg.policy using fast load.",
+        "Update etl.etl_audit_log with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+        "On any package error, insert a record into etl.etl_error_log."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "SQL - Log Package Start",
+        "SQL - Log Package End / Row Counts",
+        "SQL - Log Error to ETL_ERROR_LOG",
+        "SRC - policy (PostgreSQL)",
+        "LKP - Validate Account (account_id)",
+        "LKP - Validate Producer (producer_id)",
+        "DER - Data Cleansing",
+        "DER - Derived / Calculated Columns",
+        "CSPL - Business Rule Validation",
+        "public.policy",
+        "stg.account",
+        "stg.producer",
+        "stg.policy",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "CALCULATION",
+          "description": "Trim whitespace from policy_number and convert product_code to upper case.",
+          "source_entities": [
+            "policy_number",
+            "product_code"
+          ],
+          "target_entities": [
+            "policy_number",
+            "product_code"
+          ],
+          "expression": "TRIM(policy_number) -> policy_number; UPPER(product_code) -> product_code",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL load timestamp column.",
+          "source_entities": [],
+          "target_entities": [
+            "etl_load_date"
+          ],
+          "expression": "GETDATE() -> etl_load_date",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "FILTER",
+          "description": "Validate that account_id exists in stg.account; rows without a match are redirected to error path.",
+          "source_entities": [
+            "account_id",
+            "stg.account.account_id"
+          ],
+          "target_entities": [
+            "Lookup Match Output",
+            "Lookup No Match Output (-> Error Path)"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "FILTER",
+          "description": "Validate that producer_id exists in stg.producer; rows without a match are redirected to error path.",
+          "source_entities": [
+            "producer_id",
+            "stg.producer.producer_id"
+          ],
+          "target_entities": [
+            "Lookup Match Output",
+            "Lookup No Match Output (-> Error Path)"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CONDITIONAL",
+          "description": "Business rule validation: expiration_date > effective_date AND policy_status in ('ACTIVE','INACTIVE','LAPSED','CANCELLED') AND (cancellation_date IS NULL OR (cancellation_date > effective_date AND cancellation_date < expiration_date)).",
+          "source_entities": [
+            "expiration_date",
+            "effective_date",
+            "policy_status",
+            "cancellation_date"
+          ],
+          "target_entities": [
+            "Valid Rows",
+            "Invalid Rows (-> Error Path)"
+          ],
+          "expression": "expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "AGGREGATION",
+          "description": "Insert a row into etl.etl_audit_log at package start with status RUNNING.",
+          "source_entities": [],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "AGGREGATION",
+          "description": "Update etl.etl_audit_log at package end with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+          "source_entities": [
+            "RowsRead",
+            "RowsInserted",
+            "RowsRejected"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "AGGREGATION",
+          "description": "Insert error details into etl.etl_error_log when an OnError event occurs.",
+          "source_entities": [],
+          "target_entities": [
+            "etl.etl_error_log"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.93
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "Package",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask 'SQL - Log Package Start' inserts a row with status RUNNING at package start."
+        },
+        {
+          "source": "SRC - policy (PostgreSQL)",
+          "target": "public.policy",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "ADO.NET source component selects rows from the source table public.policy."
+        },
+        {
+          "source": "LKP - Validate Account (account_id)",
+          "target": "stg.account",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Lookup transformation validates account_id against staging account table."
+        },
+        {
+          "source": "LKP - Validate Producer (producer_id)",
+          "target": "stg.producer",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Lookup transformation validates producer_id against staging producer table."
+        },
+        {
+          "source": "DER - Data Cleansing",
+          "target": "policy_number / product_code",
+          "relationship_type": "TRANSFORMS",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "Derived Column trims whitespace from policy_number and uppercases product_code."
+        },
+        {
+          "source": "DER - Derived / Calculated Columns",
+          "target": "etl_load_date",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Adds ETL load timestamp column using GETDATE()."
+        },
+        {
+          "source": "CSPL - Business Rule Validation",
+          "target": "stg.policy / stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Conditional Split directs rows passing all business rules to stg.policy and failing rows to unified error stream."
+        },
+        {
+          "source": "Unified Error Stream",
+          "target": "stg.error_quarantine",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "All error rows (lookup failures, source errors, rule violations) are written to the error quarantine table."
+        },
+        {
+          "source": "Valid Rows Stream",
+          "target": "stg.policy",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Rows that pass validation are fast‑loaded into the staging policy table."
+        },
+        {
+          "source": "Package",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask 'SQL - Log Package End / Row Counts' updates audit log with end_time, status COMPLETED and row counts."
+        },
+        {
+          "source": "Package",
+          "target": "etl.etl_error_log",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "OnError EventHandler executes 'SQL - Log Error to ETL_ERROR_LOG' to record package errors."
+        }
+      ],
+      "gaps": [
+        "Exact column list and data types for public.policy and staging tables are not enumerated; only a high‑level SELECT list is described.",
+        "Business rule definitions (e.g., allowed policy_status values, cancellation_date logic) are mentioned but not detailed.",
+        "Line numbers or component IDs for tasks are missing, limiting traceability to the original SSIS package XML.",
+        "No explicit definition of error‑quarantine schema (primary key, constraints) is provided.",
+        "Potential external procedures or scripts invoked by the ExecuteSQLTasks are not described."
+      ]
+    },
+    "overall_confidence": 0.78
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_Policy.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_Policy.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Policy.dtsx",
+        "total_lines": 200
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "string",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "datetime",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "DATABASE:CM_Guidewire_PG_Source",
+      "label": "Database",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "DATABASE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "DATABASE:CM_DW_PG_Target",
+      "label": "Database",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Package",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Package",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "OnError EventHandler",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SRC - policy (PostgreSQL)",
+      "label": "Task",
+      "properties": {
+        "name": "SRC - policy (PostgreSQL)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:LKP - Validate Account (account_id)",
+      "label": "Task",
+      "properties": {
+        "name": "LKP - Validate Account (account_id)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:LKP - Validate Producer (producer_id)",
+      "label": "Task",
+      "properties": {
+        "name": "LKP - Validate Producer (producer_id)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DER - Data Cleansing",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DER - Derived / Calculated Columns",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:CSPL - Business Rule Validation",
+      "label": "Task",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:UN - Union All Error Rows",
+      "label": "Task",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DST - Load policy (PostgreSQL DW)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Load policy (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:public.policy",
+      "label": "Table",
+      "properties": {
+        "name": "public.policy",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.account",
+      "label": "Table",
+      "properties": {
+        "name": "stg.account",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.producer",
+      "label": "Table",
+      "properties": {
+        "name": "stg.producer",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.policy",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "data_type": "bigint",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:account_id",
+      "label": "Column",
+      "properties": {
+        "name": "account_id",
+        "entity_type": "COLUMN",
+        "data_type": "bigint",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_id",
+      "label": "Column",
+      "properties": {
+        "name": "producer_id",
+        "entity_type": "COLUMN",
+        "data_type": "bigint",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_number",
+      "label": "Column",
+      "properties": {
+        "name": "policy_number",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:product_code",
+      "label": "Column",
+      "properties": {
+        "name": "product_code",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_status",
+      "label": "Column",
+      "properties": {
+        "name": "policy_status",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:effective_date",
+      "label": "Column",
+      "properties": {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "data_type": "date",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:expiration_date",
+      "label": "Column",
+      "properties": {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "data_type": "date",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:cancellation_date",
+      "label": "Column",
+      "properties": {
+        "name": "cancellation_date",
+        "entity_type": "COLUMN",
+        "data_type": "date",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:cancellation_reason",
+      "label": "Column",
+      "properties": {
+        "name": "cancellation_reason",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:updated_timestamp",
+      "label": "Column",
+      "properties": {
+        "name": "updated_timestamp",
+        "entity_type": "COLUMN",
+        "data_type": "timestamp",
+        "parent": "public.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": "datetime",
+        "parent": "stg.policy",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from policy_number and convert product_code to upper case.",
+        "expression": "TRIM(policy_number) -> policy_number; UPPER(product_code) -> product_code",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "FILTER",
+        "description": "Validate that account_id exists in stg.account; rows without a match are redirected to error path.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "FILTER",
+        "description": "Validate that producer_id exists in stg.producer; rows without a match are redirected to error path.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: expiration_date > effective_date AND policy_status in ('ACTIVE','INACTIVE','LAPSED','CANCELLED') AND (cancellation_date IS NULL OR (cancellation_date > effective_date AND cancellation_date < expiration_date)).",
+        "expression": "expiration_date > effective_date | policy_status IN ('ACTIVE','INACTIVE','LAPSED','CANCELLED') | (cancellation_date IS NULL) OR (cancellation_date > effective_date AND cancellation_date < expiration_date)",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "AGGREGATION",
+        "description": "Insert a row into etl.etl_audit_log at package start with status RUNNING.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Update etl.etl_audit_log at package end with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Policy.dtsx:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Insert error details into etl.etl_error_log when an OnError event occurs.",
+        "expression": null,
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "DATABASE:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "DATABASE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:SRC - policy (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:LKP - Validate Account (account_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:LKP - Validate Producer (producer_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TASK:DST - Load policy (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:public.policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:stg.account",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:stg.producer",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:stg.policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:account_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:producer_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:policy_number",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:product_code",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:policy_status",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:effective_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:expiration_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:cancellation_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:cancellation_reason",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:updated_timestamp",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Policy.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:Package",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask 'SQL - Log Package Start' inserts a row with status RUNNING at package start."
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - policy (PostgreSQL)",
+      "target_id": "TABLE:public.policy",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ADO.NET source component selects rows from the source table public.policy."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Account (account_id)",
+      "target_id": "TABLE:stg.account",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup transformation validates account_id against staging account table."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Producer (producer_id)",
+      "target_id": "TABLE:stg.producer",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup transformation validates producer_id against staging producer table."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Data Cleansing",
+      "target_id": "TABLE:policy_number / product_code",
+      "type": "TRANSFORMS",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Derived Column trims whitespace from policy_number and uppercases product_code."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Derived / Calculated Columns",
+      "target_id": "TABLE:etl_load_date",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Adds ETL load timestamp column using GETDATE()."
+      }
+    },
+    {
+      "source_id": "TABLE:CSPL - Business Rule Validation",
+      "target_id": "TABLE:stg.policy / stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Conditional Split directs rows passing all business rules to stg.policy and failing rows to unified error stream."
+      }
+    },
+    {
+      "source_id": "TABLE:Unified Error Stream",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "All error rows (lookup failures, source errors, rule violations) are written to the error quarantine table."
+      }
+    },
+    {
+      "source_id": "TABLE:Valid Rows Stream",
+      "target_id": "TABLE:stg.policy",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Rows that pass validation are fast‑loaded into the staging policy table."
+      }
+    },
+    {
+      "source_id": "TABLE:Package",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask 'SQL - Log Package End / Row Counts' updates audit log with end_time, status COMPLETED and row counts."
+      }
+    },
+    {
+      "source_id": "TABLE:Package",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "OnError EventHandler executes 'SQL - Log Error to ETL_ERROR_LOG' to record package errors."
+      }
+    }
+  ]
+}

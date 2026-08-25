@@ -1,0 +1,2442 @@
+{
+  "package_id": "PKG-SSIS-Extract_Job.dtsx-48a229c0",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Job.dtsx",
+    "file_name": "Extract_Job.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 185,
+    "size_bytes": 11148
+  },
+  "summary": {
+    "purpose": "Extracts rows from the Guidewire PolicyCenter JOB table, validates the foreign‑key relationship to POLICY, applies data cleansing and business rule checks, and loads the clean rows into the data‑warehouse staging table while quarantining invalid rows and logging audit information.",
+    "high_level_narrative": "When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.job via the ADO.NET PostgreSQL source. Each row is passed to a Lookup component that checks whether the policy_id exists in the staging policy table (stg.policy); matching rows continue, non‑matches are redirected to the error stream. Matching rows are then cleansed (TRIM on job_number) and enriched with derived columns (etl_load_date = current timestamp, is_new_business_flag = 1 when job_type = 'New Business'). The enriched rows flow to a Conditional Split that enforces three business rules: job_date must not be in the future, expiration/effective dates must be logically consistent, and job_status must be one of the allowed values. Rows satisfying all rules are sent to the OLE DB Destination that fast‑loads them into stg.job. Rows that fail any rule, as well as lookup‑no‑match rows and source‑error rows, are combined by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, a second ExecuteSQLTask updates the audit log with end_time, status COMPLETED, and the row counts (rows read, inserted, rejected). An OnError event handler captures any package‑level errors and inserts a record into etl.etl_error_log.",
+    "business_domain": "Insurance Policy/Job Data Integration (PolicyCenter to Data Warehouse)",
+    "inputs": [
+      "public.job (Guidewire PolicyCenter PostgreSQL replica)",
+      "stg.policy (staging table in the data warehouse used for policy_id lookup)",
+      "OLE DB Source Error Output (source read errors)",
+      "Package variables: RowsRead, RowsInserted, RowsRejected, PackageName, StartTime"
+    ],
+    "outputs": [
+      "stg.job (staging table for validated job records)",
+      "stg.error_quarantine (table for rejected/invalid rows)",
+      "etl.etl_audit_log (package start/end audit record)",
+      "etl.etl_error_log (error event log)"
+    ],
+    "key_transformations": [
+      "SQL SELECT extracting job_id, policy_id, job_type, job_date, created_ts, job_number, job_status, submission_date, effective_date, expiration_date from public.job",
+      "Lookup on policy_id against stg.policy to enforce referential integrity (BR‑01/BR‑04)",
+      "Derived Column: TRIM(job_number) to remove whitespace",
+      "Derived Column: GETDATE() -> etl_load_date",
+      "Derived Column: job_type == 'New Business' ? 1 : 0 -> is_new_business_flag",
+      "Conditional Split enforcing: job_date <= current date; (expiration_date IS NULL) OR (effective_date IS NULL) OR (expiration_date > effective_date); job_status IN ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED')",
+      "Union All to consolidate all error streams (lookup no‑match, conditional split invalid rows, source error output)",
+      "Fast load into stg.job with batch commit size of 10,000 rows",
+      "Insert into stg.error_quarantine for all rejected rows"
+    ],
+    "key_dependencies": [
+      "Connection Manager CM_Guidewire_PG_Source (Npgsql provider, read‑only replica)",
+      "Connection Manager CM_DW_PG_Target (Npgsql provider, data‑warehouse target)",
+      "Source table public.job",
+      "Target tables stg.policy, stg.job, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log",
+      "SSIS components: Execute SQL Task, ADO.NET PostgreSQL Source, Lookup, Derived Column, Conditional Split, Union All, OLE DB Destination"
+    ],
+    "business_rules": [
+      "BR‑01/BR‑04: policy_id in job must exist in stg.policy (foreign‑key validation).",
+      "Job date must not be in the future (job_date <= current system date).",
+      "Expiration and effective dates must be logically consistent: either expiration_date is null, or effective_date is null, or expiration_date must be greater than effective_date.",
+      "Job status must be one of the allowed values: PENDING, IN_PROGRESS, COMPLETED, CANCELLED.",
+      "Job number is trimmed of leading/trailing whitespace before load.",
+      "is_new_business_flag is set to 1 when job_type equals 'New Business', otherwise 0."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_Job.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extracts rows from the source table public.job, validates that each policy_id exists in stg.policy (referential integrity), cleanses and enriches the data, applies business rule validations, and loads the valid rows into the staging table stg.job while routing invalid or rejected rows to stg.error_quarantine. The package also logs start/end timestamps and row counts in etl.etl_audit_log and records any execution errors in etl.etl_error_log.",
+    "inputs_outputs": {
+      "inputs": [
+        "public.job",
+        "stg.policy",
+        "etl.etl_audit_log (for update)",
+        "etl.etl_error_log (for insert)"
+      ],
+      "outputs": [
+        "stg.job",
+        "stg.error_quarantine",
+        "etl.etl_audit_log (log start/end)",
+        "etl.etl_error_log (error log)"
+      ]
+    },
+    "key_logic": [
+      "1. Log package start in etl.etl_audit_log (SQL_LogStart task).",
+      "2. Source component (SRC - job) reads selected columns from public.job via a SELECT statement.",
+      "3. Lookup component (LKP - Validate Policy) checks that policy_id exists in stg.policy; rows with no match are redirected to the error path.",
+      "4. Derived Column component (DER - Data Cleansing) trims whitespace from job_number.",
+      "5. Derived Column component (DER - Derived / Calculated Columns) adds ETL metadata (etl_load_date) and calculates is_new_business_flag based on job_type.",
+      "6. Conditional Split component (CSPL - Business Rule Validation) evaluates three business rules and routes rows that fail any rule to the error path.",
+      "7. Valid rows are loaded into stg.job using the OLE DB Destination (DST - Load job).",
+      "8. All error, no‑match, and invalid rows are combined by the Union All component (UN - Union All Error Rows).",
+      "9. The unified error stream is written to stg.error_quarantine (DST - Error Log).",
+      "10. Log package end, row counts, and status in etl.etl_audit_log (SQL_LogEnd task).",
+      "11. On any runtime error, the OnError event handler inserts a record into etl.etl_error_log (EH_LogError task)."
+    ],
+    "entities": [
+      {
+        "name": "Extract_Job",
+        "entity_type": "PROGRAM",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 3,
+        "description": "SSIS package that orchestrates the ETL job."
+      },
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Job",
+        "data_type": "Int32",
+        "line_number": 9,
+        "description": "Package variable to capture number of rows read."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Job",
+        "data_type": "Int32",
+        "line_number": 10,
+        "description": "Package variable to capture number of rows successfully inserted."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Job",
+        "data_type": "Int32",
+        "line_number": 11,
+        "description": "Package variable to capture number of rows rejected or sent to error quarantine."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Job",
+        "data_type": "String",
+        "line_number": 12,
+        "description": "Package name variable."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Job",
+        "data_type": "DateTime",
+        "line_number": 13,
+        "description": "Package start time."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 16,
+        "description": "ADO.NET connection manager to the source PostgreSQL replica."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 27,
+        "description": "ADO.NET connection manager to the target data‑warehouse PostgreSQL instance."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 38,
+        "description": "ExecuteSQLTask that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "DFT - Extract, Cleanse, Validate, Load job",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 45,
+        "description": "Data Flow Task containing the ETL pipeline."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 140,
+        "description": "ExecuteSQLTask that updates etl.etl_audit_log with end time, status and row counts."
+      },
+      {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Job",
+        "data_type": null,
+        "line_number": 155,
+        "description": "ExecuteSQLTask that logs runtime errors to etl.etl_error_log."
+      },
+      {
+        "name": "SRC - job (PostgreSQL)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 58,
+        "description": "Source component that runs a SELECT against public.job."
+      },
+      {
+        "name": "LKP - Validate Policy (policy_id)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 71,
+        "description": "Lookup transformation that validates policy_id against stg.policy."
+      },
+      {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 84,
+        "description": "Derived Column transformation that trims whitespace from job_number."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 95,
+        "description": "Derived Column transformation that adds etl_load_date and is_new_business_flag."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 106,
+        "description": "Conditional Split that enforces business rules on job_date, expiration/effective dates, and job_status."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 119,
+        "description": "Union All component that merges all error streams."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 130,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load job (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load job",
+        "data_type": null,
+        "line_number": 141,
+        "description": "OLE DB Destination that upserts rows into stg.job."
+      },
+      {
+        "name": "public.job",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 60,
+        "description": "Source table containing job records."
+      },
+      {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 73,
+        "description": "Staging table containing policy identifiers for FK validation."
+      },
+      {
+        "name": "stg.job",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 144,
+        "description": "Target staging table for validated job records."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 132,
+        "description": "Error‑quarantine table for rejected rows."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 40,
+        "description": "Audit log table that records package execution metadata."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 157,
+        "description": "Error log table that records runtime errors."
+      },
+      {
+        "name": "job_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Primary key of the job record."
+      },
+      {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Foreign key to policy."
+      },
+      {
+        "name": "job_type",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Type of the job (e.g., 'New Business')."
+      },
+      {
+        "name": "job_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Date the job was created."
+      },
+      {
+        "name": "created_ts",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Timestamp of row creation."
+      },
+      {
+        "name": "job_number",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Business identifier for the job."
+      },
+      {
+        "name": "job_status",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Current status of the job."
+      },
+      {
+        "name": "submission_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Date the job was submitted."
+      },
+      {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Effective date of the job."
+      },
+      {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.job",
+        "data_type": null,
+        "line_number": 60,
+        "description": "Expiration date of the job."
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.job",
+        "data_type": null,
+        "line_number": 98,
+        "description": "Timestamp when the row was loaded (GETDATE())."
+      },
+      {
+        "name": "is_new_business_flag",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.job",
+        "data_type": null,
+        "line_number": 98,
+        "description": "Flag set to 1 when job_type = 'New Business', else 0."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T001",
+        "rule_type": "READ",
+        "description": "Select required columns from public.job.",
+        "source_entities": [
+          "CM_Guidewire_PG_Source",
+          "public.job"
+        ],
+        "target_entities": [
+          "SRC - job (PostgreSQL)"
+        ],
+        "expression": "SELECT job_id, policy_id, job_type, job_date, created_ts, job_number, job_status, submission_date, effective_date, expiration_date FROM public.job",
+        "line_number": 60,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T002",
+        "rule_type": "JOIN",
+        "description": "Lookup transformation validates that each policy_id exists in stg.policy.",
+        "source_entities": [
+          "SRC - job (PostgreSQL)",
+          "stg.policy"
+        ],
+        "target_entities": [
+          "LKP - Validate Policy (policy_id)"
+        ],
+        "expression": "SELECT policy_id FROM stg.policy WHERE policy_id = <input.policy_id>",
+        "line_number": 73,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T003",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from job_number.",
+        "source_entities": [
+          "Lookup Match Output"
+        ],
+        "target_entities": [
+          "DER - Data Cleansing"
+        ],
+        "expression": "TRIM(job_number) -> job_number",
+        "line_number": 86,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T004",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp and flag indicating new‑business jobs.",
+        "source_entities": [
+          "DER - Data Cleansing"
+        ],
+        "target_entities": [
+          "DER - Derived / Calculated Columns"
+        ],
+        "expression": "GETDATE() -> etl_load_date; job_type == 'New Business' ? 1 : 0 -> is_new_business_flag",
+        "line_number": 98,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation using Conditional Split.",
+        "source_entities": [
+          "DER - Derived / Calculated Columns"
+        ],
+        "target_entities": [
+          "CSPL - Business Rule Validation"
+        ],
+        "expression": "job_date <= GETDATE() | (expiration_date IS NULL) OR (effective_date IS NULL) OR (expiration_date > effective_date) | job_status IN ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED')",
+        "line_number": 108,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T006",
+        "rule_type": "UNION",
+        "description": "Combine all error streams (lookup no‑match, conditional split invalid rows, source error output) into a single error flow.",
+        "source_entities": [
+          "Lookup No Match Output (-> Error Path)",
+          "Invalid Rows (-> Error Path)",
+          "OLE DB Source Error Output"
+        ],
+        "target_entities": [
+          "UN - Union All Error Rows"
+        ],
+        "expression": null,
+        "line_number": 121,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T007",
+        "rule_type": "WRITE",
+        "description": "Insert rejected/error rows into stg.error_quarantine.",
+        "source_entities": [
+          "UN - Union All Error Rows"
+        ],
+        "target_entities": [
+          "DST - Error Log (stg.error_quarantine)"
+        ],
+        "expression": null,
+        "line_number": 132,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T008",
+        "rule_type": "WRITE",
+        "description": "Upsert valid rows into stg.job (target staging table).",
+        "source_entities": [
+          "CSPL - Business Rule Validation (Valid Rows)"
+        ],
+        "target_entities": [
+          "DST - Load job (PostgreSQL DW)"
+        ],
+        "expression": null,
+        "line_number": 144,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T009",
+        "rule_type": "WRITE",
+        "description": "Insert package start record into etl.etl_audit_log.",
+        "source_entities": [
+          "SQL - Log Package Start"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Job','Data Flow', now(), 'RUNNING')",
+        "line_number": 40,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T010",
+        "rule_type": "WRITE",
+        "description": "Update etl.etl_audit_log with end time, status and row counts.",
+        "source_entities": [
+          "SQL - Log Package End / Row Counts"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Job' AND status = 'RUNNING'",
+        "line_number": 142,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T011",
+        "rule_type": "WRITE",
+        "description": "Log runtime errors to etl.etl_error_log on OnError event.",
+        "source_entities": [
+          "SQL - Log Error to ETL_ERROR_LOG"
+        ],
+        "target_entities": [
+          "etl.etl_error_log"
+        ],
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Job', ?, ?, ?, now())",
+        "line_number": 157,
+        "confidence": 0.98
+      }
+    ],
+    "business_rules": [
+      "BR-01: policy_id must exist in stg.policy (referential integrity).",
+      "BR-04: job_date must be less than or equal to the current system date.",
+      "BR-05: expiration_date must be null OR effective_date must be null OR expiration_date must be greater than effective_date.",
+      "BR-06: job_status must be one of ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED').",
+      "Derived flag is_new_business_flag = 1 when job_type = 'New Business', else 0."
+    ],
+    "dependencies": [
+      "CM_Guidewire_PG_Source (source connection manager)",
+      "CM_DW_PG_Target (target connection manager)",
+      "public.job (source table)",
+      "stg.policy (lookup table)",
+      "stg.job (target staging table)",
+      "stg.error_quarantine (error table)",
+      "etl.etl_audit_log (audit table)",
+      "etl.etl_error_log (error log table)"
+    ],
+    "relationships": [
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 40,
+        "description": "Insert start record."
+      },
+      {
+        "source": "SRC - job (PostgreSQL)",
+        "target": "LKP - Validate Policy (policy_id)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 71,
+        "description": "Source output feeds lookup input."
+      },
+      {
+        "source": "SRC - job (PostgreSQL)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.95,
+        "evidence_line": 121,
+        "description": "Source error output is sent to Union All."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 86,
+        "description": "Lookup match output feeds data cleansing."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 121,
+        "description": "Lookup no‑match rows are redirected to error stream."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 98,
+        "description": "Cleansed rows flow to derived/calculated columns."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.97,
+        "evidence_line": 108,
+        "description": "Rows with added metadata are evaluated by business rules."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load job (PostgreSQL DW)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 144,
+        "description": "Valid rows are loaded into stg.job."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 121,
+        "description": "Invalid rows are sent to error stream."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 132,
+        "description": "All error rows are persisted to error quarantine."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 142,
+        "description": "Update audit log with end time and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 157,
+        "description": "Log runtime error details."
+      },
+      {
+        "source": "Extract_Job",
+        "target": "SQL - Log Package Start",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 38,
+        "description": null
+      },
+      {
+        "source": "Extract_Job",
+        "target": "DFT - Extract, Cleanse, Validate, Load job",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 45,
+        "description": null
+      },
+      {
+        "source": "Extract_Job",
+        "target": "SQL - Log Package End / Row Counts",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 140,
+        "description": null
+      },
+      {
+        "source": "Extract_Job",
+        "target": "SQL - Log Error to ETL_ERROR_LOG",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 155,
+        "description": null
+      }
+    ],
+    "confidence": 0.88
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 38,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "Extract_Job",
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "SQL - Log Package Start",
+      "DFT - Extract, Cleanse, Validate, Load job",
+      "SQL - Log Package End / Row Counts",
+      "SQL - Log Error to ETL_ERROR_LOG",
+      "SRC - job (PostgreSQL)",
+      "LKP - Validate Policy (policy_id)",
+      "DER - Data Cleansing",
+      "public.job",
+      "stg.policy",
+      "stg.job",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "RowsRead",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows read."
+      },
+      {
+        "source": "RowsInserted",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows inserted."
+      },
+      {
+        "source": "RowsRejected",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows rejected."
+      },
+      {
+        "source": "PackageName",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package name variable."
+      },
+      {
+        "source": "StartTime",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package start time variable."
+      },
+      {
+        "source": "CM_Guidewire_PG_Source",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ADO.NET connection manager to source PostgreSQL."
+      },
+      {
+        "source": "CM_DW_PG_Target",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ADO.NET connection manager to target DW PostgreSQL."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that logs start in etl.etl_audit_log."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load job",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Main Data Flow Task."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that updates audit log with end info."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "Extract_Job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that logs runtime errors."
+      },
+      {
+        "source": "SRC - job (PostgreSQL)",
+        "target": "DFT - Extract, Cleanse, Validate, Load job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Source component reading from public.job."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "DFT - Extract, Cleanse, Validate, Load job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Lookup transformation validating policy_id."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DFT - Extract, Cleanse, Validate, Load job",
+        "relationship_type": "USES",
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Derived Column transformation trimming job_number."
+      },
+      {
+        "source": "public.job",
+        "target": "SRC - job (PostgreSQL)",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Table read by the source component."
+      },
+      {
+        "source": "stg.policy",
+        "target": "LKP - Validate Policy (policy_id)",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Table used for policy_id validation."
+      },
+      {
+        "source": "SRC - job (PostgreSQL)",
+        "target": "LKP - Validate Policy (policy_id)",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Rows flow from source to lookup."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Validated rows flow to data cleansing."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "stg.job",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Cleaned rows loaded into staging table."
+      },
+      {
+        "source": "InvalidRows",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Rows failing validation are routed to error quarantine."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Inserts start record."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Updates end time and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Inserts runtime error records."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no table, column, or file artifacts, while the LLM extracted a rich set of entities and relationships. No direct conflicts were found because parser output was empty."
+    ],
+    "gaps_detected": [
+      "Missing explicit parser extraction for tables, columns, and file references; column-level metadata (data types, lengths) is not available.",
+      "Conditional Split component, Union All component, and final Destination task for loading valid rows (DST - Load job) are referenced in the key logic but not present in the extracted entity list.",
+      "No line numbers or source code references for many inferred relationships, limiting traceability.",
+      "Potential external procedures or scripts invoked by ExecuteSQLTasks are not captured."
+    ],
+    "overall_confidence": 0.78
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "public.job",
+        "stg.policy",
+        "stg.job",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "columns": [
+        "job_id",
+        "policy_id",
+        "job_type",
+        "job_date",
+        "created_ts",
+        "job_number",
+        "job_status",
+        "submission_date",
+        "effective_date",
+        "expiration_date",
+        "etl_load_date",
+        "is_new_business_flag"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts rows from the Guidewire PolicyCenter JOB table, validates the foreign‑key relationship to POLICY, applies data cleansing and business rule checks, and loads the clean rows into the data‑warehouse staging table while quarantining invalid rows and logging audit information.",
+      "narrative": "When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.job via the ADO.NET PostgreSQL source. Each row is passed to a Lookup component that checks whether the policy_id exists in the staging policy table (stg.policy); matching rows continue, non‑matches are redirected to the error stream. Matching rows are then cleansed (TRIM on job_number) and enriched with derived columns (etl_load_date = current timestamp, is_new_business_flag = 1 when job_type = 'New Business'). The enriched rows flow to a Conditional Split that enforces three business rules: job_date must not be in the future, expiration/effective dates must be logically consistent, and job_status must be one of the allowed values. Rows satisfying all rules are sent to the OLE DB Destination that fast‑loads them into stg.job. Rows that fail any rule, as well as lookup‑no‑match rows and source‑error rows, are combined by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, a second ExecuteSQLTask updates the audit log with end_time, status COMPLETED, and the row counts (rows read, inserted, rejected). An OnError event handler captures any package‑level errors and inserts a record into etl.etl_error_log.",
+      "business_domain": "Insurance Policy/Job Data Integration (PolicyCenter to Data Warehouse)",
+      "business_rules": [
+        "BR‑01/BR‑04: policy_id in job must exist in stg.policy (foreign‑key validation).",
+        "Job date must not be in the future (job_date <= current system date).",
+        "Expiration and effective dates must be logically consistent: either expiration_date is null, or effective_date is null, or expiration_date must be greater than effective_date.",
+        "Job status must be one of the allowed values: PENDING, IN_PROGRESS, COMPLETED, CANCELLED.",
+        "Job number is trimmed of leading/trailing whitespace before load.",
+        "is_new_business_flag is set to 1 when job_type equals 'New Business', otherwise 0."
+      ],
+      "key_logic": [
+        "1. Log package start in etl.etl_audit_log (SQL_LogStart task).",
+        "2. Source component (SRC - job) reads selected columns from public.job via a SELECT statement.",
+        "3. Lookup component (LKP - Validate Policy) checks that policy_id exists in stg.policy; rows with no match are redirected to the error path.",
+        "4. Derived Column component (DER - Data Cleansing) trims whitespace from job_number.",
+        "5. Derived Column component (DER - Derived / Calculated Columns) adds ETL metadata (etl_load_date) and calculates is_new_business_flag based on job_type.",
+        "6. Conditional Split component (CSPL - Business Rule Validation) evaluates three business rules and routes rows that fail any rule to the error path.",
+        "7. Valid rows are loaded into stg.job using the OLE DB Destination (DST - Load job).",
+        "8. All error, no‑match, and invalid rows are combined by the Union All component (UN - Union All Error Rows).",
+        "9. The unified error stream is written to stg.error_quarantine (DST - Error Log).",
+        "10. Log package end, row counts, and status in etl.etl_audit_log (SQL_LogEnd task).",
+        "11. On any runtime error, the OnError event handler inserts a record into etl.etl_error_log (EH_LogError task)."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "Extract_Job",
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "SQL - Log Package Start",
+        "DFT - Extract, Cleanse, Validate, Load job",
+        "SQL - Log Package End / Row Counts",
+        "SQL - Log Error to ETL_ERROR_LOG",
+        "SRC - job (PostgreSQL)",
+        "LKP - Validate Policy (policy_id)",
+        "DER - Data Cleansing",
+        "public.job",
+        "stg.policy",
+        "stg.job",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T001",
+          "rule_type": "READ",
+          "description": "Select required columns from public.job.",
+          "source_entities": [
+            "CM_Guidewire_PG_Source",
+            "public.job"
+          ],
+          "target_entities": [
+            "SRC - job (PostgreSQL)"
+          ],
+          "expression": "SELECT job_id, policy_id, job_type, job_date, created_ts, job_number, job_status, submission_date, effective_date, expiration_date FROM public.job",
+          "line_number": 60,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T002",
+          "rule_type": "JOIN",
+          "description": "Lookup transformation validates that each policy_id exists in stg.policy.",
+          "source_entities": [
+            "SRC - job (PostgreSQL)",
+            "stg.policy"
+          ],
+          "target_entities": [
+            "LKP - Validate Policy (policy_id)"
+          ],
+          "expression": "SELECT policy_id FROM stg.policy WHERE policy_id = <input.policy_id>",
+          "line_number": 73,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T003",
+          "rule_type": "CALCULATION",
+          "description": "Trim whitespace from job_number.",
+          "source_entities": [
+            "Lookup Match Output"
+          ],
+          "target_entities": [
+            "DER - Data Cleansing"
+          ],
+          "expression": "TRIM(job_number) -> job_number",
+          "line_number": 86,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T004",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL load timestamp and flag indicating new‑business jobs.",
+          "source_entities": [
+            "DER - Data Cleansing"
+          ],
+          "target_entities": [
+            "DER - Derived / Calculated Columns"
+          ],
+          "expression": "GETDATE() -> etl_load_date; job_type == 'New Business' ? 1 : 0 -> is_new_business_flag",
+          "line_number": 98,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T005",
+          "rule_type": "CONDITIONAL",
+          "description": "Business rule validation using Conditional Split.",
+          "source_entities": [
+            "DER - Derived / Calculated Columns"
+          ],
+          "target_entities": [
+            "CSPL - Business Rule Validation"
+          ],
+          "expression": "job_date <= GETDATE() | (expiration_date IS NULL) OR (effective_date IS NULL) OR (expiration_date > effective_date) | job_status IN ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED')",
+          "line_number": 108,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T006",
+          "rule_type": "UNION",
+          "description": "Combine all error streams (lookup no‑match, conditional split invalid rows, source error output) into a single error flow.",
+          "source_entities": [
+            "Lookup No Match Output (-> Error Path)",
+            "Invalid Rows (-> Error Path)",
+            "OLE DB Source Error Output"
+          ],
+          "target_entities": [
+            "UN - Union All Error Rows"
+          ],
+          "expression": null,
+          "line_number": 121,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T007",
+          "rule_type": "WRITE",
+          "description": "Insert rejected/error rows into stg.error_quarantine.",
+          "source_entities": [
+            "UN - Union All Error Rows"
+          ],
+          "target_entities": [
+            "DST - Error Log (stg.error_quarantine)"
+          ],
+          "expression": null,
+          "line_number": 132,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T008",
+          "rule_type": "WRITE",
+          "description": "Upsert valid rows into stg.job (target staging table).",
+          "source_entities": [
+            "CSPL - Business Rule Validation (Valid Rows)"
+          ],
+          "target_entities": [
+            "DST - Load job (PostgreSQL DW)"
+          ],
+          "expression": null,
+          "line_number": 144,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T009",
+          "rule_type": "WRITE",
+          "description": "Insert package start record into etl.etl_audit_log.",
+          "source_entities": [
+            "SQL - Log Package Start"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Job','Data Flow', now(), 'RUNNING')",
+          "line_number": 40,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T010",
+          "rule_type": "WRITE",
+          "description": "Update etl.etl_audit_log with end time, status and row counts.",
+          "source_entities": [
+            "SQL - Log Package End / Row Counts"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Job' AND status = 'RUNNING'",
+          "line_number": 142,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T011",
+          "rule_type": "WRITE",
+          "description": "Log runtime errors to etl.etl_error_log on OnError event.",
+          "source_entities": [
+            "SQL - Log Error to ETL_ERROR_LOG"
+          ],
+          "target_entities": [
+            "etl.etl_error_log"
+          ],
+          "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Job', ?, ?, ?, now())",
+          "line_number": 157,
+          "confidence": 0.98
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "RowsRead",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Package variable capturing rows read."
+        },
+        {
+          "source": "RowsInserted",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Package variable capturing rows inserted."
+        },
+        {
+          "source": "RowsRejected",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Package variable capturing rows rejected."
+        },
+        {
+          "source": "PackageName",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Package name variable."
+        },
+        {
+          "source": "StartTime",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Package start time variable."
+        },
+        {
+          "source": "CM_Guidewire_PG_Source",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "ADO.NET connection manager to source PostgreSQL."
+        },
+        {
+          "source": "CM_DW_PG_Target",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "ADO.NET connection manager to target DW PostgreSQL."
+        },
+        {
+          "source": "SQL - Log Package Start",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask that logs start in etl.etl_audit_log."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load job",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Main Data Flow Task."
+        },
+        {
+          "source": "SQL - Log Package End / Row Counts",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask that updates audit log with end info."
+        },
+        {
+          "source": "SQL - Log Error to ETL_ERROR_LOG",
+          "target": "Extract_Job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask that logs runtime errors."
+        },
+        {
+          "source": "SRC - job (PostgreSQL)",
+          "target": "DFT - Extract, Cleanse, Validate, Load job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Source component reading from public.job."
+        },
+        {
+          "source": "LKP - Validate Policy (policy_id)",
+          "target": "DFT - Extract, Cleanse, Validate, Load job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Lookup transformation validating policy_id."
+        },
+        {
+          "source": "DER - Data Cleansing",
+          "target": "DFT - Extract, Cleanse, Validate, Load job",
+          "relationship_type": "USES",
+          "confidence": 1.0,
+          "evidence_line": null,
+          "description": "Derived Column transformation trimming job_number."
+        },
+        {
+          "source": "public.job",
+          "target": "SRC - job (PostgreSQL)",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Table read by the source component."
+        },
+        {
+          "source": "stg.policy",
+          "target": "LKP - Validate Policy (policy_id)",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Table used for policy_id validation."
+        },
+        {
+          "source": "SRC - job (PostgreSQL)",
+          "target": "LKP - Validate Policy (policy_id)",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Rows flow from source to lookup."
+        },
+        {
+          "source": "LKP - Validate Policy (policy_id)",
+          "target": "DER - Data Cleansing",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Validated rows flow to data cleansing."
+        },
+        {
+          "source": "DER - Data Cleansing",
+          "target": "stg.job",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Cleaned rows loaded into staging table."
+        },
+        {
+          "source": "InvalidRows",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Rows failing validation are routed to error quarantine."
+        },
+        {
+          "source": "SQL - Log Package Start",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Inserts start record."
+        },
+        {
+          "source": "SQL - Log Package End / Row Counts",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Updates end time and row counts."
+        },
+        {
+          "source": "SQL - Log Error to ETL_ERROR_LOG",
+          "target": "etl.etl_error_log",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Inserts runtime error records."
+        }
+      ],
+      "gaps": [
+        "Missing explicit parser extraction for tables, columns, and file references; column-level metadata (data types, lengths) is not available.",
+        "Conditional Split component, Union All component, and final Destination task for loading valid rows (DST - Load job) are referenced in the key logic but not present in the extracted entity list.",
+        "No line numbers or source code references for many inferred relationships, limiting traceability.",
+        "Potential external procedures or scripts invoked by ExecuteSQLTasks are not captured."
+      ]
+    },
+    "overall_confidence": 0.78
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_Job.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_Job.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Job.dtsx",
+        "total_lines": 185
+      }
+    },
+    {
+      "id": "PROGRAM:Extract_Job",
+      "label": "Program",
+      "properties": {
+        "name": "Extract_Job",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": null,
+        "line_number": 3
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Job",
+        "line_number": 9
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Job",
+        "line_number": 10
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Job",
+        "line_number": 11
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "String",
+        "parent": "Extract_Job",
+        "line_number": 12
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "DateTime",
+        "parent": "Extract_Job",
+        "line_number": 13
+      }
+    },
+    {
+      "id": "TASK:CM_Guidewire_PG_Source",
+      "label": "Task",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 16
+      }
+    },
+    {
+      "id": "TASK:CM_DW_PG_Target",
+      "label": "Task",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 27
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "TASK:DFT - Extract, Cleanse, Validate, Load job",
+      "label": "Task",
+      "properties": {
+        "name": "DFT - Extract, Cleanse, Validate, Load job",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 45
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 140
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Job",
+        "line_number": 155
+      }
+    },
+    {
+      "id": "TASK:SRC - job (PostgreSQL)",
+      "label": "Task",
+      "properties": {
+        "name": "SRC - job (PostgreSQL)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 58
+      }
+    },
+    {
+      "id": "TASK:LKP - Validate Policy (policy_id)",
+      "label": "Task",
+      "properties": {
+        "name": "LKP - Validate Policy (policy_id)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 71
+      }
+    },
+    {
+      "id": "TASK:DER - Data Cleansing",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "TASK:DER - Derived / Calculated Columns",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 95
+      }
+    },
+    {
+      "id": "TASK:CSPL - Business Rule Validation",
+      "label": "Task",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 106
+      }
+    },
+    {
+      "id": "TASK:UN - Union All Error Rows",
+      "label": "Task",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 119
+      }
+    },
+    {
+      "id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 130
+      }
+    },
+    {
+      "id": "TASK:DST - Load job (PostgreSQL DW)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Load job (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load job",
+        "line_number": 141
+      }
+    },
+    {
+      "id": "TABLE:public.job",
+      "label": "Table",
+      "properties": {
+        "name": "public.job",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 60
+      }
+    },
+    {
+      "id": "TABLE:stg.policy",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 73
+      }
+    },
+    {
+      "id": "TABLE:stg.job",
+      "label": "Table",
+      "properties": {
+        "name": "stg.job",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 144
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 132
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 40
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 157
+      }
+    },
+    {
+      "id": "COLUMN:job_id",
+      "label": "Column",
+      "properties": {
+        "name": "job_id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:policy_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:job_type",
+      "label": "Column",
+      "properties": {
+        "name": "job_type",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:job_date",
+      "label": "Column",
+      "properties": {
+        "name": "job_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:created_ts",
+      "label": "Column",
+      "properties": {
+        "name": "created_ts",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:job_number",
+      "label": "Column",
+      "properties": {
+        "name": "job_number",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:job_status",
+      "label": "Column",
+      "properties": {
+        "name": "job_status",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:submission_date",
+      "label": "Column",
+      "properties": {
+        "name": "submission_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:effective_date",
+      "label": "Column",
+      "properties": {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:expiration_date",
+      "label": "Column",
+      "properties": {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "stg.job",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "COLUMN:is_new_business_flag",
+      "label": "Column",
+      "properties": {
+        "name": "is_new_business_flag",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "stg.job",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T001",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T001",
+        "rule_type": "READ",
+        "description": "Select required columns from public.job.",
+        "expression": "SELECT job_id, policy_id, job_type, job_date, created_ts, job_number, job_status, submission_date, effective_date, expiration_date FROM public.job",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T002",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T002",
+        "rule_type": "JOIN",
+        "description": "Lookup transformation validates that each policy_id exists in stg.policy.",
+        "expression": "SELECT policy_id FROM stg.policy WHERE policy_id = <input.policy_id>",
+        "line_number": 73
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T003",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T003",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from job_number.",
+        "expression": "TRIM(job_number) -> job_number",
+        "line_number": 86
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T004",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T004",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp and flag indicating new‑business jobs.",
+        "expression": "GETDATE() -> etl_load_date; job_type == 'New Business' ? 1 : 0 -> is_new_business_flag",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T005",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation using Conditional Split.",
+        "expression": "job_date <= GETDATE() | (expiration_date IS NULL) OR (effective_date IS NULL) OR (expiration_date > effective_date) | job_status IN ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED')",
+        "line_number": 108
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T006",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T006",
+        "rule_type": "UNION",
+        "description": "Combine all error streams (lookup no‑match, conditional split invalid rows, source error output) into a single error flow.",
+        "expression": null,
+        "line_number": 121
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T007",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T007",
+        "rule_type": "WRITE",
+        "description": "Insert rejected/error rows into stg.error_quarantine.",
+        "expression": null,
+        "line_number": 132
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T008",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T008",
+        "rule_type": "WRITE",
+        "description": "Upsert valid rows into stg.job (target staging table).",
+        "expression": null,
+        "line_number": 144
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T009",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T009",
+        "rule_type": "WRITE",
+        "description": "Insert package start record into etl.etl_audit_log.",
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Job','Data Flow', now(), 'RUNNING')",
+        "line_number": 40
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T010",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T010",
+        "rule_type": "WRITE",
+        "description": "Update etl.etl_audit_log with end time, status and row counts.",
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Job' AND status = 'RUNNING'",
+        "line_number": 142
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Job.dtsx:T011",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T011",
+        "rule_type": "WRITE",
+        "description": "Log runtime errors to etl.etl_error_log on OnError event.",
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Job', ?, ?, ?, now())",
+        "line_number": 157
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "PROGRAM:Extract_Job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:DFT - Extract, Cleanse, Validate, Load job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:SRC - job (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:LKP - Validate Policy (policy_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TASK:DST - Load job (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:public.job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:stg.policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:stg.job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:job_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:job_type",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:job_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:created_ts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:job_number",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:job_status",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:submission_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:effective_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:expiration_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Job.dtsx",
+      "target_id": "COLUMN:is_new_business_flag",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRead",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows read."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsInserted",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows inserted."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRejected",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package variable capturing rows rejected."
+      }
+    },
+    {
+      "source_id": "TABLE:PackageName",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package name variable."
+      }
+    },
+    {
+      "source_id": "TABLE:StartTime",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Package start time variable."
+      }
+    },
+    {
+      "source_id": "TABLE:CM_Guidewire_PG_Source",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ADO.NET connection manager to source PostgreSQL."
+      }
+    },
+    {
+      "source_id": "TABLE:CM_DW_PG_Target",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ADO.NET connection manager to target DW PostgreSQL."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package Start",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that logs start in etl.etl_audit_log."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load job",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Main Data Flow Task."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package End / Row Counts",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that updates audit log with end info."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Error to ETL_ERROR_LOG",
+      "target_id": "TABLE:Extract_Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask that logs runtime errors."
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - job (PostgreSQL)",
+      "target_id": "TABLE:DFT - Extract, Cleanse, Validate, Load job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Source component reading from public.job."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Policy (policy_id)",
+      "target_id": "TABLE:DFT - Extract, Cleanse, Validate, Load job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Lookup transformation validating policy_id."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Data Cleansing",
+      "target_id": "TABLE:DFT - Extract, Cleanse, Validate, Load job",
+      "type": "USES",
+      "properties": {
+        "confidence": 1.0,
+        "evidence_line": null,
+        "description": "Derived Column transformation trimming job_number."
+      }
+    },
+    {
+      "source_id": "TABLE:public.job",
+      "target_id": "TABLE:SRC - job (PostgreSQL)",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Table read by the source component."
+      }
+    },
+    {
+      "source_id": "TABLE:stg.policy",
+      "target_id": "TABLE:LKP - Validate Policy (policy_id)",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Table used for policy_id validation."
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - job (PostgreSQL)",
+      "target_id": "TABLE:LKP - Validate Policy (policy_id)",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Rows flow from source to lookup."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Policy (policy_id)",
+      "target_id": "TABLE:DER - Data Cleansing",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Validated rows flow to data cleansing."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Data Cleansing",
+      "target_id": "TABLE:stg.job",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Cleaned rows loaded into staging table."
+      }
+    },
+    {
+      "source_id": "TABLE:InvalidRows",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Rows failing validation are routed to error quarantine."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package Start",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Inserts start record."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package End / Row Counts",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Updates end time and row counts."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Error to ETL_ERROR_LOG",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Inserts runtime error records."
+      }
+    }
+  ]
+}

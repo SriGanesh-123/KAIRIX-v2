@@ -1,0 +1,47 @@
+# Source Code Summary: Extract_Job
+
+**Business Domain:** Insurance Policy/Job Data Integration (PolicyCenter to Data Warehouse)
+
+## Purpose
+Extracts rows from the Guidewire PolicyCenter JOB table, validates the foreign‑key relationship to POLICY, applies data cleansing and business rule checks, and loads the clean rows into the data‑warehouse staging table while quarantining invalid rows and logging audit information.
+
+## High-Level Narrative
+When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.job via the ADO.NET PostgreSQL source. Each row is passed to a Lookup component that checks whether the policy_id exists in the staging policy table (stg.policy); matching rows continue, non‑matches are redirected to the error stream. Matching rows are then cleansed (TRIM on job_number) and enriched with derived columns (etl_load_date = current timestamp, is_new_business_flag = 1 when job_type = 'New Business'). The enriched rows flow to a Conditional Split that enforces three business rules: job_date must not be in the future, expiration/effective dates must be logically consistent, and job_status must be one of the allowed values. Rows satisfying all rules are sent to the OLE DB Destination that fast‑loads them into stg.job. Rows that fail any rule, as well as lookup‑no‑match rows and source‑error rows, are combined by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, a second ExecuteSQLTask updates the audit log with end_time, status COMPLETED, and the row counts (rows read, inserted, rejected). An OnError event handler captures any package‑level errors and inserts a record into etl.etl_error_log.
+
+## Inputs
+- public.job (Guidewire PolicyCenter PostgreSQL replica)
+- stg.policy (staging table in the data warehouse used for policy_id lookup)
+- OLE DB Source Error Output (source read errors)
+- Package variables: RowsRead, RowsInserted, RowsRejected, PackageName, StartTime
+
+## Outputs
+- stg.job (staging table for validated job records)
+- stg.error_quarantine (table for rejected/invalid rows)
+- etl.etl_audit_log (package start/end audit record)
+- etl.etl_error_log (error event log)
+
+## Key Transformations
+- SQL SELECT extracting job_id, policy_id, job_type, job_date, created_ts, job_number, job_status, submission_date, effective_date, expiration_date from public.job
+- Lookup on policy_id against stg.policy to enforce referential integrity (BR‑01/BR‑04)
+- Derived Column: TRIM(job_number) to remove whitespace
+- Derived Column: GETDATE() -> etl_load_date
+- Derived Column: job_type == 'New Business' ? 1 : 0 -> is_new_business_flag
+- Conditional Split enforcing: job_date <= current date; (expiration_date IS NULL) OR (effective_date IS NULL) OR (expiration_date > effective_date); job_status IN ('PENDING','IN_PROGRESS','COMPLETED','CANCELLED')
+- Union All to consolidate all error streams (lookup no‑match, conditional split invalid rows, source error output)
+- Fast load into stg.job with batch commit size of 10,000 rows
+- Insert into stg.error_quarantine for all rejected rows
+
+## Key Dependencies
+- Connection Manager CM_Guidewire_PG_Source (Npgsql provider, read‑only replica)
+- Connection Manager CM_DW_PG_Target (Npgsql provider, data‑warehouse target)
+- Source table public.job
+- Target tables stg.policy, stg.job, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log
+- SSIS components: Execute SQL Task, ADO.NET PostgreSQL Source, Lookup, Derived Column, Conditional Split, Union All, OLE DB Destination
+
+## Business Rules
+- BR‑01/BR‑04: policy_id in job must exist in stg.policy (foreign‑key validation).
+- Job date must not be in the future (job_date <= current system date).
+- Expiration and effective dates must be logically consistent: either expiration_date is null, or effective_date is null, or expiration_date must be greater than effective_date.
+- Job status must be one of the allowed values: PENDING, IN_PROGRESS, COMPLETED, CANCELLED.
+- Job number is trimmed of leading/trailing whitespace before load.
+- is_new_business_flag is set to 1 when job_type equals 'New Business', otherwise 0.

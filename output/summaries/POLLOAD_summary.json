@@ -1,0 +1,28 @@
+{
+  "purpose": "Load policy master records from a line‑sequential input file into a VSAM KSDS (indexed) file, performing basic validation and duplicate detection.",
+  "high_level_narrative": "The program POLLOAD starts by displaying a start message and opening the sequential input file (POLICY‑IN) and the VSAM indexed file (POLICY‑MASTER). It then enters a loop that reads one record at a time from POLICY‑IN until end‑of‑file. For each record, it increments a read counter, validates that the policy number field is not blank, and if valid, moves each input field to the corresponding field in the VSAM record layout defined by the POLYMAST copybook. The program attempts to write the populated VSAM record; on a duplicate key (invalid key) it logs a duplicate‑policy error and increments an error counter, otherwise it increments a write counter. After all input records are processed, the program closes both files, displays totals for records read, written, and errors, and ends execution.",
+  "business_domain": "Personal Lines Policy Management",
+  "inputs": [
+    "POLICY-IN (line sequential file containing raw policy data)"
+  ],
+  "outputs": [
+    "POLICY-MASTER (VSAM KSDS indexed file storing policy master records)"
+  ],
+  "key_transformations": [
+    "Validation: reject records where PI-POLICY-NUMBER is blank and count as error.",
+    "Field mapping: move each PI‑* field from the input record to the corresponding VSAM field (e.g., PI-POLICY-NUMBER → POLICY-NUMBER, PI-CUSTOMER-ID → CUSTOMER-ID, etc.).",
+    "Duplicate detection: VSAM write with INVALID KEY clause treats duplicate POLICY-NUMBER as an error.",
+    "Counting: increment WS-READ-COUNT for each input record, WS-WRITE-COUNT for successful writes, WS-ERROR-COUNT for validation or duplicate errors."
+  ],
+  "key_dependencies": [
+    "Copybook POLYMAST (defines the VSAM record layout for POLICY-MASTER)",
+    "File definitions for POLICY-IN (sequential) and POLICY-MASTER (indexed VSAM)",
+    "COBOL runtime file‑status handling (WS-IN-STATUS, WS-VSAM-STATUS)"
+  ],
+  "business_rules": [
+    "A policy record must contain a non‑blank policy number; otherwise it is considered invalid.",
+    "Policy numbers must be unique in the POLICY-MASTER VSAM file; duplicate keys are rejected and logged as errors.",
+    "All fields from the input record are transferred directly to the VSAM record without transformation.",
+    "Processing stops only after the entire input file has been read; no partial roll‑back is performed."
+  ]
+}

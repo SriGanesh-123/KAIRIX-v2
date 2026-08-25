@@ -1,0 +1,1784 @@
+{
+  "package_id": "PKG-SSIS-Extract_Location.dtsx-f6fff9b5",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Location.dtsx",
+    "file_name": "Extract_Location.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 185,
+    "size_bytes": 11351
+  },
+  "summary": {
+    "purpose": "Extracts LOCATION records from the Guidewire PolicyCenter PostgreSQL source, validates the foreign key to POLICY_PERIOD, cleanses address and code fields, applies business rule checks, and loads the valid rows into the data warehouse while quarantining invalid rows and logging audit information.",
+    "high_level_narrative": "When the package runs, it first logs a start entry in etl.etl_audit_log. The main Data Flow task reads all columns from public.location using a PostgreSQL source component. Each row is passed to a Lookup component that checks whether the policy_period_id exists in the staging table stg.policy_period; matching rows continue, non‑matching rows are sent to an error stream. Matching rows undergo a Derived Column transformation that trims whitespace, upper‑cases state and country codes, substitutes empty strings for null address_line2, and adds an ETL load timestamp (GETDATE()). A second Derived Column adds any additional calculated columns (currently only etl_load_date). The rows then flow to a Conditional Split that enforces business rules: building_value and contents_value must be >= 0 and occupancy_type must be one of the allowed codes. Valid rows are bulk‑loaded (fast load) into stg.location. All error streams (lookup no‑match, conditional split invalid rows, and source component errors) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, an end‑log SQL task updates etl.etl_audit_log with end time, status, and row counts. Any package‑level errors trigger an OnError handler that inserts details into etl.etl_error_log.",
+    "business_domain": "Insurance Policy – Location data extraction and loading",
+    "inputs": [
+      "public.location (Guidewire PolicyCenter source database)",
+      "stg.policy_period (staging table in the data warehouse for policy period reference)",
+      "etl.etl_audit_log (used for logging start/end of the package)",
+      "etl.etl_error_log (used for logging runtime errors)"
+    ],
+    "outputs": [
+      "stg.location (staging table for cleaned location records)",
+      "stg.error_quarantine (table capturing rejected/invalid rows)",
+      "etl.etl_audit_log (audit record updated with row counts and status)",
+      "etl.etl_error_log (error record inserted on package failure)"
+    ],
+    "key_transformations": [
+      "SQL SELECT extracting location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value from public.location",
+      "Lookup validation of policy_period_id against stg.policy_period (full cache, redirect no‑match rows)",
+      "Derived Column cleansing: TRIM(address_line1), TRIM(city), UPPER(TRIM(state_code)), UPPER(TRIM(country_code)), ISNULL(address_line2, '')",
+      "Derived Column adding ETL metadata: GETDATE() -> etl_load_date",
+      "Conditional Split enforcing business rules on building_value, contents_value, and occupancy_type",
+      "Union All merging all error/no‑match streams into a single error flow",
+      "Fast load bulk insert into stg.location with commit size of 10,000 rows",
+      "Insert into stg.error_quarantine for rejected rows"
+    ],
+    "key_dependencies": [
+      "Connection Manager CM_Guidewire_PG_Source (PostgreSQL source)",
+      "Connection Manager CM_DW_PG_Target (PostgreSQL target)",
+      "SQL Execute Task for audit start log",
+      "SQL Execute Task for audit end log and row count update",
+      "SQL Execute Task for error logging (etl.etl_error_log)",
+      "ADO.NET PostgreSQL Source component",
+      "Lookup component (policy_period_id validation)",
+      "Derived Column components (data cleansing and metadata)",
+      "Conditional Split component (business rule validation)",
+      "Union All component (error stream consolidation)",
+      "OLE DB Destination components for stg.location and stg.error_quarantine"
+    ],
+    "business_rules": [
+      "BR-05: policy_period_id in location must exist in stg.policy_period (referential integrity)",
+      "Building value must be greater than or equal to 0.00",
+      "Contents value must be greater than or equal to 0.00",
+      "Occupancy_type must be one of: OWNER_OCCUPIED, TENANT_OCCUPIED, VACANT, UNDER_CONSTRUCTION, OTHER",
+      "Address fields are trimmed of leading/trailing whitespace",
+      "State_code and country_code are stored in upper case",
+      "Null address_line2 values are replaced with an empty string"
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_Location.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extract rows from the source POLICYCENTER location table, validate the foreign key to POLICY_PERIOD, cleanse address fields, apply business rule checks, and load the valid rows into the data warehouse staging table while quarantining invalid rows and logging audit information.",
+    "inputs_outputs": {
+      "inputs": [
+        "public.location (source table)",
+        "stg.policy_period (lookup table for policy_period_id)",
+        "etl.etl_audit_log (audit log table for start/end timestamps and row counts)",
+        "CM_Guidewire_PG_Source (connection manager to source PostgreSQL)",
+        "CM_DW_PG_Target (connection manager to target PostgreSQL)"
+      ],
+      "outputs": [
+        "stg.location (target staging table for cleaned location rows)",
+        "stg.error_quarantine (error‑quarantine table for rejected rows)",
+        "etl.etl_audit_log (audit log updated with end time and row counts)",
+        "etl.etl_error_log (error log populated by OnError handler)"
+      ]
+    },
+    "key_logic": [
+      "1. ExecuteSQLTask \"SQL - Log Package Start\" inserts a row into etl.etl_audit_log with status RUNNING.",
+      "2. Data Flow \"DFT - Extract, Cleanse, Validate, Load location\" reads columns location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value from public.location.",
+      "3. Lookup component validates that each policy_period_id exists in stg.policy_period; rows with no match are redirected to the error path.",
+      "4. Derived Column component \"Data Cleansing\" trims whitespace, upper‑cases state and country codes, and replaces null address_line2 with an empty string.",
+      "5. Derived Column component \"Derived / Calculated Columns\" adds ETL metadata column etl_load_date = GETDATE().",
+      "6. Conditional Split component applies business rules: building_value >= 0, contents_value >= 0, occupancy_type must be one of ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER'). Valid rows continue; invalid rows are sent to the error path.",
+      "7. Union All component merges all error streams (lookup no‑match, conditional split invalid rows, source error output) into a single error flow.",
+      "8. OLE DB Destination \"Error Log (stg.error_quarantine)\" writes the unified error rows to stg.error_quarantine.",
+      "9. OLE DB Destination \"Load location (PostgreSQL DW)\" writes the validated rows to stg.location using fast load with a commit size of 10,000 rows.",
+      "10. ExecuteSQLTask \"SQL - Log Package End / Row Counts\" updates etl.etl_audit_log with end_time, status COMPLETED, and the row count variables (RowsRead, RowsInserted, RowsRejected).",
+      "11. OnError event handler logs any package‑level errors to etl.etl_error_log."
+    ],
+    "entities": [
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": "Int32",
+        "line_number": 12,
+        "description": "Counter for total rows read from source."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": "Int32",
+        "line_number": 13,
+        "description": "Counter for rows successfully loaded into target."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": "Int32",
+        "line_number": 14,
+        "description": "Counter for rows rejected due to validation or errors."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": "String",
+        "line_number": 15,
+        "description": "Name of the SSIS package."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": "DateTime",
+        "line_number": 16,
+        "description": "Package execution start timestamp."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": null,
+        "line_number": 20,
+        "description": "ADO.NET Npgsql connection to the Guidewire PostgreSQL source database."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "parent_entity": "Extract_Location",
+        "data_type": null,
+        "line_number": 31,
+        "description": "ADO.NET Npgsql connection to the Data Warehouse PostgreSQL target database."
+      },
+      {
+        "name": "public.location",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_Guidewire_PG_Source",
+        "data_type": null,
+        "line_number": null,
+        "description": "Source table containing location records."
+      },
+      {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table used for foreign‑key validation of policy_period_id."
+      },
+      {
+        "name": "stg.location",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Target staging table for cleaned location rows."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Table that stores rows rejected by validation or processing errors."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log table tracking package execution metrics."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Error log table populated by the OnError event handler."
+      },
+      {
+        "name": "SRC - location (PostgreSQL)",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 70,
+        "description": "ADO.NET source component that reads from public.location."
+      },
+      {
+        "name": "LKP - Validate Policy_Period (policy_period_id)",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 84,
+        "description": "Lookup component that validates policy_period_id against stg.policy_period."
+      },
+      {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 98,
+        "description": "Derived Column component applying TRIM, UPPER, ISNULL transformations."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 112,
+        "description": "Derived Column component adding ETL metadata columns."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 126,
+        "description": "Conditional Split component enforcing business rules on numeric and occupancy fields."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 144,
+        "description": "Union All component merging all error streams into a single flow."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 162,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load location (PostgreSQL DW)",
+        "entity_type": "TABLE",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": 176,
+        "description": "OLE DB Destination that loads validated rows into stg.location."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Location",
+        "data_type": null,
+        "line_number": 56,
+        "description": "ExecuteSQLTask that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Location",
+        "data_type": null,
+        "line_number": 200,
+        "description": "ExecuteSQLTask that updates etl.etl_audit_log with end time and row counts."
+      },
+      {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "parent_entity": "OnError",
+        "data_type": null,
+        "line_number": 214,
+        "description": "ExecuteSQLTask that inserts error details into etl.etl_error_log."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T001",
+        "rule_type": "MAPPING",
+        "description": "Select required columns from public.location.",
+        "source_entities": [
+          "public.location"
+        ],
+        "target_entities": [
+          "SRC - location (PostgreSQL)"
+        ],
+        "expression": "SELECT location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value",
+        "line_number": 70,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T002",
+        "rule_type": "LOOKUP",
+        "description": "Validate that policy_period_id exists in stg.policy_period; non‑matches are redirected.",
+        "source_entities": [
+          "SRC - location (PostgreSQL)"
+        ],
+        "target_entities": [
+          "LKP - Validate Policy_Period (policy_period_id)"
+        ],
+        "expression": "SELECT policy_period_id FROM stg.policy_period",
+        "line_number": 84,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T003",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from address_line1 and city, uppercase state_code and country_code, replace null address_line2 with empty string.",
+        "source_entities": [
+          "Lookup Match Output"
+        ],
+        "target_entities": [
+          "DER - Data Cleansing"
+        ],
+        "expression": "TRIM(address_line1) -> address_line1; TRIM(city) -> city; UPPER(TRIM(state_code)) -> state_code; UPPER(TRIM(country_code)) -> country_code; ISNULL(address_line2,'') -> address_line2",
+        "line_number": 98,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T004",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load date column with current timestamp.",
+        "source_entities": [
+          "Cleansing Output"
+        ],
+        "target_entities": [
+          "DER - Derived / Calculated Columns"
+        ],
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": 112,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: building_value >= 0, contents_value >= 0, occupancy_type in allowed list.",
+        "source_entities": [
+          "Derived Column Output"
+        ],
+        "target_entities": [
+          "CSPL - Business Rule Validation"
+        ],
+        "expression": "building_value >= 0.00 | contents_value >= 0.00 | occupancy_type IN ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER')",
+        "line_number": 126,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T006",
+        "rule_type": "UNION",
+        "description": "Combine lookup no‑match rows, conditional split invalid rows, and source error rows into a single error stream.",
+        "source_entities": [
+          "Lookup No Match Output (-> Error Path)",
+          "Invalid Rows (-> Error Path)",
+          "OLE DB Source Error Output"
+        ],
+        "target_entities": [
+          "UN - Union All Error Rows"
+        ],
+        "expression": null,
+        "line_number": 144,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T007",
+        "rule_type": "AGGREGATION",
+        "description": "Fast load of valid rows into stg.location with a commit size of 10,000 rows.",
+        "source_entities": [
+          "Valid Rows"
+        ],
+        "target_entities": [
+          "DST - Load location (PostgreSQL DW)"
+        ],
+        "expression": null,
+        "line_number": 176,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T008",
+        "rule_type": "WRITE",
+        "description": "Insert error rows into stg.error_quarantine.",
+        "source_entities": [
+          "Unified Error Output"
+        ],
+        "target_entities": [
+          "DST - Error Log (stg.error_quarantine)"
+        ],
+        "expression": null,
+        "line_number": 162,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T009",
+        "rule_type": "WRITE",
+        "description": "Insert start record into etl.etl_audit_log.",
+        "source_entities": [],
+        "target_entities": [
+          "SQL - Log Package Start"
+        ],
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Location','Data Flow',now(),'RUNNING')",
+        "line_number": 56,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T010",
+        "rule_type": "WRITE",
+        "description": "Update audit log with end time, status COMPLETED and row counts.",
+        "source_entities": [
+          "RowsRead",
+          "RowsInserted",
+          "RowsRejected"
+        ],
+        "target_entities": [
+          "SQL - Log Package End / Row Counts"
+        ],
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Location' AND status = 'RUNNING'",
+        "line_number": 200,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T011",
+        "rule_type": "WRITE",
+        "description": "Log package‑level errors to etl.etl_error_log.",
+        "source_entities": [],
+        "target_entities": [
+          "SQL - Log Error to ETL_ERROR_LOG"
+        ],
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Location', ?, ?, ?, now())",
+        "line_number": 214,
+        "confidence": 0.98
+      }
+    ],
+    "business_rules": [
+      "BR-01: policy_period_id must exist in stg.policy_period (referential integrity).",
+      "BR-05: Same as BR-01 – enforced via lookup component.",
+      "BR-10: building_value must be greater than or equal to 0.00.",
+      "BR-11: contents_value must be greater than or equal to 0.00.",
+      "BR-12: occupancy_type must be one of ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER').",
+      "BR-20: address_line1 and city are trimmed of leading/trailing whitespace.",
+      "BR-21: state_code and country_code are stored in upper case.",
+      "BR-22: Null address_line2 values are replaced with an empty string."
+    ],
+    "dependencies": [
+      "Npgsql PostgreSQL Provider",
+      "Guidewire PolicyCenter PostgreSQL replica (source)",
+      "Insurance Data Warehouse PostgreSQL (target)",
+      "etl.etl_audit_log table",
+      "etl.etl_error_log table",
+      "stg.policy_period table",
+      "stg.location table",
+      "stg.error_quarantine table"
+    ],
+    "relationships": [
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 56,
+        "description": "Inserts a start record into the audit log."
+      },
+      {
+        "source": "SRC - location (PostgreSQL)",
+        "target": "public.location",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 70,
+        "description": "Source component reads rows from the public.location table."
+      },
+      {
+        "source": "SRC - location (PostgreSQL)",
+        "target": "LKP - Validate Policy_Period (policy_period_id)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.97,
+        "evidence_line": 84,
+        "description": "Source output feeds into lookup input for policy_period validation."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "stg.policy_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.97,
+        "evidence_line": 84,
+        "description": "Lookup component queries stg.policy_period for matching IDs."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.96,
+        "evidence_line": 98,
+        "description": "Rows that match are passed to the cleansing component."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 84,
+        "description": "Lookup no‑match rows are redirected to the error union."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.96,
+        "evidence_line": 112,
+        "description": "Cleansed rows flow to derived column component for metadata addition."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.96,
+        "evidence_line": 126,
+        "description": "Rows with ETL metadata are evaluated against business rules."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load location (PostgreSQL DW)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": 176,
+        "description": "Valid rows are loaded into the target staging table."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": 126,
+        "description": "Invalid rows are sent to the error union."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 162,
+        "description": "All error streams are written to the quarantine table."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 200,
+        "description": "Updates audit log with end time, status, and row counts."
+      },
+      {
+        "source": "OnError",
+        "target": "SQL - Log Error to ETL_ERROR_LOG",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 214,
+        "description": "Error handler invokes task to log error details."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 214,
+        "description": "Inserts error information into the ETL error log table."
+      },
+      {
+        "source": "SRC - location (PostgreSQL)",
+        "target": "OLE DB Source Error Output",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 70,
+        "description": "Source component can emit rows to its error output."
+      },
+      {
+        "source": "OLE DB Source Error Output",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.95,
+        "evidence_line": 70,
+        "description": "Error output from source is fed into the union of error rows."
+      }
+    ],
+    "confidence": 0.92
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 24,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "public.location",
+      "stg.policy_period",
+      "stg.location",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "Extract_Location",
+        "target": "CM_Guidewire_PG_Source",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package uses the Guidewire PostgreSQL source connection manager."
+      },
+      {
+        "source": "Extract_Location",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package uses the Data Warehouse PostgreSQL target connection manager."
+      },
+      {
+        "source": "public.location",
+        "target": "Extract_Location",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Data Flow reads rows from the source table public.location."
+      },
+      {
+        "source": "stg.policy_period",
+        "target": "public.location",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Lookup component validates policy_period_id against stg.policy_period."
+      },
+      {
+        "source": "public.location",
+        "target": "stg.location",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Derived Column and Conditional Split components cleanse data before loading into stg.location."
+      },
+      {
+        "source": "public.location",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Union All merges error streams and writes them to stg.error_quarantine."
+      },
+      {
+        "source": "Extract_Location",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask logs package start and end information to etl.etl_audit_log."
+      },
+      {
+        "source": "Extract_Location",
+        "target": "etl.etl_error_log",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OnError event handler writes package‑level errors to etl.etl_error_log."
+      },
+      {
+        "source": "RowsRead",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": 12,
+        "description": "Variable RowsRead stores total rows read and is logged in the audit table."
+      },
+      {
+        "source": "RowsInserted",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": 13,
+        "description": "Variable RowsInserted stores count of rows successfully loaded."
+      },
+      {
+        "source": "RowsRejected",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": 14,
+        "description": "Variable RowsRejected stores count of rows rejected."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced empty tables/columns lists, resulting in no confirmed entities; all entities were inferred from LLM analysis."
+    ],
+    "gaps_detected": [
+      "No column‑level metadata (data types, lengths, nullability) extracted for source or target tables.",
+      "Absence of explicit primary‑key/foreign‑key definitions beyond the lookup validation.",
+      "No details on package variables beyond names and line numbers; runtime expressions are not captured.",
+      "Potential external stored procedures or scripts referenced in ExecuteSQLTask are not enumerated."
+    ],
+    "overall_confidence": 0.78
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "public.location",
+        "stg.policy_period",
+        "stg.location",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log",
+        "SRC - location (PostgreSQL)",
+        "LKP - Validate Policy_Period (policy_period_id)",
+        "DER - Data Cleansing",
+        "DER - Derived / Calculated Columns",
+        "CSPL - Business Rule Validation",
+        "UN - Union All Error Rows",
+        "DST - Error Log (stg.error_quarantine)",
+        "DST - Load location (PostgreSQL DW)"
+      ],
+      "columns": [],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts LOCATION records from the Guidewire PolicyCenter PostgreSQL source, validates the foreign key to POLICY_PERIOD, cleanses address and code fields, applies business rule checks, and loads the valid rows into the data warehouse while quarantining invalid rows and logging audit information.",
+      "narrative": "When the package runs, it first logs a start entry in etl.etl_audit_log. The main Data Flow task reads all columns from public.location using a PostgreSQL source component. Each row is passed to a Lookup component that checks whether the policy_period_id exists in the staging table stg.policy_period; matching rows continue, non‑matching rows are sent to an error stream. Matching rows undergo a Derived Column transformation that trims whitespace, upper‑cases state and country codes, substitutes empty strings for null address_line2, and adds an ETL load timestamp (GETDATE()). A second Derived Column adds any additional calculated columns (currently only etl_load_date). The rows then flow to a Conditional Split that enforces business rules: building_value and contents_value must be >= 0 and occupancy_type must be one of the allowed codes. Valid rows are bulk‑loaded (fast load) into stg.location. All error streams (lookup no‑match, conditional split invalid rows, and source component errors) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, an end‑log SQL task updates etl.etl_audit_log with end time, status, and row counts. Any package‑level errors trigger an OnError handler that inserts details into etl.etl_error_log.",
+      "business_domain": "Insurance Policy – Location data extraction and loading",
+      "business_rules": [
+        "BR-05: policy_period_id in location must exist in stg.policy_period (referential integrity)",
+        "Building value must be greater than or equal to 0.00",
+        "Contents value must be greater than or equal to 0.00",
+        "Occupancy_type must be one of: OWNER_OCCUPIED, TENANT_OCCUPIED, VACANT, UNDER_CONSTRUCTION, OTHER",
+        "Address fields are trimmed of leading/trailing whitespace",
+        "State_code and country_code are stored in upper case",
+        "Null address_line2 values are replaced with an empty string"
+      ],
+      "key_logic": [
+        "1. ExecuteSQLTask \"SQL - Log Package Start\" inserts a row into etl.etl_audit_log with status RUNNING.",
+        "2. Data Flow \"DFT - Extract, Cleanse, Validate, Load location\" reads columns location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value from public.location.",
+        "3. Lookup component validates that each policy_period_id exists in stg.policy_period; rows with no match are redirected to the error path.",
+        "4. Derived Column component \"Data Cleansing\" trims whitespace, upper‑cases state and country codes, and replaces null address_line2 with an empty string.",
+        "5. Derived Column component \"Derived / Calculated Columns\" adds ETL metadata column etl_load_date = GETDATE().",
+        "6. Conditional Split component applies business rules: building_value >= 0, contents_value >= 0, occupancy_type must be one of ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER'). Valid rows continue; invalid rows are sent to the error path.",
+        "7. Union All component merges all error streams (lookup no‑match, conditional split invalid rows, source error output) into a single error flow.",
+        "8. OLE DB Destination \"Error Log (stg.error_quarantine)\" writes the unified error rows to stg.error_quarantine.",
+        "9. OLE DB Destination \"Load location (PostgreSQL DW)\" writes the validated rows to stg.location using fast load with a commit size of 10,000 rows.",
+        "10. ExecuteSQLTask \"SQL - Log Package End / Row Counts\" updates etl.etl_audit_log with end_time, status COMPLETED, and the row count variables (RowsRead, RowsInserted, RowsRejected).",
+        "11. OnError event handler logs any package‑level errors to etl.etl_error_log."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "public.location",
+        "stg.policy_period",
+        "stg.location",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T001",
+          "rule_type": "MAPPING",
+          "description": "Select required columns from public.location.",
+          "source_entities": [
+            "public.location"
+          ],
+          "target_entities": [
+            "SRC - location (PostgreSQL)"
+          ],
+          "expression": "SELECT location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value",
+          "line_number": 70,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T002",
+          "rule_type": "LOOKUP",
+          "description": "Validate that policy_period_id exists in stg.policy_period; non‑matches are redirected.",
+          "source_entities": [
+            "SRC - location (PostgreSQL)"
+          ],
+          "target_entities": [
+            "LKP - Validate Policy_Period (policy_period_id)"
+          ],
+          "expression": "SELECT policy_period_id FROM stg.policy_period",
+          "line_number": 84,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T003",
+          "rule_type": "CALCULATION",
+          "description": "Trim whitespace from address_line1 and city, uppercase state_code and country_code, replace null address_line2 with empty string.",
+          "source_entities": [
+            "Lookup Match Output"
+          ],
+          "target_entities": [
+            "DER - Data Cleansing"
+          ],
+          "expression": "TRIM(address_line1) -> address_line1; TRIM(city) -> city; UPPER(TRIM(state_code)) -> state_code; UPPER(TRIM(country_code)) -> country_code; ISNULL(address_line2,'') -> address_line2",
+          "line_number": 98,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T004",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL load date column with current timestamp.",
+          "source_entities": [
+            "Cleansing Output"
+          ],
+          "target_entities": [
+            "DER - Derived / Calculated Columns"
+          ],
+          "expression": "GETDATE() -> etl_load_date",
+          "line_number": 112,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T005",
+          "rule_type": "CONDITIONAL",
+          "description": "Business rule validation: building_value >= 0, contents_value >= 0, occupancy_type in allowed list.",
+          "source_entities": [
+            "Derived Column Output"
+          ],
+          "target_entities": [
+            "CSPL - Business Rule Validation"
+          ],
+          "expression": "building_value >= 0.00 | contents_value >= 0.00 | occupancy_type IN ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER')",
+          "line_number": 126,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T006",
+          "rule_type": "UNION",
+          "description": "Combine lookup no‑match rows, conditional split invalid rows, and source error rows into a single error stream.",
+          "source_entities": [
+            "Lookup No Match Output (-> Error Path)",
+            "Invalid Rows (-> Error Path)",
+            "OLE DB Source Error Output"
+          ],
+          "target_entities": [
+            "UN - Union All Error Rows"
+          ],
+          "expression": null,
+          "line_number": 144,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T007",
+          "rule_type": "AGGREGATION",
+          "description": "Fast load of valid rows into stg.location with a commit size of 10,000 rows.",
+          "source_entities": [
+            "Valid Rows"
+          ],
+          "target_entities": [
+            "DST - Load location (PostgreSQL DW)"
+          ],
+          "expression": null,
+          "line_number": 176,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T008",
+          "rule_type": "WRITE",
+          "description": "Insert error rows into stg.error_quarantine.",
+          "source_entities": [
+            "Unified Error Output"
+          ],
+          "target_entities": [
+            "DST - Error Log (stg.error_quarantine)"
+          ],
+          "expression": null,
+          "line_number": 162,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T009",
+          "rule_type": "WRITE",
+          "description": "Insert start record into etl.etl_audit_log.",
+          "source_entities": [],
+          "target_entities": [
+            "SQL - Log Package Start"
+          ],
+          "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Location','Data Flow',now(),'RUNNING')",
+          "line_number": 56,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T010",
+          "rule_type": "WRITE",
+          "description": "Update audit log with end time, status COMPLETED and row counts.",
+          "source_entities": [
+            "RowsRead",
+            "RowsInserted",
+            "RowsRejected"
+          ],
+          "target_entities": [
+            "SQL - Log Package End / Row Counts"
+          ],
+          "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Location' AND status = 'RUNNING'",
+          "line_number": 200,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T011",
+          "rule_type": "WRITE",
+          "description": "Log package‑level errors to etl.etl_error_log.",
+          "source_entities": [],
+          "target_entities": [
+            "SQL - Log Error to ETL_ERROR_LOG"
+          ],
+          "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Location', ?, ?, ?, now())",
+          "line_number": 214,
+          "confidence": 0.98
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "Extract_Location",
+          "target": "CM_Guidewire_PG_Source",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Package uses the Guidewire PostgreSQL source connection manager."
+        },
+        {
+          "source": "Extract_Location",
+          "target": "CM_DW_PG_Target",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Package uses the Data Warehouse PostgreSQL target connection manager."
+        },
+        {
+          "source": "public.location",
+          "target": "Extract_Location",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Data Flow reads rows from the source table public.location."
+        },
+        {
+          "source": "stg.policy_period",
+          "target": "public.location",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Lookup component validates policy_period_id against stg.policy_period."
+        },
+        {
+          "source": "public.location",
+          "target": "stg.location",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Derived Column and Conditional Split components cleanse data before loading into stg.location."
+        },
+        {
+          "source": "public.location",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Union All merges error streams and writes them to stg.error_quarantine."
+        },
+        {
+          "source": "Extract_Location",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask logs package start and end information to etl.etl_audit_log."
+        },
+        {
+          "source": "Extract_Location",
+          "target": "etl.etl_error_log",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "OnError event handler writes package‑level errors to etl.etl_error_log."
+        },
+        {
+          "source": "RowsRead",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": 12,
+          "description": "Variable RowsRead stores total rows read and is logged in the audit table."
+        },
+        {
+          "source": "RowsInserted",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": 13,
+          "description": "Variable RowsInserted stores count of rows successfully loaded."
+        },
+        {
+          "source": "RowsRejected",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": 14,
+          "description": "Variable RowsRejected stores count of rows rejected."
+        }
+      ],
+      "gaps": [
+        "No column‑level metadata (data types, lengths, nullability) extracted for source or target tables.",
+        "Absence of explicit primary‑key/foreign‑key definitions beyond the lookup validation.",
+        "No details on package variables beyond names and line numbers; runtime expressions are not captured.",
+        "Potential external stored procedures or scripts referenced in ExecuteSQLTask are not enumerated."
+      ]
+    },
+    "overall_confidence": 0.78
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_Location.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_Location.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Location.dtsx",
+        "total_lines": 185
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Location",
+        "line_number": 12
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Location",
+        "line_number": 13
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": "Extract_Location",
+        "line_number": 14
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "String",
+        "parent": "Extract_Location",
+        "line_number": 15
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "DateTime",
+        "parent": "Extract_Location",
+        "line_number": 16
+      }
+    },
+    {
+      "id": "TABLE:CM_Guidewire_PG_Source",
+      "label": "Table",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "Extract_Location",
+        "line_number": 20
+      }
+    },
+    {
+      "id": "TABLE:CM_DW_PG_Target",
+      "label": "Table",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "Extract_Location",
+        "line_number": 31
+      }
+    },
+    {
+      "id": "TABLE:public.location",
+      "label": "Table",
+      "properties": {
+        "name": "public.location",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_Guidewire_PG_Source",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.policy_period",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.location",
+      "label": "Table",
+      "properties": {
+        "name": "stg.location",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:SRC - location (PostgreSQL)",
+      "label": "Table",
+      "properties": {
+        "name": "SRC - location (PostgreSQL)",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TABLE:LKP - Validate Policy_Period (policy_period_id)",
+      "label": "Table",
+      "properties": {
+        "name": "LKP - Validate Policy_Period (policy_period_id)",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "TABLE:DER - Data Cleansing",
+      "label": "Table",
+      "properties": {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "TABLE:DER - Derived / Calculated Columns",
+      "label": "Table",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 112
+      }
+    },
+    {
+      "id": "TABLE:CSPL - Business Rule Validation",
+      "label": "Table",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 126
+      }
+    },
+    {
+      "id": "TABLE:UN - Union All Error Rows",
+      "label": "Table",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 144
+      }
+    },
+    {
+      "id": "TABLE:DST - Error Log (stg.error_quarantine)",
+      "label": "Table",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 162
+      }
+    },
+    {
+      "id": "TABLE:DST - Load location (PostgreSQL DW)",
+      "label": "Table",
+      "properties": {
+        "name": "DST - Load location (PostgreSQL DW)",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": 176
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Location",
+        "line_number": 56
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Location",
+        "line_number": 200
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "OnError",
+        "line_number": 214
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T001",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T001",
+        "rule_type": "MAPPING",
+        "description": "Select required columns from public.location.",
+        "expression": "SELECT location_id, policy_period_id, location_number, address_line1, address_line2, city, state_code, zip_code, country_code, occupancy_type, building_value, contents_value",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T002",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T002",
+        "rule_type": "LOOKUP",
+        "description": "Validate that policy_period_id exists in stg.policy_period; non‑matches are redirected.",
+        "expression": "SELECT policy_period_id FROM stg.policy_period",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T003",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T003",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from address_line1 and city, uppercase state_code and country_code, replace null address_line2 with empty string.",
+        "expression": "TRIM(address_line1) -> address_line1; TRIM(city) -> city; UPPER(TRIM(state_code)) -> state_code; UPPER(TRIM(country_code)) -> country_code; ISNULL(address_line2,'') -> address_line2",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T004",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T004",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load date column with current timestamp.",
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": 112
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T005",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: building_value >= 0, contents_value >= 0, occupancy_type in allowed list.",
+        "expression": "building_value >= 0.00 | contents_value >= 0.00 | occupancy_type IN ('OWNER_OCCUPIED','TENANT_OCCUPIED','VACANT','UNDER_CONSTRUCTION','OTHER')",
+        "line_number": 126
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T006",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T006",
+        "rule_type": "UNION",
+        "description": "Combine lookup no‑match rows, conditional split invalid rows, and source error rows into a single error stream.",
+        "expression": null,
+        "line_number": 144
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T007",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T007",
+        "rule_type": "AGGREGATION",
+        "description": "Fast load of valid rows into stg.location with a commit size of 10,000 rows.",
+        "expression": null,
+        "line_number": 176
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T008",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T008",
+        "rule_type": "WRITE",
+        "description": "Insert error rows into stg.error_quarantine.",
+        "expression": null,
+        "line_number": 162
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T009",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T009",
+        "rule_type": "WRITE",
+        "description": "Insert start record into etl.etl_audit_log.",
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Location','Data Flow',now(),'RUNNING')",
+        "line_number": 56
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T010",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T010",
+        "rule_type": "WRITE",
+        "description": "Update audit log with end time, status COMPLETED and row counts.",
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Location' AND status = 'RUNNING'",
+        "line_number": 200
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Location.dtsx:T011",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T011",
+        "rule_type": "WRITE",
+        "description": "Log package‑level errors to etl.etl_error_log.",
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Location', ?, ?, ?, now())",
+        "line_number": 214
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:public.location",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:stg.policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:stg.location",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:SRC - location (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:LKP - Validate Policy_Period (policy_period_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TABLE:DST - Load location (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Location.dtsx",
+      "target_id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T001",
+      "target_id": "TABLE:SRC - location (PostgreSQL)",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:SRC - location (PostgreSQL)",
+      "target_id": "TRANSFORMATION:Extract_Location.dtsx:T002",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T002",
+      "target_id": "TABLE:LKP - Validate Policy_Period (policy_period_id)",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T003",
+      "target_id": "TABLE:DER - Data Cleansing",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T004",
+      "target_id": "TABLE:DER - Derived / Calculated Columns",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T005",
+      "target_id": "TABLE:CSPL - Business Rule Validation",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T006",
+      "target_id": "TABLE:UN - Union All Error Rows",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:Extract_Location.dtsx:T007",
+      "target_id": "TABLE:DST - Load location (PostgreSQL DW)",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:Extract_Location",
+      "target_id": "TABLE:CM_Guidewire_PG_Source",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package uses the Guidewire PostgreSQL source connection manager."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Location",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package uses the Data Warehouse PostgreSQL target connection manager."
+      }
+    },
+    {
+      "source_id": "TABLE:public.location",
+      "target_id": "TABLE:Extract_Location",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Data Flow reads rows from the source table public.location."
+      }
+    },
+    {
+      "source_id": "TABLE:stg.policy_period",
+      "target_id": "TABLE:public.location",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Lookup component validates policy_period_id against stg.policy_period."
+      }
+    },
+    {
+      "source_id": "TABLE:public.location",
+      "target_id": "TABLE:stg.location",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Derived Column and Conditional Split components cleanse data before loading into stg.location."
+      }
+    },
+    {
+      "source_id": "TABLE:public.location",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Union All merges error streams and writes them to stg.error_quarantine."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Location",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask logs package start and end information to etl.etl_audit_log."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Location",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OnError event handler writes package‑level errors to etl.etl_error_log."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRead",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": 12,
+        "description": "Variable RowsRead stores total rows read and is logged in the audit table."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsInserted",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": 13,
+        "description": "Variable RowsInserted stores count of rows successfully loaded."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRejected",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": 14,
+        "description": "Variable RowsRejected stores count of rows rejected."
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "purpose": "Extracts rows from the Guidewire PolicyCenter policy_period table, validates foreign‑key references to policy and job, applies business rule checks, adds ETL metadata, and loads the clean data into the data‑warehouse staging table while quarantining invalid rows and logging execution details.",
+  "high_level_narrative": "When the package runs it first inserts a start record into etl.etl_audit_log. The Data Flow task then reads all columns from public.policy_period via the source connection. Each row is passed through a Lookup against stg.policy to ensure the policy_id exists; non‑matching rows are sent to an error stream. Matching rows continue to a second Lookup against stg.job to validate job_id, with non‑matches also routed to error. Valid rows receive a derived column etl_load_date (current timestamp). A Conditional Split then evaluates four business rules (expiration_date > effective_date, term_number >= 1, written_date <= current date, period_status in the allowed list). Rows that satisfy all rules are directed to the OLE DB Destination that fast‑loads them into stg.policy_period. All error streams (source errors, lookup no‑matches, and conditional‑split failures) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, an Execute SQL task updates the audit log with end time and row counts. Any package‑level error triggers an OnError handler that records details in etl.etl_error_log.",
+  "business_domain": "PolicyCenter – Policy Period",
+  "inputs": [
+    "public.policy_period (source PostgreSQL)",
+    "stg.policy (staging table for policy reference)",
+    "stg.job (staging table for job reference)"
+  ],
+  "outputs": [
+    "stg.policy_period (staging table in the data warehouse)",
+    "stg.error_quarantine (error‑quarantine table)",
+    "etl.etl_audit_log (package execution audit)",
+    "etl.etl_error_log (error handler logging)"
+  ],
+  "key_transformations": [
+    "SELECT policy_period_id, policy_id, job_id, term_number, effective_date, expiration_date, period_status, written_date, transaction_effective_date FROM public.policy_period",
+    "Lookup validation of policy_id against stg.policy (referential integrity)",
+    "Lookup validation of job_id against stg.job (referential integrity)",
+    "Derived column addition: etl_load_date = GETDATE()",
+    "Conditional split enforcing: expiration_date > effective_date; term_number >= 1; written_date <= GETDATE(); period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')",
+    "Union All of all error/no‑match streams",
+    "Fast load (bulk insert) into stg.policy_period with commit size 10,000",
+    "Audit log insert at start and update with row counts at end"
+  ],
+  "key_dependencies": [
+    "Connection Manager CM_Guidewire_PG_Source (Npgsql provider, read‑only replica)",
+    "Connection Manager CM_DW_PG_Target (Npgsql provider, data‑warehouse)",
+    "Execute SQL Tasks for audit logging and error logging",
+    "Lookup components (stg.policy, stg.job)",
+    "Derived Column component",
+    "Conditional Split component",
+    "Union All component",
+    "OLE DB Destination components for stg.policy_period and stg.error_quarantine",
+    "Tables: public.policy_period, stg.policy, stg.job, stg.policy_period, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log"
+  ],
+  "business_rules": [
+    "BR‑01 / BR‑05: policy_id must exist in stg.policy (foreign‑key validation)",
+    "BR‑01 / BR‑05: job_id must exist in stg.job (foreign‑key validation)",
+    "Expiration date must be later than effective date",
+    "Term number must be greater than or equal to 1",
+    "Written date must not be in the future (<= current date)",
+    "Period status must be one of: ACTIVE, EXPIRED, CANCELLED, ENDED"
+  ]
+}

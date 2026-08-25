@@ -1,0 +1,2235 @@
+{
+  "package_id": "PKG-SQL-ClaimCenter_Monoline.sql-8b1f2a4d",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\sql\\ClaimCenter_Monoline.sql",
+    "file_name": "ClaimCenter_Monoline.sql",
+    "source_type": "sql",
+    "file_extension": ".sql",
+    "total_lines": 342,
+    "size_bytes": 13379
+  },
+  "summary": {
+    "purpose": "Generate a claim‑level loss summary (incurred amount) filtered primarily by year‑to‑date, suitable for profit‑and‑loss reporting, by aggregating transaction amounts from ClaimCenter and enriching them with policy and underwriting information.",
+    "high_level_narrative": "The script declares two unused date parameters, then executes a SELECT that aggregates claim transaction data. A deep sub‑query pulls rows from many ClaimCenter view objects (transaction line items, transactions, sets, claims, policies, coverages, exposures, users, etc.) and joins lookup tables for LOB, policy type, transaction codes, cost types, recovery categories, underwriting companies, etc. Within the inner SELECT, numerous CASE expressions derive business fields such as PolSource, TFGTran, Company, CostType, DedStatAmount and a signed TransAmount based on transaction type (Reserve, Payment, Recovery) and the DoesNotErodeReserves flag. Row numbers are generated for reserve lines to distinguish first vs subsequent entries. Dates are normalized to YYYYMMDD strings. The outer SELECT groups by PolSource, LOBCode and PolicyNumber, applies DISTINCT, and sums the calculated TransAmount to produce IncurredAmount per policy/LOB. The final result set contains PolSource, LOBCode, PolicyNumber and the aggregated IncurredAmount.",
+    "business_domain": "Claims – loss incurred calculation for underwriting and financial reporting.",
+    "inputs": [
+      "vw_curr_cc_transactionlineitem (tl)",
+      "vw_curr_cc_transaction (t)",
+      "vw_curr_cc_transactionset (tset)",
+      "vw_curr_cc_claim (cl)",
+      "vw_curr_cc_policy (po)",
+      "vw_curr_cc_check (ck)",
+      "vw_curr_cc_reserveline (rl)",
+      "vw_curr_cc_exposure (ex)",
+      "vw_curr_cc_coverage (cv)",
+      "vw_curr_cc_contact (clmcont)",
+      "vw_curr_cc_user (u1, u2)",
+      "vw_curr_cc_riskunit (ru)",
+      "vw_curr_cc_classcode (cls)",
+      "vw_curr_cctl_lobcode (lob)",
+      "vw_curr_cctl_policytype (polt)",
+      "vw_curr_cctl_transaction (tt)",
+      "vw_curr_cctl_losscause (tlc)",
+      "vw_curr_cctl_transactionstatus (ts)",
+      "vw_curr_cctl_costtype (CST)",
+      "vw_curr_cctl_costcategory (ccat)",
+      "vw_curr_cctl_linecategory (lc)",
+      "vw_curr_cctl_transactionlifecyclestate (tls)",
+      "vw_curr_cctl_recoverycategory (rv)",
+      "vw_curr_cctl_underwritingcompanytype (uw)",
+      "vw_curr_cctl_coveragesubtype (st)",
+      "@PV_STARTDATE (unused)",
+      "@PV_ENDDATE (unused)"
+    ],
+    "outputs": [
+      "Result set with columns: PolSource, LOBCode, PolicyNumber, IncurredAmount (sum of TransAmount)"
+    ],
+    "key_transformations": [
+      "Derive PolSource as 'Legacy' or 'Guidewire' based on PolicyPrefix_Ext.",
+      "Generate row_number partitioned by ClaimNumber, exposure, typecode and cost name for reserve lines.",
+      "Map underwriting company IDs to short codes (LRM, WRM, SON, UNK).",
+      "Convert dates to CHAR(8) YYYYMMDD format for policy effective dates and accounting dates.",
+      "Calculate TFGTran code using complex CASE logic that considers transaction type, cost type, rownum and other flags.",
+      "Determine signed TransAmount: Payments are negative unless DoesNotErodeReserves=1, Recoveries are always negative, others retain sign.",
+      "Format Amount field with leading zeros and sign handling for reporting.",
+      "Compute DedStatAmount for specific coverage types with a ceiling of 99999.",
+      "Aggregate (SUM) TransAmount per PolSource, LOBCode and PolicyNumber, applying DISTINCT to eliminate duplicates.",
+      "Select only required columns for the final output."
+    ],
+    "key_dependencies": [
+      "All ClaimCenter view objects prefixed with vw_curr_cc_ (transactionlineitem, transaction, transactionset, claim, policy, check, reserveline, exposure, coverage, contact, user, riskunit, classcode).",
+      "Lookup tables prefixed with vw_curr_cctl_ (lobcode, policytype, transaction, losscause, transactionstatus, costtype, costcategory, linecategory, transactionlifecyclestate, recoverycategory, underwritingcompanytype, coveragesubtype).",
+      "SQL Server window function ROW_NUMBER for reserve line sequencing.",
+      "Standard SQL functions (CASE, ISNULL, CAST, CONVERT, RIGHT, LEFT, UPPER, REPLACE)."
+    ],
+    "business_rules": [
+      "If PolicyPrefix_Ext is null, the claim source is classified as 'Legacy'; otherwise 'Guidewire'.",
+      "For reserve transactions, assign rownum = ROW_NUMBER partitioned by claim and exposure; non‑reserve rows get rownum = 0.",
+      "TFGTran mapping rules: e.g., Reserve + Indemnity first row => '421', subsequent rows => '431'; Reserve + non‑Indemnity first row => '422', subsequent => '432'; Payment + Indemnity with DoesNotErodeReserves=1 => '321', otherwise '331'; Payment + non‑Indemnity with DoesNotErodeReserves=1 => '322', otherwise '332'; Recovery categories map to specific codes (e.g., Credit_loss + Indemnity => '321', salvage + Indemnity => '341', etc.).",
+      "TransAmount sign rule: Payments are stored as negative amounts unless DoesNotErodeReserves=1 (then positive); Recoveries are always stored as negative; all other transaction types retain their original sign.",
+      "DedStatAmount is populated only for specific coverage types (BP7EmploymentPracticesLiabilityInsurance, BP7SupplementalExtendReportingPeriodEPLI) and capped at 99999; otherwise blank.",
+      "Company code mapping based on underwriting company name: Lightning Rod Mutual => 'LRM', Western Reserve Mutual => 'WRM', Sonnenberg Mutual => 'SON', else 'UNK'.",
+      "CostType determines TFGASL and GWASL codes using predefined mappings (e.g., CPEquipBrkCov => '270', CPINCCCov => '010', certain claim coverages => '010', else '021').",
+      "Only distinct combinations of PolSource, LOBCode and PolicyNumber are retained before summing incurred amounts."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "ClaimCenter_Monoline.sql",
+    "source_type": "sql",
+    "purpose": "Generate a claim loss dataset (YTD or P&L) that aggregates incurred amounts per policy source and line of business, applying TFG transaction code filters and business logic to derive transaction types, amounts, and related attributes for downstream reporting.",
+    "inputs_outputs": {
+      "inputs": [
+        "vw_curr_cc_transactionlineitem (tl)",
+        "vw_curr_cc_transaction (t)",
+        "vw_curr_cc_transactionset (tset)",
+        "vw_curr_cc_claim (cl)",
+        "vw_curr_cc_policy (po)",
+        "vw_curr_cc_check (ck)",
+        "vw_curr_cc_reserveline (rl)",
+        "vw_curr_cc_exposure (ex)",
+        "vw_curr_cc_coverage (cv)",
+        "vw_curr_cc_contact (clmcont)",
+        "vw_curr_cc_user (u1, u2)",
+        "vw_curr_cc_riskunit (ru)",
+        "vw_curr_cc_classcode (cls)",
+        "vw_curr_cctl_lobcode (lob)",
+        "vw_curr_cctl_policytype (polt)",
+        "vw_curr_cctl_transaction (tt)",
+        "vw_curr_cctl_losscause (tlc)",
+        "vw_curr_cctl_transactionstatus (ts)",
+        "vw_curr_cctl_costtype (CST)",
+        "vw_curr_cctl_costcategory (ccat)",
+        "vw_curr_cctl_linecategory (lc)",
+        "vw_curr_cctl_transactionlifecyclestate (tls)",
+        "vw_curr_cctl_recoverycategory (rv)",
+        "vw_curr_cctl_underwritingcompanytype (uw)",
+        "vw_curr_cctl_coveragesubtype (st)",
+        "@PV_STARTDATE (variable, not used)",
+        "@PV_ENDDATE (variable, not used)"
+      ],
+      "outputs": [
+        "PolSource",
+        "LOBCode",
+        "PolicyNumber",
+        "IncurredAmount"
+      ]
+    },
+    "key_logic": [
+      "1. Declare two datetime variables (@PV_STARTDATE, @PV_ENDDATE) – currently unused.",
+      "2. Execute an outer SELECT that returns distinct PolSource, LOBCode, PolicyNumber and the SUM of TransAmount as IncurredAmount.",
+      "3. The outer SELECT reads from a derived table (sub‑query) that produces a flat rowset with all needed columns.",
+      "4. Inside the derived table, compute PolSource based on whether PolicyPrefix_Ext is null (Legacy vs Guidewire).",
+      "5. Generate a row number (rownum) for Reserve‑type transactions partitioned by ClaimNumber, exposure id, transaction type and cost name; otherwise set to 0.",
+      "6. Map underwriting company names to three‑letter codes (LRM, WRM, SON, UNK).",
+      "7. Convert dates to CHAR(8) strings (YYYYMMDD) for policy effective dates and accounting dates.",
+      "8. Derive TFGTran codes using a large CASE that considers original TFGTran, CostType (Indemnity vs other) and the rownum value.",
+      "9. Calculate AcctDate_sql based on the later of transaction CreateTime and ApprovalDate.",
+      "10. Build formatted strings for ClaimNumber, Class, ClmtNumber, etc. using RIGHT, CAST, ISNULL, LTRIM.",
+      "11. Determine TransAmount sign: Payments are negated when DoesNotErodeReserves = 0, Recoveries are always negated, otherwise amount is taken as‑is.",
+      "12. Produce a formatted Amount field that left‑pads numeric values and adds a leading minus sign when needed.",
+      "13. Derive DedStatAmount based on coverage deductible thresholds.",
+      "14. Append claim close and reopen dates as CHAR(8) strings.",
+      "15. The final result set aggregates TransAmount per PolSource/LOBCode/PolicyNumber."
+    ],
+    "entities": [
+      {
+        "name": "@PV_STARTDATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "datetime",
+        "line_number": 15,
+        "description": "Start date placeholder – not used in the query."
+      },
+      {
+        "name": "@PV_ENDDATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "datetime",
+        "line_number": 16,
+        "description": "End date placeholder – not used in the query."
+      },
+      {
+        "name": "vw_curr_cc_transactionlineitem",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 276,
+        "description": "Base view providing transaction line items (alias tl)."
+      },
+      {
+        "name": "tl.TransactionID",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_transactionlineitem",
+        "data_type": null,
+        "line_number": 276,
+        "description": "Foreign key to transaction."
+      },
+      {
+        "name": "vw_curr_cc_transaction",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 277,
+        "description": "Transaction header view (alias t)."
+      },
+      {
+        "name": "t.id",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_transaction",
+        "data_type": null,
+        "line_number": 277,
+        "description": "Primary key of transaction."
+      },
+      {
+        "name": "vw_curr_cc_transactionset",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 278,
+        "description": "Transaction set view (alias tset)."
+      },
+      {
+        "name": "vw_curr_cc_claim",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 279,
+        "description": "Claim view (alias cl)."
+      },
+      {
+        "name": "cl.ClaimNumber",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_claim",
+        "data_type": null,
+        "line_number": 95,
+        "description": "Claim identifier."
+      },
+      {
+        "name": "cl.LossDate",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_claim",
+        "data_type": null,
+        "line_number": 125,
+        "description": "Date of loss occurrence."
+      },
+      {
+        "name": "cl.ReportedDate",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_claim",
+        "data_type": null,
+        "line_number": 124,
+        "description": "Date claim was reported."
+      },
+      {
+        "name": "vw_curr_cc_policy",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 280,
+        "description": "Policy view (alias po)."
+      },
+      {
+        "name": "po.PolicyNumber",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_policy",
+        "data_type": null,
+        "line_number": 112,
+        "description": "Policy number."
+      },
+      {
+        "name": "po.PolicyDecNo_Ext",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_policy",
+        "data_type": null,
+        "line_number": 113,
+        "description": "Policy decimal extension."
+      },
+      {
+        "name": "po.UnderwritingCo",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_policy",
+        "data_type": null,
+        "line_number": 302,
+        "description": "Underwriting company reference."
+      },
+      {
+        "name": "vw_curr_cc_check",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 281,
+        "description": "Check view (alias ck)."
+      },
+      {
+        "name": "ck.IssueDate",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_check",
+        "data_type": null,
+        "line_number": 215,
+        "description": "Date the check was issued."
+      },
+      {
+        "name": "vw_curr_cc_exposure",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 283,
+        "description": "Exposure view (alias ex)."
+      },
+      {
+        "name": "ex.CoverageID",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_exposure",
+        "data_type": null,
+        "line_number": 284,
+        "description": "Link to coverage."
+      },
+      {
+        "name": "vw_curr_cc_coverage",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 284,
+        "description": "Coverage view (alias cv)."
+      },
+      {
+        "name": "cv.CicsClaimCov_Ext",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_coverage",
+        "data_type": null,
+        "line_number": 129,
+        "description": "External claim coverage code."
+      },
+      {
+        "name": "cv.Deductible",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cc_coverage",
+        "data_type": null,
+        "line_number": 262,
+        "description": "Deductible amount for the coverage."
+      },
+      {
+        "name": "vw_curr_cctl_lobcode",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 292,
+        "description": "LOB code lookup view (alias lob)."
+      },
+      {
+        "name": "lob.TYPECODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cctl_lobcode",
+        "data_type": null,
+        "line_number": 97,
+        "description": "Line of business code."
+      },
+      {
+        "name": "vw_curr_cctl_transaction",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 294,
+        "description": "Transaction type lookup (alias tt)."
+      },
+      {
+        "name": "tt.TYPECODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cctl_transaction",
+        "data_type": null,
+        "line_number": 90,
+        "description": "Transaction type code (Reserve, Payment, Recovery)."
+      },
+      {
+        "name": "vw_curr_cctl_costtype",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 297,
+        "description": "Cost type lookup (alias CST)."
+      },
+      {
+        "name": "CST.NAME",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cctl_costtype",
+        "data_type": null,
+        "line_number": 199,
+        "description": "Cost type name (e.g., Indemnity)."
+      },
+      {
+        "name": "vw_curr_cctl_recoverycategory",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 301,
+        "description": "Recovery category lookup (alias rv)."
+      },
+      {
+        "name": "rv.TYPECODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cctl_recoverycategory",
+        "data_type": null,
+        "line_number": 190,
+        "description": "Recovery category code."
+      },
+      {
+        "name": "vw_curr_cctl_underwritingcompanytype",
+        "entity_type": "VIEW",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 302,
+        "description": "Underwriting company lookup (alias uw)."
+      },
+      {
+        "name": "uw.name",
+        "entity_type": "COLUMN",
+        "parent_entity": "vw_curr_cctl_underwritingcompanytype",
+        "data_type": null,
+        "line_number": 115,
+        "description": "Full name of underwriting company."
+      },
+      {
+        "name": "PolSource",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 21,
+        "description": "Derived column indicating source system (Legacy/Guidewire)."
+      },
+      {
+        "name": "LOBCode",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 22,
+        "description": "Line of business code derived from lob view."
+      },
+      {
+        "name": "PolicyNumber",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 27,
+        "description": "Policy number from policy view."
+      },
+      {
+        "name": "TransAmount",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 78,
+        "description": "Calculated transaction amount after sign adjustments."
+      },
+      {
+        "name": "IncurredAmount",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 27,
+        "description": "SUM of TransAmount per grouping."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map PolicyPrefix_Ext null to 'Legacy' else 'Guidewire' as PolSource.",
+        "source_entities": [
+          "PolicyPrefix_Ext"
+        ],
+        "target_entities": [
+          "PolSource"
+        ],
+        "expression": "CASE WHEN PolicyPrefix_Ext IS NULL THEN 'Legacy' ELSE 'Guidewire' END",
+        "line_number": 83,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Generate rownum for Reserve transactions partitioned by ClaimNumber, exposure id, transaction type and cost name.",
+        "source_entities": [
+          "tt.TYPECODE",
+          "ClaimNumber",
+          "ex.id",
+          "CST.NAME",
+          "tl.CreateTime"
+        ],
+        "target_entities": [
+          "rownum"
+        ],
+        "expression": "ROW_NUMBER() OVER (PARTITION BY ClaimNumber, ex.id, tt.typecode, CST.NAME ORDER BY tl.CreateTime)",
+        "line_number": 90,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "Derive Company code from underwriting company name.",
+        "source_entities": [
+          "uw.name"
+        ],
+        "target_entities": [
+          "Company"
+        ],
+        "expression": "CASE WHEN uw.name='Lightning Rod Mutual Insurance Company' THEN 'LRM' WHEN uw.name='Western Reserve Mutual Casualty Company' THEN 'WRM' WHEN uw.name='Sonnenberg Mutual Insurance Company' THEN 'SON' ELSE 'UNK' END",
+        "line_number": 115,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Convert dates to CHAR(8) YYYYMMDD strings for policy effective dates.",
+        "source_entities": [
+          "po.OrigEffectiveDate",
+          "po.EffectiveDate",
+          "po.ExpirationDate"
+        ],
+        "target_entities": [
+          "PolOrgEffDate",
+          "PolEffDate",
+          "PolExpDate"
+        ],
+        "expression": "CAST(REPLACE(CONVERT(CHAR(10), date, 101), '/', '') AS CHAR(8))",
+        "line_number": 121,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CONDITIONAL",
+        "description": "Derive TFGTran code based on original TFGTran, CostType, and rownum.",
+        "source_entities": [
+          "TFGTran",
+          "CostType",
+          "rownum"
+        ],
+        "target_entities": [
+          "TFGTran"
+        ],
+        "expression": "CASE WHEN TFGTran='431' AND CostType='Indemnity' AND rownum=1 THEN '421' WHEN TFGTran='431' AND CostType='Indemnity' AND rownum<>1 THEN '431' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum=1 THEN '422' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum<>1 THEN '432' ELSE TFGTran END",
+        "line_number": 57,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "CONDITIONAL",
+        "description": "Select accounting date (AcctDate_sql) as the later of transaction CreateTime and ApprovalDate.",
+        "source_entities": [
+          "tl.CreateTime",
+          "tset.ApprovalDate"
+        ],
+        "target_entities": [
+          "AcctDate_sql"
+        ],
+        "expression": "CASE WHEN tl.CreateTime >= ISNULL(tset.ApprovalDate,'01/01/2000') THEN CAST(tl.CreateTime AS DATE) ELSE CAST(tset.ApprovalDate AS DATE) END",
+        "line_number": 149,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Calculate TransAmount with sign adjustments based on transaction type and DoesNotErodeReserves flag.",
+        "source_entities": [
+          "tt.TYPECODE",
+          "DoesNotErodeReserves",
+          "tl.TransactionAmount"
+        ],
+        "target_entities": [
+          "TransAmount"
+        ],
+        "expression": "CASE WHEN tt.TYPECODE='Payment' THEN CASE WHEN DoesNotErodeReserves=0 THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE tl.TransactionAmount END WHEN tt.TYPECODE='Recovery' THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE ISNULL(tl.TransactionAmount,0.00) END",
+        "line_number": 224,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Format Amount field as a zero‑padded string with optional leading minus sign.",
+        "source_entities": [
+          "tt.TYPECODE",
+          "tl.TransactionAmount"
+        ],
+        "target_entities": [
+          "Amount"
+        ],
+        "expression": "CASE WHEN tt.TYPECODE='Recovery' THEN CASE WHEN ISNULL(tl.TransactionAmount,0.00)>0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(-1*tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(-1*tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END ELSE CASE WHEN ISNULL(tl.TransactionAmount,0.00)<0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END END",
+        "line_number": 237,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "Derive DedStatAmount based on coverage deductible, capping at 99999.",
+        "source_entities": [
+          "cv.Deductible",
+          "ct.typecode"
+        ],
+        "target_entities": [
+          "DedStatAmount"
+        ],
+        "expression": "CASE WHEN UPPER(CAST(ct.typecode AS CHAR(50))) IN ('BP7EmploymentPracticesLiabilityInsurance','BP7SupplementalExtendReportingPeriodEPLI') THEN CASE WHEN cv.Deductible>99999 THEN '99999     ' ELSE CAST(ISNULL(cv.Deductible,'          ') AS CHAR(10)) END ELSE '          ' END",
+        "line_number": 259,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "AGGREGATION",
+        "description": "Sum TransAmount per PolSource, LOBCode, and PolicyNumber to produce IncurredAmount.",
+        "source_entities": [
+          "TransAmount",
+          "PolSource",
+          "LOBCode",
+          "PolicyNumber"
+        ],
+        "target_entities": [
+          "IncurredAmount"
+        ],
+        "expression": "SUM(TransAmount) GROUP BY PolSource, LOBCode, PolicyNumber",
+        "line_number": 27,
+        "confidence": 0.99
+      }
+    ],
+    "business_rules": [
+      "If TFGTran = '431' and CostType = 'Indemnity' then rownum = 1 maps to TFGTran '421' (first indemnity reserve).",
+      "If TFGTran = '431' and CostType = 'Indemnity' and rownum <> 1 then keep TFGTran as '431' (subsequent indemnity reserves).",
+      "If TFGTran = '431' and CostType <> 'Indemnity' then map to '422' (first non‑indemnity reserve) or '432' (subsequent).",
+      "Payments where DoesNotErodeReserves = 0 are recorded as negative amounts; otherwise positive.",
+      "Recoveries are always recorded as negative amounts.",
+      "Company codes are limited to LRM, WRM, SON, UNK based on underwriting company name.",
+      "Deductible amounts greater than 99,999 are capped at 99,999 for reporting.",
+      "Only rows where TFGTran matches the defined loss transaction codes are intended for the final report (implicit filter)."
+    ],
+    "dependencies": [
+      "vw_curr_cc_transactionlineitem",
+      "vw_curr_cc_transaction",
+      "vw_curr_cc_transactionset",
+      "vw_curr_cc_claim",
+      "vw_curr_cc_policy",
+      "vw_curr_cc_check",
+      "vw_curr_cc_reserveline",
+      "vw_curr_cc_exposure",
+      "vw_curr_cc_coverage",
+      "vw_curr_cc_contact",
+      "vw_curr_cc_user",
+      "vw_curr_cc_riskunit",
+      "vw_curr_cc_classcode",
+      "vw_curr_cctl_lobcode",
+      "vw_curr_cctl_policytype",
+      "vw_curr_cctl_transaction",
+      "vw_curr_cctl_losscause",
+      "vw_curr_cctl_transactionstatus",
+      "vw_curr_cctl_costtype",
+      "vw_curr_cctl_costcategory",
+      "vw_curr_cctl_linecategory",
+      "vw_curr_cctl_transactionlifecyclestate",
+      "vw_curr_cctl_recoverycategory",
+      "vw_curr_cctl_underwritingcompanytype",
+      "vw_curr_cctl_coveragesubtype"
+    ],
+    "relationships": [
+      {
+        "source": "vw_curr_cc_transactionlineitem tl",
+        "target": "vw_curr_cc_transaction t",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 277,
+        "description": "LEFT JOIN on tl.TransactionID = t.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cc_transactionset tset",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 278,
+        "description": "LEFT JOIN on t.TransactionSetID = tset.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cc_claim cl",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 279,
+        "description": "LEFT JOIN on t.ClaimID = cl.id"
+      },
+      {
+        "source": "vw_curr_cc_claim cl",
+        "target": "vw_curr_cc_policy po",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 280,
+        "description": "LEFT JOIN on cl.PolicyID = po.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cc_check ck",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 281,
+        "description": "LEFT JOIN on t.CheckID = ck.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cc_reserveline rl",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 282,
+        "description": "LEFT JOIN on t.ReserveLineID = rl.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cc_exposure ex",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 283,
+        "description": "LEFT JOIN on t.ExposureID = ex.id"
+      },
+      {
+        "source": "vw_curr_cc_exposure ex",
+        "target": "vw_curr_cc_coverage cv",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 284,
+        "description": "LEFT JOIN on ex.CoverageID = cv.id"
+      },
+      {
+        "source": "vw_curr_cc_exposure ex",
+        "target": "vw_curr_cc_contact clmcont",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.97,
+        "evidence_line": 285,
+        "description": "LEFT JOIN on ex.ClaimantDenormID = clmcont.id"
+      },
+      {
+        "source": "vw_curr_cc_claim cl",
+        "target": "vw_curr_cc_user u1",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 287,
+        "description": "LEFT JOIN on cl.AssignedUserID = u1.id"
+      },
+      {
+        "source": "vw_curr_cc_claim cl",
+        "target": "vw_curr_cc_user u2",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 288,
+        "description": "LEFT JOIN on cl.SubroRepresentative_Ext = u2.id"
+      },
+      {
+        "source": "vw_curr_cc_coverage cv",
+        "target": "vw_curr_cc_riskunit ru",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.95,
+        "evidence_line": 290,
+        "description": "LEFT JOIN on cv.RiskUnitID = ru.id"
+      },
+      {
+        "source": "vw_curr_cc_riskunit ru",
+        "target": "vw_curr_cc_classcode cls",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.95,
+        "evidence_line": 291,
+        "description": "LEFT JOIN on ru.ClassCodeID = cls.id"
+      },
+      {
+        "source": "vw_curr_cc_claim cl",
+        "target": "vw_curr_cctl_lobcode lob",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 292,
+        "description": "LEFT JOIN on cl.LOBCode = lob.id"
+      },
+      {
+        "source": "vw_curr_cc_policy po",
+        "target": "vw_curr_cctl_policytype polt",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 293,
+        "description": "LEFT JOIN on po.PolicyType = polt.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_transaction tt",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.99,
+        "evidence_line": 294,
+        "description": "LEFT JOIN on t.Subtype = tt.id"
+      },
+      {
+        "source": "vw_curr_cc_claim cl",
+        "target": "vw_curr_cctl_losscause tlc",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 295,
+        "description": "LEFT JOIN on cl.LossCause = tlc.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_transactionstatus ts",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.97,
+        "evidence_line": 296,
+        "description": "LEFT JOIN on t.Status = ts.id"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_costtype CST",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 297,
+        "description": "LEFT JOIN on t.CostType = CST.ID"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_costcategory ccat",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 298,
+        "description": "LEFT JOIN on t.CostCategory = ccat.ID"
+      },
+      {
+        "source": "vw_curr_cc_transactionlineitem tl",
+        "target": "vw_curr_cctl_linecategory lc",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.95,
+        "evidence_line": 299,
+        "description": "LEFT JOIN on tl.LineCategory = lc.ID"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_transactionlifecyclestate tls",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 300,
+        "description": "LEFT JOIN on t.LifeCycleState = tls.ID"
+      },
+      {
+        "source": "vw_curr_cc_transaction t",
+        "target": "vw_curr_cctl_recoverycategory rv",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 301,
+        "description": "LEFT JOIN on t.RecoveryCategory = rv.ID"
+      },
+      {
+        "source": "vw_curr_cc_policy po",
+        "target": "vw_curr_cctl_underwritingcompanytype uw",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.93,
+        "evidence_line": 302,
+        "description": "LEFT JOIN on po.UnderwritingCo = uw.id"
+      },
+      {
+        "source": "vw_curr_cc_exposure ex",
+        "target": "vw_curr_cctl_coveragesubtype st",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.93,
+        "evidence_line": 303,
+        "description": "LEFT JOIN on ex.CoverageSubType = st.id"
+      },
+      {
+        "source": "Derived sub‑query",
+        "target": "Outer SELECT",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.99,
+        "evidence_line": 29,
+        "description": "Outer query reads columns from the derived table."
+      },
+      {
+        "source": "PolSource",
+        "target": "PolSource (output)",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.98,
+        "evidence_line": 83,
+        "description": "PolSource derived from PolicyPrefix_Ext."
+      },
+      {
+        "source": "TransAmount",
+        "target": "IncurredAmount",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.99,
+        "evidence_line": 27,
+        "description": "SUM of TransAmount per grouping."
+      },
+      {
+        "source": "TFGTran, CostType, rownum",
+        "target": "TFGTran (re‑mapped)",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.97,
+        "evidence_line": 57,
+        "description": "Conditional mapping of TFGTran codes."
+      }
+    ],
+    "confidence": 0.93
+  },
+  "reconciliation": {
+    "parser_facts_count": 121,
+    "llm_findings_count": 37,
+    "confirmed_entities": [
+      "vw_curr_cc_transactionlineitem",
+      "vw_curr_cc_transaction",
+      "vw_curr_cc_transactionset",
+      "vw_curr_cc_claim",
+      "vw_curr_cc_policy",
+      "vw_curr_cc_check",
+      "vw_curr_cc_reserveline",
+      "vw_curr_cc_exposure",
+      "vw_curr_cc_coverage",
+      "vw_curr_cc_contact",
+      "vw_curr_cc_user",
+      "vw_curr_cc_riskunit",
+      "vw_curr_cc_classcode",
+      "vw_curr_cctl_lobcode",
+      "vw_curr_cctl_policytype",
+      "vw_curr_cctl_transaction",
+      "vw_curr_cctl_losscause",
+      "vw_curr_cctl_transactionstatus",
+      "vw_curr_cctl_costtype",
+      "vw_curr_cctl_costcategory",
+      "vw_curr_cctl_linecategory",
+      "vw_curr_cctl_transactionlifecyclestate",
+      "vw_curr_cctl_recoverycategory",
+      "vw_curr_cctl_underwritingcompanytype",
+      "vw_curr_cctl_coveragesubtype"
+    ],
+    "inferred_entities": [
+      "@PV_STARTDATE",
+      "@PV_ENDDATE",
+      "PolSource",
+      "LOBCode",
+      "IncurredAmount",
+      "TransAmount",
+      "TFGTran",
+      "AcctDate_sql",
+      "DedStatAmount",
+      "rownum",
+      "underwriting_company_code",
+      "formatted_Amount",
+      "claim_close_date_str",
+      "claim_reopen_date_str"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "tl.TransactionID",
+        "target": "t.id",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 276,
+        "description": "Transaction line item references the transaction header."
+      },
+      {
+        "source": "t.TransactionSetID",
+        "target": "tset.id",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": 277,
+        "description": "Each transaction belongs to a transaction set."
+      },
+      {
+        "source": "cl.ClaimNumber",
+        "target": "tl.ClaimNumber",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": 279,
+        "description": "Transaction line items are linked to the claim via ClaimNumber."
+      },
+      {
+        "source": "po.PolicyNumber",
+        "target": "tl.PolicyNumber",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 280,
+        "description": "Policy information is joined to transaction line items."
+      },
+      {
+        "source": "PolSource",
+        "target": "PolicyPrefix_Ext",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "PolSource is computed from PolicyPrefix_Ext (null = Legacy, else Guidewire)."
+      },
+      {
+        "source": "IncurredAmount",
+        "target": "TransAmount",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Final output sums TransAmount per PolSource/LOBCode/PolicyNumber."
+      },
+      {
+        "source": "rownum",
+        "target": "Reserve-type transaction grouping",
+        "relationship_type": "USES",
+        "confidence": 0.89,
+        "evidence_line": null,
+        "description": "Row number generated for reserve‑type rows partitioned by claim/exposure/transaction type."
+      }
+    ],
+    "discrepancies": [
+      "Parser list contains duplicate entry for vw_curr_cc_user; LLM references two aliases (u1, u2) which resolves the duplication.",
+      "Parser column list includes many generic TYPECODE entries without context; LLM clarifies specific uses (e.g., CostType, TransactionType).",
+      "Variables @PV_STARTDATE and @PV_ENDDATE are declared in the script but not referenced; LLM notes they are placeholders and unused.",
+      "Parser reports 28 joins; LLM identifies only the logical joins needed for the final aggregation, omitting some internal joins that do not affect output."
+    ],
+    "gaps_detected": [
+      "Exact mapping rules for TFGTran codes are described in business logic but not materialized in any lookup table within the provided script.",
+      "External reference data for underwriting company name to three‑letter code (LRM, WRM, SON, UNK) is not defined in the script.",
+      "Definitions of cost categories (Indemnity vs other) and their impact on sign handling are implicit; no explicit enumeration is present.",
+      "No information on indexes or performance hints for the large derived table; potential optimization gaps."
+    ],
+    "overall_confidence": 0.94
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [],
+      "columns": [
+        "tl.TransactionID",
+        "t.id",
+        "cl.ClaimNumber",
+        "cl.LossDate",
+        "cl.ReportedDate",
+        "po.PolicyNumber",
+        "po.PolicyDecNo_Ext",
+        "po.UnderwritingCo",
+        "ck.IssueDate",
+        "ex.CoverageID",
+        "cv.CicsClaimCov_Ext",
+        "cv.Deductible",
+        "lob.TYPECODE",
+        "tt.TYPECODE",
+        "CST.NAME",
+        "rv.TYPECODE",
+        "uw.name",
+        "PolSource",
+        "LOBCode",
+        "PolicyNumber",
+        "TransAmount",
+        "IncurredAmount"
+      ],
+      "parser_summary": {
+        "unique_tables": 28,
+        "table_occurrences": 29,
+        "joins": 28,
+        "variables": 2,
+        "set_statements": 0,
+        "case_expressions": 19,
+        "nested_case_expressions": 4,
+        "business_rules": 47,
+        "where_conditions": 1,
+        "group_by": 1,
+        "functions": 7,
+        "column_references": 92,
+        "sqlglot_ast_nodes": 1663
+      }
+    },
+    "documented_knowledge": {
+      "purpose": "Generate a claim‑level loss summary (incurred amount) filtered primarily by year‑to‑date, suitable for profit‑and‑loss reporting, by aggregating transaction amounts from ClaimCenter and enriching them with policy and underwriting information.",
+      "narrative": "The script declares two unused date parameters, then executes a SELECT that aggregates claim transaction data. A deep sub‑query pulls rows from many ClaimCenter view objects (transaction line items, transactions, sets, claims, policies, coverages, exposures, users, etc.) and joins lookup tables for LOB, policy type, transaction codes, cost types, recovery categories, underwriting companies, etc. Within the inner SELECT, numerous CASE expressions derive business fields such as PolSource, TFGTran, Company, CostType, DedStatAmount and a signed TransAmount based on transaction type (Reserve, Payment, Recovery) and the DoesNotErodeReserves flag. Row numbers are generated for reserve lines to distinguish first vs subsequent entries. Dates are normalized to YYYYMMDD strings. The outer SELECT groups by PolSource, LOBCode and PolicyNumber, applies DISTINCT, and sums the calculated TransAmount to produce IncurredAmount per policy/LOB. The final result set contains PolSource, LOBCode, PolicyNumber and the aggregated IncurredAmount.",
+      "business_domain": "Claims – loss incurred calculation for underwriting and financial reporting.",
+      "business_rules": [
+        "If PolicyPrefix_Ext is null, the claim source is classified as 'Legacy'; otherwise 'Guidewire'.",
+        "For reserve transactions, assign rownum = ROW_NUMBER partitioned by claim and exposure; non‑reserve rows get rownum = 0.",
+        "TFGTran mapping rules: e.g., Reserve + Indemnity first row => '421', subsequent rows => '431'; Reserve + non‑Indemnity first row => '422', subsequent => '432'; Payment + Indemnity with DoesNotErodeReserves=1 => '321', otherwise '331'; Payment + non‑Indemnity with DoesNotErodeReserves=1 => '322', otherwise '332'; Recovery categories map to specific codes (e.g., Credit_loss + Indemnity => '321', salvage + Indemnity => '341', etc.).",
+        "TransAmount sign rule: Payments are stored as negative amounts unless DoesNotErodeReserves=1 (then positive); Recoveries are always stored as negative; all other transaction types retain their original sign.",
+        "DedStatAmount is populated only for specific coverage types (BP7EmploymentPracticesLiabilityInsurance, BP7SupplementalExtendReportingPeriodEPLI) and capped at 99999; otherwise blank.",
+        "Company code mapping based on underwriting company name: Lightning Rod Mutual => 'LRM', Western Reserve Mutual => 'WRM', Sonnenberg Mutual => 'SON', else 'UNK'.",
+        "CostType determines TFGASL and GWASL codes using predefined mappings (e.g., CPEquipBrkCov => '270', CPINCCCov => '010', certain claim coverages => '010', else '021').",
+        "Only distinct combinations of PolSource, LOBCode and PolicyNumber are retained before summing incurred amounts."
+      ],
+      "key_logic": [
+        "1. Declare two datetime variables (@PV_STARTDATE, @PV_ENDDATE) – currently unused.",
+        "2. Execute an outer SELECT that returns distinct PolSource, LOBCode, PolicyNumber and the SUM of TransAmount as IncurredAmount.",
+        "3. The outer SELECT reads from a derived table (sub‑query) that produces a flat rowset with all needed columns.",
+        "4. Inside the derived table, compute PolSource based on whether PolicyPrefix_Ext is null (Legacy vs Guidewire).",
+        "5. Generate a row number (rownum) for Reserve‑type transactions partitioned by ClaimNumber, exposure id, transaction type and cost name; otherwise set to 0.",
+        "6. Map underwriting company names to three‑letter codes (LRM, WRM, SON, UNK).",
+        "7. Convert dates to CHAR(8) strings (YYYYMMDD) for policy effective dates and accounting dates.",
+        "8. Derive TFGTran codes using a large CASE that considers original TFGTran, CostType (Indemnity vs other) and the rownum value.",
+        "9. Calculate AcctDate_sql based on the later of transaction CreateTime and ApprovalDate.",
+        "10. Build formatted strings for ClaimNumber, Class, ClmtNumber, etc. using RIGHT, CAST, ISNULL, LTRIM.",
+        "11. Determine TransAmount sign: Payments are negated when DoesNotErodeReserves = 0, Recoveries are always negated, otherwise amount is taken as‑is.",
+        "12. Produce a formatted Amount field that left‑pads numeric values and adds a leading minus sign when needed.",
+        "13. Derive DedStatAmount based on coverage deductible thresholds.",
+        "14. Append claim close and reopen dates as CHAR(8) strings.",
+        "15. The final result set aggregates TransAmount per PolSource/LOBCode/PolicyNumber."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "@PV_STARTDATE",
+        "@PV_ENDDATE",
+        "PolSource",
+        "LOBCode",
+        "IncurredAmount",
+        "TransAmount",
+        "TFGTran",
+        "AcctDate_sql",
+        "DedStatAmount",
+        "rownum",
+        "underwriting_company_code",
+        "formatted_Amount",
+        "claim_close_date_str",
+        "claim_reopen_date_str"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "MAPPING",
+          "description": "Map PolicyPrefix_Ext null to 'Legacy' else 'Guidewire' as PolSource.",
+          "source_entities": [
+            "PolicyPrefix_Ext"
+          ],
+          "target_entities": [
+            "PolSource"
+          ],
+          "expression": "CASE WHEN PolicyPrefix_Ext IS NULL THEN 'Legacy' ELSE 'Guidewire' END",
+          "line_number": 83,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "CALCULATION",
+          "description": "Generate rownum for Reserve transactions partitioned by ClaimNumber, exposure id, transaction type and cost name.",
+          "source_entities": [
+            "tt.TYPECODE",
+            "ClaimNumber",
+            "ex.id",
+            "CST.NAME",
+            "tl.CreateTime"
+          ],
+          "target_entities": [
+            "rownum"
+          ],
+          "expression": "ROW_NUMBER() OVER (PARTITION BY ClaimNumber, ex.id, tt.typecode, CST.NAME ORDER BY tl.CreateTime)",
+          "line_number": 90,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "MAPPING",
+          "description": "Derive Company code from underwriting company name.",
+          "source_entities": [
+            "uw.name"
+          ],
+          "target_entities": [
+            "Company"
+          ],
+          "expression": "CASE WHEN uw.name='Lightning Rod Mutual Insurance Company' THEN 'LRM' WHEN uw.name='Western Reserve Mutual Casualty Company' THEN 'WRM' WHEN uw.name='Sonnenberg Mutual Insurance Company' THEN 'SON' ELSE 'UNK' END",
+          "line_number": 115,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CALCULATION",
+          "description": "Convert dates to CHAR(8) YYYYMMDD strings for policy effective dates.",
+          "source_entities": [
+            "po.OrigEffectiveDate",
+            "po.EffectiveDate",
+            "po.ExpirationDate"
+          ],
+          "target_entities": [
+            "PolOrgEffDate",
+            "PolEffDate",
+            "PolExpDate"
+          ],
+          "expression": "CAST(REPLACE(CONVERT(CHAR(10), date, 101), '/', '') AS CHAR(8))",
+          "line_number": 121,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CONDITIONAL",
+          "description": "Derive TFGTran code based on original TFGTran, CostType, and rownum.",
+          "source_entities": [
+            "TFGTran",
+            "CostType",
+            "rownum"
+          ],
+          "target_entities": [
+            "TFGTran"
+          ],
+          "expression": "CASE WHEN TFGTran='431' AND CostType='Indemnity' AND rownum=1 THEN '421' WHEN TFGTran='431' AND CostType='Indemnity' AND rownum<>1 THEN '431' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum=1 THEN '422' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum<>1 THEN '432' ELSE TFGTran END",
+          "line_number": 57,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "CONDITIONAL",
+          "description": "Select accounting date (AcctDate_sql) as the later of transaction CreateTime and ApprovalDate.",
+          "source_entities": [
+            "tl.CreateTime",
+            "tset.ApprovalDate"
+          ],
+          "target_entities": [
+            "AcctDate_sql"
+          ],
+          "expression": "CASE WHEN tl.CreateTime >= ISNULL(tset.ApprovalDate,'01/01/2000') THEN CAST(tl.CreateTime AS DATE) ELSE CAST(tset.ApprovalDate AS DATE) END",
+          "line_number": 149,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "CALCULATION",
+          "description": "Calculate TransAmount with sign adjustments based on transaction type and DoesNotErodeReserves flag.",
+          "source_entities": [
+            "tt.TYPECODE",
+            "DoesNotErodeReserves",
+            "tl.TransactionAmount"
+          ],
+          "target_entities": [
+            "TransAmount"
+          ],
+          "expression": "CASE WHEN tt.TYPECODE='Payment' THEN CASE WHEN DoesNotErodeReserves=0 THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE tl.TransactionAmount END WHEN tt.TYPECODE='Recovery' THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE ISNULL(tl.TransactionAmount,0.00) END",
+          "line_number": 224,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "CALCULATION",
+          "description": "Format Amount field as a zero‑padded string with optional leading minus sign.",
+          "source_entities": [
+            "tt.TYPECODE",
+            "tl.TransactionAmount"
+          ],
+          "target_entities": [
+            "Amount"
+          ],
+          "expression": "CASE WHEN tt.TYPECODE='Recovery' THEN CASE WHEN ISNULL(tl.TransactionAmount,0.00)>0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(-1*tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(-1*tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END ELSE CASE WHEN ISNULL(tl.TransactionAmount,0.00)<0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END END",
+          "line_number": 237,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "MAPPING",
+          "description": "Derive DedStatAmount based on coverage deductible, capping at 99999.",
+          "source_entities": [
+            "cv.Deductible",
+            "ct.typecode"
+          ],
+          "target_entities": [
+            "DedStatAmount"
+          ],
+          "expression": "CASE WHEN UPPER(CAST(ct.typecode AS CHAR(50))) IN ('BP7EmploymentPracticesLiabilityInsurance','BP7SupplementalExtendReportingPeriodEPLI') THEN CASE WHEN cv.Deductible>99999 THEN '99999     ' ELSE CAST(ISNULL(cv.Deductible,'          ') AS CHAR(10)) END ELSE '          ' END",
+          "line_number": 259,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "AGGREGATION",
+          "description": "Sum TransAmount per PolSource, LOBCode, and PolicyNumber to produce IncurredAmount.",
+          "source_entities": [
+            "TransAmount",
+            "PolSource",
+            "LOBCode",
+            "PolicyNumber"
+          ],
+          "target_entities": [
+            "IncurredAmount"
+          ],
+          "expression": "SUM(TransAmount) GROUP BY PolSource, LOBCode, PolicyNumber",
+          "line_number": 27,
+          "confidence": 0.99
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "tl.TransactionID",
+          "target": "t.id",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 276,
+          "description": "Transaction line item references the transaction header."
+        },
+        {
+          "source": "t.TransactionSetID",
+          "target": "tset.id",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": 277,
+          "description": "Each transaction belongs to a transaction set."
+        },
+        {
+          "source": "cl.ClaimNumber",
+          "target": "tl.ClaimNumber",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": 279,
+          "description": "Transaction line items are linked to the claim via ClaimNumber."
+        },
+        {
+          "source": "po.PolicyNumber",
+          "target": "tl.PolicyNumber",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": 280,
+          "description": "Policy information is joined to transaction line items."
+        },
+        {
+          "source": "PolSource",
+          "target": "PolicyPrefix_Ext",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "PolSource is computed from PolicyPrefix_Ext (null = Legacy, else Guidewire)."
+        },
+        {
+          "source": "IncurredAmount",
+          "target": "TransAmount",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Final output sums TransAmount per PolSource/LOBCode/PolicyNumber."
+        },
+        {
+          "source": "rownum",
+          "target": "Reserve-type transaction grouping",
+          "relationship_type": "USES",
+          "confidence": 0.89,
+          "evidence_line": null,
+          "description": "Row number generated for reserve‑type rows partitioned by claim/exposure/transaction type."
+        }
+      ],
+      "gaps": [
+        "Exact mapping rules for TFGTran codes are described in business logic but not materialized in any lookup table within the provided script.",
+        "External reference data for underwriting company name to three‑letter code (LRM, WRM, SON, UNK) is not defined in the script.",
+        "Definitions of cost categories (Indemnity vs other) and their impact on sign handling are implicit; no explicit enumeration is present.",
+        "No information on indexes or performance hints for the large derived table; potential optimization gaps."
+      ]
+    },
+    "overall_confidence": 0.94
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "label": "Artifact",
+      "properties": {
+        "name": "ClaimCenter_Monoline.sql",
+        "source_type": "sql",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\sql\\ClaimCenter_Monoline.sql",
+        "total_lines": 342
+      }
+    },
+    {
+      "id": "VARIABLE:@PV_STARTDATE",
+      "label": "Variable",
+      "properties": {
+        "name": "@PV_STARTDATE",
+        "entity_type": "VARIABLE",
+        "data_type": "datetime",
+        "parent": null,
+        "line_number": 15
+      }
+    },
+    {
+      "id": "VARIABLE:@PV_ENDDATE",
+      "label": "Variable",
+      "properties": {
+        "name": "@PV_ENDDATE",
+        "entity_type": "VARIABLE",
+        "data_type": "datetime",
+        "parent": null,
+        "line_number": 16
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_transactionlineitem",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_transactionlineitem",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 276
+      }
+    },
+    {
+      "id": "COLUMN:tl.TransactionID",
+      "label": "Column",
+      "properties": {
+        "name": "tl.TransactionID",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_transactionlineitem",
+        "line_number": 276
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_transaction",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_transaction",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 277
+      }
+    },
+    {
+      "id": "COLUMN:t.id",
+      "label": "Column",
+      "properties": {
+        "name": "t.id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_transaction",
+        "line_number": 277
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_transactionset",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_transactionset",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 278
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_claim",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_claim",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 279
+      }
+    },
+    {
+      "id": "COLUMN:cl.ClaimNumber",
+      "label": "Column",
+      "properties": {
+        "name": "cl.ClaimNumber",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_claim",
+        "line_number": 95
+      }
+    },
+    {
+      "id": "COLUMN:cl.LossDate",
+      "label": "Column",
+      "properties": {
+        "name": "cl.LossDate",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_claim",
+        "line_number": 125
+      }
+    },
+    {
+      "id": "COLUMN:cl.ReportedDate",
+      "label": "Column",
+      "properties": {
+        "name": "cl.ReportedDate",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_claim",
+        "line_number": 124
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_policy",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_policy",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 280
+      }
+    },
+    {
+      "id": "COLUMN:po.PolicyNumber",
+      "label": "Column",
+      "properties": {
+        "name": "po.PolicyNumber",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_policy",
+        "line_number": 112
+      }
+    },
+    {
+      "id": "COLUMN:po.PolicyDecNo_Ext",
+      "label": "Column",
+      "properties": {
+        "name": "po.PolicyDecNo_Ext",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_policy",
+        "line_number": 113
+      }
+    },
+    {
+      "id": "COLUMN:po.UnderwritingCo",
+      "label": "Column",
+      "properties": {
+        "name": "po.UnderwritingCo",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_policy",
+        "line_number": 302
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_check",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_check",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 281
+      }
+    },
+    {
+      "id": "COLUMN:ck.IssueDate",
+      "label": "Column",
+      "properties": {
+        "name": "ck.IssueDate",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_check",
+        "line_number": 215
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_exposure",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_exposure",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 283
+      }
+    },
+    {
+      "id": "COLUMN:ex.CoverageID",
+      "label": "Column",
+      "properties": {
+        "name": "ex.CoverageID",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_exposure",
+        "line_number": 284
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cc_coverage",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cc_coverage",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 284
+      }
+    },
+    {
+      "id": "COLUMN:cv.CicsClaimCov_Ext",
+      "label": "Column",
+      "properties": {
+        "name": "cv.CicsClaimCov_Ext",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_coverage",
+        "line_number": 129
+      }
+    },
+    {
+      "id": "COLUMN:cv.Deductible",
+      "label": "Column",
+      "properties": {
+        "name": "cv.Deductible",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cc_coverage",
+        "line_number": 262
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cctl_lobcode",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cctl_lobcode",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 292
+      }
+    },
+    {
+      "id": "COLUMN:lob.TYPECODE",
+      "label": "Column",
+      "properties": {
+        "name": "lob.TYPECODE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cctl_lobcode",
+        "line_number": 97
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cctl_transaction",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cctl_transaction",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 294
+      }
+    },
+    {
+      "id": "COLUMN:tt.TYPECODE",
+      "label": "Column",
+      "properties": {
+        "name": "tt.TYPECODE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cctl_transaction",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cctl_costtype",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cctl_costtype",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 297
+      }
+    },
+    {
+      "id": "COLUMN:CST.NAME",
+      "label": "Column",
+      "properties": {
+        "name": "CST.NAME",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cctl_costtype",
+        "line_number": 199
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cctl_recoverycategory",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cctl_recoverycategory",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 301
+      }
+    },
+    {
+      "id": "COLUMN:rv.TYPECODE",
+      "label": "Column",
+      "properties": {
+        "name": "rv.TYPECODE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cctl_recoverycategory",
+        "line_number": 190
+      }
+    },
+    {
+      "id": "VIEW:vw_curr_cctl_underwritingcompanytype",
+      "label": "View",
+      "properties": {
+        "name": "vw_curr_cctl_underwritingcompanytype",
+        "entity_type": "VIEW",
+        "data_type": null,
+        "parent": null,
+        "line_number": 302
+      }
+    },
+    {
+      "id": "COLUMN:uw.name",
+      "label": "Column",
+      "properties": {
+        "name": "uw.name",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "vw_curr_cctl_underwritingcompanytype",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "COLUMN:PolSource",
+      "label": "Column",
+      "properties": {
+        "name": "PolSource",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 21
+      }
+    },
+    {
+      "id": "COLUMN:LOBCode",
+      "label": "Column",
+      "properties": {
+        "name": "LOBCode",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 22
+      }
+    },
+    {
+      "id": "COLUMN:PolicyNumber",
+      "label": "Column",
+      "properties": {
+        "name": "PolicyNumber",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 27
+      }
+    },
+    {
+      "id": "COLUMN:TransAmount",
+      "label": "Column",
+      "properties": {
+        "name": "TransAmount",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 78
+      }
+    },
+    {
+      "id": "COLUMN:IncurredAmount",
+      "label": "Column",
+      "properties": {
+        "name": "IncurredAmount",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 27
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map PolicyPrefix_Ext null to 'Legacy' else 'Guidewire' as PolSource.",
+        "expression": "CASE WHEN PolicyPrefix_Ext IS NULL THEN 'Legacy' ELSE 'Guidewire' END",
+        "line_number": 83
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Generate rownum for Reserve transactions partitioned by ClaimNumber, exposure id, transaction type and cost name.",
+        "expression": "ROW_NUMBER() OVER (PARTITION BY ClaimNumber, ex.id, tt.typecode, CST.NAME ORDER BY tl.CreateTime)",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "Derive Company code from underwriting company name.",
+        "expression": "CASE WHEN uw.name='Lightning Rod Mutual Insurance Company' THEN 'LRM' WHEN uw.name='Western Reserve Mutual Casualty Company' THEN 'WRM' WHEN uw.name='Sonnenberg Mutual Insurance Company' THEN 'SON' ELSE 'UNK' END",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Convert dates to CHAR(8) YYYYMMDD strings for policy effective dates.",
+        "expression": "CAST(REPLACE(CONVERT(CHAR(10), date, 101), '/', '') AS CHAR(8))",
+        "line_number": 121
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CONDITIONAL",
+        "description": "Derive TFGTran code based on original TFGTran, CostType, and rownum.",
+        "expression": "CASE WHEN TFGTran='431' AND CostType='Indemnity' AND rownum=1 THEN '421' WHEN TFGTran='431' AND CostType='Indemnity' AND rownum<>1 THEN '431' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum=1 THEN '422' WHEN TFGTran='431' AND CostType<>'Indemnity' AND rownum<>1 THEN '432' ELSE TFGTran END",
+        "line_number": 57
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "CONDITIONAL",
+        "description": "Select accounting date (AcctDate_sql) as the later of transaction CreateTime and ApprovalDate.",
+        "expression": "CASE WHEN tl.CreateTime >= ISNULL(tset.ApprovalDate,'01/01/2000') THEN CAST(tl.CreateTime AS DATE) ELSE CAST(tset.ApprovalDate AS DATE) END",
+        "line_number": 149
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Calculate TransAmount with sign adjustments based on transaction type and DoesNotErodeReserves flag.",
+        "expression": "CASE WHEN tt.TYPECODE='Payment' THEN CASE WHEN DoesNotErodeReserves=0 THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE tl.TransactionAmount END WHEN tt.TYPECODE='Recovery' THEN ISNULL(tl.TransactionAmount,0.00)*-1 ELSE ISNULL(tl.TransactionAmount,0.00) END",
+        "line_number": 224
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Format Amount field as a zero‑padded string with optional leading minus sign.",
+        "expression": "CASE WHEN tt.TYPECODE='Recovery' THEN CASE WHEN ISNULL(tl.TransactionAmount,0.00)>0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(-1*tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(-1*tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END ELSE CASE WHEN ISNULL(tl.TransactionAmount,0.00)<0 THEN CONCAT('-',RIGHT(CAST((-100000000+ISNULL(tl.TransactionAmount,0.00)) AS NUMERIC(11,2)),11)) ELSE RIGHT(CONCAT('00000000',CAST(ISNULL(tl.TransactionAmount,0.00) AS NUMERIC(11,2))),12) END END",
+        "line_number": 237
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "Derive DedStatAmount based on coverage deductible, capping at 99999.",
+        "expression": "CASE WHEN UPPER(CAST(ct.typecode AS CHAR(50))) IN ('BP7EmploymentPracticesLiabilityInsurance','BP7SupplementalExtendReportingPeriodEPLI') THEN CASE WHEN cv.Deductible>99999 THEN '99999     ' ELSE CAST(ISNULL(cv.Deductible,'          ') AS CHAR(10)) END ELSE '          ' END",
+        "line_number": 259
+      }
+    },
+    {
+      "id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "AGGREGATION",
+        "description": "Sum TransAmount per PolSource, LOBCode, and PolicyNumber to produce IncurredAmount.",
+        "expression": "SUM(TransAmount) GROUP BY PolSource, LOBCode, PolicyNumber",
+        "line_number": 27
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VARIABLE:@PV_STARTDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VARIABLE:@PV_ENDDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_transactionlineitem",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:tl.TransactionID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:t.id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_transactionset",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_claim",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:cl.ClaimNumber",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:cl.LossDate",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:cl.ReportedDate",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:po.PolicyNumber",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:po.PolicyDecNo_Ext",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:po.UnderwritingCo",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_check",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:ck.IssueDate",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_exposure",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:ex.CoverageID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cc_coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:cv.CicsClaimCov_Ext",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:cv.Deductible",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cctl_lobcode",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:lob.TYPECODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cctl_transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:tt.TYPECODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cctl_costtype",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:CST.NAME",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cctl_recoverycategory",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:rv.TYPECODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "VIEW:vw_curr_cctl_underwritingcompanytype",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:uw.name",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:PolSource",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:LOBCode",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:PolicyNumber",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:TransAmount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:ClaimCenter_Monoline.sql",
+      "target_id": "COLUMN:IncurredAmount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "COLUMN:tt.TYPECODE",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T2",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "COLUMN:CST.NAME",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T2",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "COLUMN:uw.name",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T3",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "COLUMN:tt.TYPECODE",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T7",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "COLUMN:tt.TYPECODE",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T8",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "COLUMN:cv.Deductible",
+      "target_id": "TRANSFORMATION:ClaimCenter_Monoline.sql:T9",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:tl.TransactionID",
+      "target_id": "TABLE:t.id",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 276,
+        "description": "Transaction line item references the transaction header."
+      }
+    },
+    {
+      "source_id": "TABLE:t.TransactionSetID",
+      "target_id": "TABLE:tset.id",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 277,
+        "description": "Each transaction belongs to a transaction set."
+      }
+    },
+    {
+      "source_id": "TABLE:cl.ClaimNumber",
+      "target_id": "TABLE:tl.ClaimNumber",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": 279,
+        "description": "Transaction line items are linked to the claim via ClaimNumber."
+      }
+    },
+    {
+      "source_id": "TABLE:po.PolicyNumber",
+      "target_id": "TABLE:tl.PolicyNumber",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 280,
+        "description": "Policy information is joined to transaction line items."
+      }
+    },
+    {
+      "source_id": "TABLE:PolSource",
+      "target_id": "TABLE:PolicyPrefix_Ext",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "PolSource is computed from PolicyPrefix_Ext (null = Legacy, else Guidewire)."
+      }
+    },
+    {
+      "source_id": "TABLE:IncurredAmount",
+      "target_id": "TABLE:TransAmount",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Final output sums TransAmount per PolSource/LOBCode/PolicyNumber."
+      }
+    },
+    {
+      "source_id": "TABLE:rownum",
+      "target_id": "TABLE:Reserve-type transaction grouping",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.89,
+        "evidence_line": null,
+        "description": "Row number generated for reserve‑type rows partitioned by claim/exposure/transaction type."
+      }
+    }
+  ]
+}

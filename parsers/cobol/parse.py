@@ -1,172 +1,922 @@
-from tree_sitter_language_pack import get_parser
+from __future__ import annotations
+
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
+from typing import Any
+
+# Ensure UTF-8 console output on Windows to prevent encoding errors
+# when COBOL source text contains non-ASCII characters in display strings.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+try:
+    from tree_sitter_language_pack import get_parser
+except ImportError as exc:
+    raise ImportError(
+        "tree_sitter_language_pack is required. "
+        "Install it with: pip install tree-sitter-language-pack"
+    ) from exc
 
 
 # =========================================================
 # CONFIGURATION
 # =========================================================
 
-# Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# COBOL source programs in this project
-BASE_DIR = PROJECT_ROOT / "source" / "mainframe" / "cobol"
+SOURCE_DIR = (
+    PROJECT_ROOT
+    / "source"
+    / "mainframe"
+    / "cobol"
+)
 
-# Generated COBOL metadata
-OUTPUT_DIR = PROJECT_ROOT / "output" / "cobol"
+OUTPUT_DIR = (
+    PROJECT_ROOT
+    / "output"
+    / "cobol"
+)
+
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Module-level parser singleton — reusing one parser instance avoids
+# the internal tree-sitter C state accumulation that causes a hang on
+# the 5th consecutive parse of a file that has parse errors.
+_COBOL_PARSER = get_parser("cobol")
 
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def clean_spaces(text):
+def clean_spaces(text: str) -> str:
+    """Collapse whitespace without changing the actual meaning."""
     return re.sub(r"\s+", " ", text).strip()
 
 
-def node_text(node, source):
-    return source[
-        node.start_byte:node.end_byte
-    ].decode("utf-8", errors="replace").strip()
+def node_text(node: Any, source: bytes) -> str:
+    return source[node.start_byte:node.end_byte].decode(
+        "utf-8",
+        errors="replace",
+    ).strip()
 
 
-def walk(node):
+def line_number(source_text: str, position: int) -> int:
+    return source_text[:position].count("\n") + 1
+
+
+def operation_metadata(
+    text: str,
+    start_byte: int,
+    end_byte: int,
+    source_text: str,
+) -> dict[str, Any]:
+    """
+    Create a normalized operation record.
+
+    Offsets are character offsets in source_text.  Because the parser
+    decodes UTF-8 source using one character representation, we calculate
+    the byte offsets from the encoded slices below rather than mixing
+    Python character indexes with Tree-sitter indexes.
+    """
+    start_byte_utf8 = len(source_text[:start_byte].encode("utf-8"))
+    end_byte_utf8 = len(source_text[:end_byte].encode("utf-8"))
+
+    return {
+        "text": clean_spaces(text),
+        "start_byte": start_byte_utf8,
+        "end_byte": end_byte_utf8,
+        "start_line": line_number(source_text, start_byte),
+        "end_line": line_number(source_text, max(start_byte, end_byte - 1)),
+    }
+
+
+def tree_operation_metadata(
+    node: Any,
+    source: bytes,
+) -> dict[str, Any]:
+    """Use Tree-sitter's exact byte offsets when this helper is used."""
+    return {
+        "text": clean_spaces(node_text(node, source)),
+        "start_byte": node.start_byte,
+        "end_byte": node.end_byte,
+        "start_line": node.start_point.row + 1,
+        "end_line": node.end_point.row + 1,
+    }
+
+
+def walk(node: Any):
+    """
+    Iterative Tree-sitter traversal.
+
+    Do not use recursive traversal here.  Some COBOL trees are large and
+    deeply nested.
+    """
     stack = [node]
 
     while stack:
         current = stack.pop()
         yield current
 
-        children = current.children
-        for child in reversed(children):
+        for child in reversed(current.children):
             stack.append(child)
 
 
-def line_number(source_text, position):
-    return source_text[:position].count("\n") + 1
+def _char_to_byte_offsets(source_text: str) -> list[int]:
+    """
+    offsets[i] = UTF-8 byte offset immediately before character i.
+    """
+    offsets = [0]
+    total = 0
+
+    for char in source_text:
+        total += len(char.encode("utf-8"))
+        offsets.append(total)
+
+    return offsets
 
 
 # =========================================================
-# FALLBACK SOURCE EXTRACTION
+# SOURCE STRUCTURE EXTRACTION
 # =========================================================
 
-def fallback_extract(source_text, metadata):
-
-    # -----------------------------------------------------
-    # DIVISIONS
-    # -----------------------------------------------------
-
-    division_patterns = [
-        (
-            "identification_division",
-            r"\bIDENTIFICATION\s+DIVISION\s*\."
-        ),
-        (
-            "environment_division",
-            r"\bENVIRONMENT\s+DIVISION\s*\."
-        ),
-        (
-            "data_division",
-            r"\bDATA\s+DIVISION\s*\."
-        ),
-        (
-            "procedure_division",
-            r"\bPROCEDURE\s+DIVISION\s*\."
-        )
-    ]
-
-    existing = {
-        x["type"]
-        for x in metadata["divisions"]
-    }
-
-    for division_type, pattern in division_patterns:
-
-        if division_type in existing:
-            continue
-
-        match = re.search(
-            pattern,
-            source_text,
-            re.IGNORECASE
-        )
-
-        if match:
-
-            metadata["divisions"].append({
-                "type": division_type,
-                "text": match.group(0),
-                "start_line": line_number(
-                    source_text,
-                    match.start()
-                )
-            })
+def _procedure_division_start(source_text: str) -> int | None:
+    match = re.search(
+        r"\bPROCEDURE\s+DIVISION\b",
+        source_text,
+        re.IGNORECASE,
+    )
+    return match.end() if match else None
 
 
-    # -----------------------------------------------------
-    # PARAGRAPHS
-    # -----------------------------------------------------
+def _extract_paragraphs(source_text: str) -> list[dict[str, Any]]:
+    """
+    Extract COBOL paragraphs from PROCEDURE DIVISION.
 
-    existing = {
-        x["text"].rstrip(".").upper()
-        for x in metadata["paragraphs"]
-    }
+    A paragraph header is deliberately conservative:
+      optional Area-A whitespace + NAME.
+
+    The header must occupy its own source line.  This prevents statements
+    such as "END-IF." from becoming paragraphs.
+    """
+    procedure_start = _procedure_division_start(source_text)
+
+    if procedure_start is None:
+        return []
+
+    procedure_text = source_text[procedure_start:]
+    base_offset = procedure_start
 
     paragraph_pattern = re.compile(
-        r"(?m)^[ \t]{0,11}"
-        r"([A-Z][A-Z0-9-]*|[0-9][0-9A-Z-]*)"
-        r"\.\s*$"
+        r"(?mi)^[ \t]{0,7}"
+        r"(?P<name>[A-Z0-9][A-Z0-9-]*)"
+        r"\.\s*(?:$|(?=\n))"
     )
 
     ignored = {
-        "IDENTIFICATION",
-        "ENVIRONMENT",
-        "DATA",
+        "SECTION",
+        "DIVISION",
         "PROCEDURE",
-        "FILE-CONTROL",
-        "FILE",
-        "WORKING-STORAGE",
-        "LOCAL-STORAGE",
-        "LINKAGE",
-        "INPUT-OUTPUT",
-        "INPUT-OUTPUT SECTION"
+        "END-PROGRAM",
     }
 
-    for match in paragraph_pattern.finditer(
-        source_text
-    ):
+    matches = []
 
-        name = match.group(1).upper()
+    for match in paragraph_pattern.finditer(procedure_text):
+        name = match.group("name").upper()
 
         if name in ignored:
             continue
 
-        if name not in existing:
+        absolute_start = base_offset + match.start()
+        absolute_end = base_offset + match.end()
 
-            metadata["paragraphs"].append({
-                "text": name + ".",
+        matches.append(
+            {
+                "name": name,
+                "text": f"{name}.",
+                "start_char": absolute_start,
+                "header_end_char": absolute_end,
+                "start_line": line_number(source_text, absolute_start),
+            }
+        )
+
+    paragraphs = []
+
+    for index, item in enumerate(matches):
+        if index + 1 < len(matches):
+            end_char = matches[index + 1]["start_char"]
+        else:
+            end_char = len(source_text)
+
+        start_char = item["start_char"]
+
+        paragraphs.append(
+            {
+                "name": item["name"],
+                "text": item["text"],
+                "start_line": item["start_line"],
+                "end_line": line_number(
+                    source_text,
+                    max(start_char, end_char - 1),
+                ),
+                "start_byte": len(
+                    source_text[:start_char].encode("utf-8")
+                ),
+                "end_byte": len(
+                    source_text[:end_char].encode("utf-8")
+                ),
+            }
+        )
+
+    return paragraphs
+
+
+def _extract_divisions(source_text: str) -> list[dict[str, Any]]:
+    patterns = [
+        (
+            "identification_division",
+            r"\bIDENTIFICATION\s+DIVISION\s*\.",
+        ),
+        (
+            "environment_division",
+            r"\bENVIRONMENT\s+DIVISION\s*\.",
+        ),
+        (
+            "data_division",
+            r"\bDATA\s+DIVISION\s*\.",
+        ),
+        (
+            "procedure_division",
+            r"\bPROCEDURE\s+DIVISION\b(?:\s+USING\b[^\n.]*)?\s*\.",
+        ),
+    ]
+
+    divisions = []
+
+    for division_type, pattern in patterns:
+        match = re.search(
+            pattern,
+            source_text,
+            re.IGNORECASE,
+        )
+
+        if not match:
+            continue
+
+        divisions.append(
+            {
+                "type": division_type,
+                "text": clean_spaces(match.group(0)),
                 "start_line": line_number(
                     source_text,
-                    match.start()
-                )
-            })
+                    match.start(),
+                ),
+                "start_byte": len(
+                    source_text[:match.start()].encode("utf-8")
+                ),
+            }
+        )
 
-            existing.add(name)
+    return divisions
 
 
-    # -----------------------------------------------------
-    # SELECT FILES
-    # -----------------------------------------------------
+# =========================================================
+# SOURCE-BASED OPERATION EXTRACTION
+# =========================================================
 
-    existing = {
-        x.get("name", "").upper()
-        for x in metadata["files"]
-        if x.get("type") == "SELECT"
+_OPERATION_KEYWORDS = (
+    "PERFORM",
+    "READ",
+    "WRITE",
+    "MOVE",
+    "OPEN",
+    "CLOSE",
+    "DISPLAY",
+    "IF",
+    "GO TO",
+    "GOTO",
+    "ADD",
+)
+
+
+def _statement_end(
+    source_text: str,
+    start: int,
+) -> int:
+    """
+    Find the end of a COBOL sentence.
+
+    We stop at the first period after the statement.  This is mainly used
+    for multiline OPEN/CLOSE statements.  For ordinary one-line operations
+    the line end is preferred by the caller.
+    """
+    period = source_text.find(".", start)
+
+    if period == -1:
+        return len(source_text)
+
+    return period + 1
+
+
+def _line_bounds(source_text: str, line_start: int) -> tuple[int, int]:
+    newline = source_text.find("\n", line_start)
+
+    if newline == -1:
+        return line_start, len(source_text)
+
+    return line_start, newline
+
+
+def _iter_lines_with_offsets(source_text: str):
+    """
+    Yield:
+        line_number, line_start_char, line_end_char, line_text
+    """
+    offset = 0
+
+    for number, line in enumerate(
+        source_text.splitlines(keepends=True),
+        start=1,
+    ):
+        text = line.rstrip("\r\n")
+        end = offset + len(text)
+
+        yield number, offset, end, text
+
+        offset += len(line)
+
+
+def _make_operation(
+    source_text: str,
+    start_char: int,
+    end_char: int,
+) -> dict[str, Any]:
+    raw = source_text[start_char:end_char].strip()
+
+    return {
+        "text": clean_spaces(raw),
+        "start_byte": len(
+            source_text[:start_char].encode("utf-8")
+        ),
+        "end_byte": len(
+            source_text[:end_char].encode("utf-8")
+        ),
+        "start_line": line_number(
+            source_text,
+            start_char,
+        ),
+        "end_line": line_number(
+            source_text,
+            max(start_char, end_char - 1),
+        ),
     }
+
+
+def _extract_statement_operations(
+    source_text: str,
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    Extract executable COBOL operations directly from source text.
+
+    Tree-sitter is intentionally NOT used here.
+
+    Rules:
+    - Paragraph labels such as OPEN-FILES. and CLOSE-FILES. are ignored.
+    - END-IF, END-PERFORM, END-READ, etc. are never operations.
+    - PERFORM paragraph calls are captured.
+    - PERFORM UNTIL / VARYING are captured as control operations.
+    - READ/WRITE/MOVE/IF/etc. are captured only when they are actual
+      statements.
+    - OPEN and CLOSE support COBOL continuation lines.
+    - Operation metadata contains exact source locations.
+    """
+
+    operations: dict[str, list[dict[str, Any]]] = {
+        "perform": [],
+        "read": [],
+        "write": [],
+        "move": [],
+        "open": [],
+        "close": [],
+        "display": [],
+        "if": [],
+        "goto": [],
+        "add": [],
+    }
+
+    lines = list(
+        _iter_lines_with_offsets(source_text)
+    )
+
+    procedure_start = _procedure_division_start(
+        source_text
+    )
+
+    if procedure_start is None:
+        return operations
+
+    # ---------------------------------------------------------
+    # Build paragraph-label positions.
+    #
+    # This is important because:
+    #
+    # OPEN-FILES.
+    # CLOSE-FILES.
+    # READ-POLICY.
+    #
+    # are paragraph names, NOT operations.
+    # ---------------------------------------------------------
+
+    paragraph_ranges = []
+
+    paragraphs = _extract_paragraphs(
+        source_text
+    )
+
+    for paragraph in paragraphs:
+        paragraph_ranges.append(
+            (
+                paragraph["start_byte"],
+                paragraph["end_byte"],
+                paragraph["name"],
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Helper: determine whether a source line is a paragraph
+    # header.
+    # ---------------------------------------------------------
+
+    def is_paragraph_header(
+        line_start: int,
+        stripped_line: str,
+    ) -> bool:
+
+        # A COBOL paragraph header is:
+        #
+        # OPEN-FILES.
+        #
+        # and must contain only the paragraph name + period.
+
+        return bool(
+            re.match(
+                r"^[A-Z0-9][A-Z0-9-]*\.\s*$",
+                stripped_line,
+                re.IGNORECASE,
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Helper: calculate actual byte offset of keyword
+    # ---------------------------------------------------------
+
+    def keyword_offset(
+        raw_line: str,
+        line_start: int,
+        keyword: str,
+    ) -> int:
+
+        position = raw_line.upper().find(
+            keyword.upper()
+        )
+
+        if position < 0:
+            return line_start
+
+        return line_start + position
+
+    # ---------------------------------------------------------
+    # Helper: create a one-line operation
+    # ---------------------------------------------------------
+
+    def add_operation(
+        operation_type: str,
+        keyword: str,
+        line_start: int,
+        line_end: int,
+        raw_line: str,
+    ) -> None:
+
+        operations[operation_type].append(
+            _make_operation(
+                source_text,
+                keyword_offset(
+                    raw_line,
+                    line_start,
+                    keyword,
+                ),
+                line_end,
+            )
+        )
+
+    # ---------------------------------------------------------
+    # Scan source
+    # ---------------------------------------------------------
+
+    for index, (
+        number,
+        start,
+        end,
+        raw_line,
+    ) in enumerate(lines):
+
+        # Before PROCEDURE DIVISION
+        if end <= procedure_start:
+            continue
+
+        stripped = raw_line.strip()
+
+        if not stripped:
+            continue
+
+        # Fixed-format COBOL comments
+        if (
+            len(raw_line) >= 7
+            and raw_line[6] in ("*", "/")
+        ):
+            continue
+
+        upper = stripped.upper()
+
+        # -----------------------------------------------------
+        # Paragraph header
+        # -----------------------------------------------------
+
+        if is_paragraph_header(
+            start,
+            stripped,
+        ):
+            continue
+
+        # Never treat structural terminators as operations.
+        if upper.startswith(
+            (
+                "END-IF",
+                "END-PERFORM",
+                "END-READ",
+                "END-WRITE",
+                "END-EVALUATE",
+                "END-SEARCH",
+                "END-STRING",
+                "END-UNSTRING",
+                "END-START",
+            )
+        ):
+            continue
+
+        # -----------------------------------------------------
+        # PERFORM
+        # -----------------------------------------------------
+
+        if re.match(
+            r"^PERFORM\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "perform",
+                "PERFORM",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # READ
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^READ\s+[A-Z0-9-]+",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "read",
+                "READ",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # WRITE
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^WRITE\s+[A-Z0-9-]+",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "write",
+                "WRITE",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # MOVE
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^MOVE\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "move",
+                "MOVE",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # OPEN
+        #
+        # Example:
+        #
+        # OPEN INPUT POLICY-IN PREMIUM-IN
+        #      OUTPUT PREMIUM-OUT ERROR-OUT
+        #
+        # Stop when another executable statement begins.
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^OPEN(?:\s+|$)",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            statement_start = keyword_offset(
+                raw_line,
+                start,
+                "OPEN",
+            )
+
+            statement_end = end
+
+            # Only consume continuation lines.
+            for next_index in range(
+                index + 1,
+                len(lines),
+            ):
+
+                (
+                    _next_number,
+                    _next_start,
+                    _next_end,
+                    next_line,
+                ) = lines[next_index]
+
+                next_stripped = (
+                    next_line.strip()
+                )
+
+                if not next_stripped:
+                    continue
+
+                next_upper = (
+                    next_stripped.upper()
+                )
+
+                # A new COBOL statement starts.
+                if re.match(
+                    r"^(PERFORM|READ|WRITE|MOVE|"
+                    r"OPEN|CLOSE|IF|DISPLAY|ADD|"
+                    r"GO\s+TO|GOTO|SET|COMPUTE|"
+                    r"STRING|UNSTRING|EVALUATE|"
+                    r"SEARCH|START|DELETE|REWRITE|"
+                    r"CALL|EXEC|END-IF|END-PERFORM)\b",
+                    next_upper,
+                    re.IGNORECASE,
+                ):
+                    break
+
+                # Paragraph header.
+                if is_paragraph_header(
+                    _next_start,
+                    next_stripped,
+                ):
+                    break
+
+                statement_end = _next_end
+
+                # If the continuation line ends the
+                # COBOL sentence, stop.
+                if "." in next_line:
+                    break
+
+            operations["open"].append(
+                _make_operation(
+                    source_text,
+                    statement_start,
+                    statement_end,
+                )
+            )
+
+        # -----------------------------------------------------
+        # CLOSE
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^CLOSE(?:\s+|$)",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            statement_start = keyword_offset(
+                raw_line,
+                start,
+                "CLOSE",
+            )
+
+            statement_end = end
+
+            # CLOSE is usually one line, but support
+            # continuation lines.
+            for next_index in range(
+                index + 1,
+                len(lines),
+            ):
+
+                (
+                    _next_number,
+                    _next_start,
+                    _next_end,
+                    next_line,
+                ) = lines[next_index]
+
+                next_stripped = (
+                    next_line.strip()
+                )
+
+                if not next_stripped:
+                    continue
+
+                next_upper = (
+                    next_stripped.upper()
+                )
+
+                if re.match(
+                    r"^(PERFORM|READ|WRITE|MOVE|"
+                    r"OPEN|CLOSE|IF|DISPLAY|ADD|"
+                    r"GO\s+TO|GOTO|SET|COMPUTE|"
+                    r"STRING|UNSTRING|EVALUATE|"
+                    r"SEARCH|START|DELETE|REWRITE|"
+                    r"CALL|EXEC|END-IF|END-PERFORM)\b",
+                    next_upper,
+                    re.IGNORECASE,
+                ):
+                    break
+
+                if is_paragraph_header(
+                    _next_start,
+                    next_stripped,
+                ):
+                    break
+
+                statement_end = _next_end
+
+                if "." in next_line:
+                    break
+
+            operations["close"].append(
+                _make_operation(
+                    source_text,
+                    statement_start,
+                    statement_end,
+                )
+            )
+
+        # -----------------------------------------------------
+        # DISPLAY
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^DISPLAY\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "display",
+                "DISPLAY",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # IF
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^IF\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "if",
+                "IF",
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # GO TO / GOTO
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^(GO\s+TO|GOTO)\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            keyword = (
+                "GO TO"
+                if upper.startswith("GO TO")
+                else "GOTO"
+            )
+
+            add_operation(
+                "goto",
+                keyword,
+                start,
+                end,
+                raw_line,
+            )
+
+        # -----------------------------------------------------
+        # ADD
+        # -----------------------------------------------------
+
+        elif re.match(
+            r"^ADD\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+
+            add_operation(
+                "add",
+                "ADD",
+                start,
+                end,
+                raw_line,
+            )
+
+    return _deduplicate_operations(
+        operations
+    )
+
+def _deduplicate_operations(
+    operations: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    result = {}
+
+    for operation_type, values in operations.items():
+        seen = set()
+        unique = []
+
+        for item in values:
+            key = (
+                item.get("start_byte"),
+                item.get("end_byte"),
+                item.get("text"),
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            unique.append(item)
+
+        result[operation_type] = unique
+
+    return result
+
+
+# =========================================================
+# FILE / VARIABLE / COPYBOOK EXTRACTION
+# =========================================================
+
+def extract_files(source_text: str) -> list[dict[str, Any]]:
+    files = []
+    seen = set()
 
     select_pattern = re.compile(
         r"""
@@ -174,63 +924,58 @@ def fallback_extract(source_text, metadata):
         (?P<name>[A-Z0-9-]+)
         (?P<body>.*?\.)
         """,
-        re.IGNORECASE |
-        re.DOTALL |
-        re.VERBOSE
+        re.IGNORECASE | re.DOTALL | re.VERBOSE,
     )
 
-    for match in select_pattern.finditer(
-        source_text
-    ):
-
+    for match in select_pattern.finditer(source_text):
         name = match.group("name").upper()
 
-        if name in existing:
+        if name in seen:
             continue
 
-        text = (
-            "SELECT "
-            + name
-            + match.group("body")
-        )
+        text = "SELECT " + name + match.group("body")
 
-        info = {
+        info: dict[str, Any] = {
             "type": "SELECT",
             "name": name,
+            "text": clean_spaces(text),
             "start_line": line_number(
                 source_text,
-                match.start()
-            )
+                match.start(),
+            ),
+            "start_byte": len(
+                source_text[:match.start()].encode("utf-8")
+            ),
         }
 
         assign = re.search(
             r"\bASSIGN\s+TO\s+([A-Z0-9-]+)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         organization = re.search(
             r"\bORGANIZATION\s+IS\s+(.+?)(?=\s+(?:ACCESS|RECORD|FILE)\b|\.)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         access = re.search(
             r"\bACCESS\s+MODE\s+IS\s+([A-Z]+)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         record_key = re.search(
             r"\bRECORD\s+KEY\s+IS\s+([A-Z0-9-]+)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         status = re.search(
             r"\bFILE\s+STATUS\s+IS\s+([A-Z0-9-]+)",
             text,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         if assign:
@@ -250,190 +995,164 @@ def fallback_extract(source_text, metadata):
         if status:
             info["file_status"] = status.group(1).upper()
 
-        metadata["files"].append(info)
-        existing.add(name)
-
-
-    # -----------------------------------------------------
-    # FD FILES
-    # -----------------------------------------------------
-
-    existing = {
-        x.get("name", "").upper()
-        for x in metadata["files"]
-        if x.get("type") in [
-            "FD",
-            "FD_RECOVERED"
-        ]
-    }
+        files.append(info)
+        seen.add(name)
 
     fd_pattern = re.compile(
-        r"(?m)^\s*FD\s+([A-Z0-9-]+)\s*\."
+        r"(?mi)^[ \t]{0,11}FD\s+([A-Z0-9-]+)\s*\."
     )
 
-    for match in fd_pattern.finditer(
-        source_text
-    ):
-
+    for match in fd_pattern.finditer(source_text):
         name = match.group(1).upper()
 
-        if name in existing:
+        if name in seen:
             continue
 
-        metadata["files"].append({
-            "type": "FD_RECOVERED",
-            "name": name,
-            "start_line": line_number(
-                source_text,
-                match.start()
-            )
-        })
+        files.append(
+            {
+                "type": "FD",
+                "name": name,
+                "text": clean_spaces(match.group(0)),
+                "start_line": line_number(
+                    source_text,
+                    match.start(),
+                ),
+                "start_byte": len(
+                    source_text[:match.start()].encode("utf-8")
+                ),
+            }
+        )
 
-        existing.add(name)
+        seen.add(name)
+
+    return files
 
 
-    # -----------------------------------------------------
-    # 77 VARIABLES
-    # -----------------------------------------------------
+def extract_variables(source_text: str) -> list[dict[str, Any]]:
+    variables = []
+    seen = set()
 
-    existing = {
-        x.get("name", "").upper()
-        for x in metadata["variables"]
-        if x.get("name")
-    }
-
-    variable_pattern = re.compile(
+    pattern = re.compile(
         r"""
-        (?m)^\s*
-        77\s+
+        (?mi)^[ \t]*
+        (?P<level>01|05|77)
+        \s+
         (?P<name>[A-Z0-9-]+)
         \s+
         PIC\s+
-        (?P<picture>[A-Z0-9()VXS9+-]+)
+        (?P<picture>[A-Z0-9()VXS9+\-]+)
         (?:
             \s+
             VALUE\s+
             (?P<value>[^.]+)
         )?
-        \.
+        \s*\.
         """,
-        re.IGNORECASE |
-        re.VERBOSE
+        re.IGNORECASE | re.VERBOSE,
     )
 
-    for match in variable_pattern.finditer(
-        source_text
-    ):
-
+    for match in pattern.finditer(source_text):
         name = match.group("name").upper()
 
-        if name in existing:
+        if name in seen:
             continue
 
-        variable = {
+        item: dict[str, Any] = {
             "name": name,
-            "level": 77,
+            "level": int(match.group("level")),
             "picture": match.group("picture").upper(),
             "start_line": line_number(
                 source_text,
-                match.start()
-            )
+                match.start(),
+            ),
         }
 
         if match.group("value"):
-            variable["value"] = clean_spaces(
+            item["value"] = clean_spaces(
                 match.group("value")
             )
 
-        metadata["variables"].append(variable)
-        existing.add(name)
+        variables.append(item)
+        seen.add(name)
+
+    return variables
 
 
-    # -----------------------------------------------------
-    # COPYBOOKS
-    # -----------------------------------------------------
+def extract_copybooks(source_text: str) -> list[dict[str, Any]]:
+    result = []
+    seen = set()
 
-    existing = {
-        x.get("name", "").upper()
-        for x in metadata["copybooks"]
-        if x.get("name")
-    }
-
-    copy_pattern = re.compile(
-        r"(?m)^\s*COPY\s+([A-Z0-9-]+)\s*\."
+    pattern = re.compile(
+        r"(?mi)^[ \t]*COPY\s+([A-Z0-9-]+)\s*\."
     )
 
-    for match in copy_pattern.finditer(
-        source_text
-    ):
-
+    for match in pattern.finditer(source_text):
         name = match.group(1).upper()
 
-        if name in existing:
+        if name in seen:
             continue
 
-        metadata["copybooks"].append({
-            "name": name,
-            "start_line": line_number(
-                source_text,
-                match.start()
-            )
-        })
+        result.append(
+            {
+                "name": name,
+                "start_line": line_number(
+                    source_text,
+                    match.start(),
+                ),
+                "start_byte": len(
+                    source_text[:match.start()].encode("utf-8")
+                ),
+            }
+        )
 
-        existing.add(name)
+        seen.add(name)
 
-    return metadata
+    return result
 
 
 # =========================================================
 # RECORD / FIELD EXTRACTION
 # =========================================================
 
-def extract_records(source_text):
-
+def extract_records(source_text: str) -> list[dict[str, Any]]:
     records = []
 
     record_pattern = re.compile(
         r"""
-        ^\s*
+        (?mi)^[ \t]*
         01\s+
         (?P<record>[A-Z0-9-]+)
         \s*\.
         """,
-        re.IGNORECASE |
-        re.MULTILINE |
-        re.VERBOSE
+        re.IGNORECASE | re.VERBOSE,
     )
 
     field_pattern = re.compile(
         r"""
-        ^\s*
-        (?P<level>0[25])
+        (?mi)^[ \t]*
+        (?P<level>02|05)
         \s+
         (?P<name>[A-Z0-9-]+)
         \s+
         PIC\s+
-        (?P<picture>[A-Z0-9()VXS9+-]+)
+        (?P<picture>[A-Z0-9()VXS9+\-]+)
         (?:
-            \s+VALUE\s+(?P<value>[^.]+)
+            \s+
+            VALUE\s+
+            (?P<value>[^.]+)
         )?
         \s*\.
         """,
-        re.IGNORECASE |
-        re.MULTILINE |
-        re.VERBOSE
+        re.IGNORECASE | re.VERBOSE,
     )
 
-    matches = list(
-        record_pattern.finditer(source_text)
-    )
+    matches = list(record_pattern.finditer(source_text))
 
-    for i, match in enumerate(matches):
-
+    for index, match in enumerate(matches):
         start = match.start()
 
-        if i + 1 < len(matches):
-            end = matches[i + 1].start()
+        if index + 1 < len(matches):
+            end = matches[index + 1].start()
         else:
             end = len(source_text)
 
@@ -444,32 +1163,23 @@ def extract_records(source_text):
             "level": 1,
             "start_line": line_number(
                 source_text,
-                start
+                start,
             ),
-            "fields": []
+            "start_byte": len(
+                source_text[:start].encode("utf-8")
+            ),
+            "fields": [],
         }
 
-        for field_match in field_pattern.finditer(
-            block
-        ):
-
+        for field_match in field_pattern.finditer(block):
             field = {
                 "name": field_match.group("name").upper(),
-                "level": int(
-                    field_match.group("level")
+                "level": int(field_match.group("level")),
+                "picture": field_match.group("picture").upper(),
+                "start_line": line_number(
+                    source_text,
+                    start + field_match.start(),
                 ),
-                "picture": field_match.group(
-                    "picture"
-                ).upper(),
-                "start_line": (
-                    line_number(
-                        source_text,
-                        start
-                    )
-                    + block[
-                        :field_match.start()
-                    ].count("\n")
-                )
             }
 
             if field_match.group("value"):
@@ -488,11 +1198,17 @@ def extract_records(source_text):
 # RELATIONSHIPS
 # =========================================================
 
-def extract_relationships(
-    file_name,
-    metadata
-):
+def _operation_text(operation: Any) -> str:
+    if isinstance(operation, dict):
+        return str(operation.get("text", ""))
 
+    return str(operation)
+
+
+def extract_relationships(
+    file_name: str,
+    metadata: dict[str, Any],
+) -> list[dict[str, Any]]:
     relationships = []
 
     # -----------------------------------------------------
@@ -500,244 +1216,354 @@ def extract_relationships(
     # -----------------------------------------------------
 
     for operation in metadata["operations"]["read"]:
+        text = _operation_text(operation)
 
-        match = re.search(
-            r"\bREAD\s+([A-Z0-9-]+)",
-            operation,
-            re.IGNORECASE
+        match = re.match(
+            r"^\s*READ\s+([A-Z0-9-]+)\b",
+            text,
+            re.IGNORECASE,
         )
 
         if match:
-
-            relationships.append({
-                "source": file_name,
-                "relationship": "READS",
-                "target": match.group(1).upper()
-            })
-
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "READS",
+                    "target": match.group(1).upper(),
+                }
+            )
 
     # -----------------------------------------------------
     # WRITE
     # -----------------------------------------------------
 
     for operation in metadata["operations"]["write"]:
+        text = _operation_text(operation)
 
-        match = re.search(
-            r"\bWRITE\s+([A-Z0-9-]+)",
-            operation,
-            re.IGNORECASE
+        match = re.match(
+            r"^\s*WRITE\s+([A-Z0-9-]+)\b",
+            text,
+            re.IGNORECASE,
         )
 
         if not match:
             continue
 
-        write_target = match.group(1).upper()
+        target = match.group(1).upper()
 
         resolved_file = None
 
         for item in metadata["files"]:
-
             name = item.get("name")
 
-            if name and name.upper() == write_target:
-
+            if name and name.upper() == target:
                 resolved_file = name.upper()
                 break
 
-        if resolved_file is None:
-
-            if write_target.endswith("-RECORD"):
-
-                candidate = (
-                    write_target[:-7]
-                    .rstrip("-")
-                )
-
-                for item in metadata["files"]:
-
-                    name = item.get("name")
-
-                    if name and name.upper() == candidate:
-
-                        resolved_file = candidate
-                        break
-
         if resolved_file:
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "WRITES",
+                    "target": resolved_file,
+                }
+            )
 
-            relationships.append({
-                "source": file_name,
-                "relationship": "WRITES",
-                "target": resolved_file
-            })
-
-            relationships.append({
-                "source": resolved_file,
-                "relationship": "WRITES_RECORD",
-                "target": write_target
-            })
-
+            relationships.append(
+                {
+                    "source": resolved_file,
+                    "relationship": "WRITES_RECORD",
+                    "target": target,
+                }
+            )
         else:
-
-            relationships.append({
-                "source": file_name,
-                "relationship": "WRITES",
-                "target": write_target
-            })
-
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "WRITES",
+                    "target": target,
+                }
+            )
 
     # -----------------------------------------------------
     # COPYBOOKS
     # -----------------------------------------------------
 
     for item in metadata["copybooks"]:
+        name = item.get("name")
 
-        if item.get("name"):
-
-            relationships.append({
-                "source": file_name,
-                "relationship": "USES_COPYBOOK",
-                "target": item["name"]
-            })
-
+        if name:
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "USES_COPYBOOK",
+                    "target": name.upper(),
+                }
+            )
 
     # -----------------------------------------------------
     # RECORDS
     # -----------------------------------------------------
 
     for record in metadata["records"]:
+        record_name = record["record_name"]
 
-        relationships.append({
-            "source": file_name,
-            "relationship": "CONTAINS_RECORD",
-            "target": record["record_name"]
-        })
+        relationships.append(
+            {
+                "source": file_name,
+                "relationship": "CONTAINS_RECORD",
+                "target": record_name,
+            }
+        )
 
         for field in record["fields"]:
-
-            relationships.append({
-                "source": record["record_name"],
-                "relationship": "CONTAINS_FIELD",
-                "target": field["name"]
-            })
-
+            relationships.append(
+                {
+                    "source": record_name,
+                    "relationship": "CONTAINS_FIELD",
+                    "target": field["name"],
+                }
+            )
 
     # -----------------------------------------------------
     # PARAGRAPHS
     # -----------------------------------------------------
 
     for paragraph in metadata["paragraphs"]:
+        name = paragraph["text"].rstrip(".").upper()
 
-        name = paragraph["text"].rstrip(".")
-
-        relationships.append({
-            "source": file_name,
-            "relationship": "CONTAINS_PARAGRAPH",
-            "target": name
-        })
-
+        relationships.append(
+            {
+                "source": file_name,
+                "relationship": "CONTAINS_PARAGRAPH",
+                "target": name,
+            }
+        )
 
     # -----------------------------------------------------
     # PERFORM
     # -----------------------------------------------------
 
     for operation in metadata["operations"]["perform"]:
+        text = _operation_text(operation)
 
-        match = re.search(
-            r"PERFORM\s+([A-Z0-9-]+)",
-            operation,
-            re.IGNORECASE
+        # Only a real paragraph target becomes a PERFORMS
+        # relationship.  PERFORM UNTIL / VARYING are control
+        # constructs, not paragraph calls.
+        match = re.match(
+            r"^\s*PERFORM\s+"
+            r"(?!UNTIL\b|VARYING\b|WITH\b|TEST\b)"
+            r"([A-Z0-9-]+)\b",
+            text,
+            re.IGNORECASE,
         )
 
         if match:
+            target = match.group(1).upper()
 
-            relationships.append({
-                "source": file_name,
-                "relationship": "PERFORMS",
-                "target": match.group(1).upper()
-            })
-
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "PERFORMS",
+                    "target": target,
+                }
+            )
 
     # -----------------------------------------------------
     # OPEN
     # -----------------------------------------------------
 
     for operation in metadata["operations"]["open"]:
+        text = _operation_text(operation)
 
-        match = re.search(
-            r"OPEN\s+(?:INPUT|OUTPUT|I-O|EXTEND)?\s*([A-Z0-9-]+)",
-            operation,
-            re.IGNORECASE
+        # OPEN INPUT A B OUTPUT C D
+        # We capture every file immediately following INPUT,
+        # OUTPUT, I-O or EXTEND until another mode keyword.
+        mode_pattern = re.compile(
+            r"\b(?:INPUT|OUTPUT|I-O|EXTEND)\s+"
+            r"([A-Z0-9-]+)",
+            re.IGNORECASE,
         )
 
-        if match:
-
-            relationships.append({
-                "source": file_name,
-                "relationship": "OPENS",
-                "target": match.group(1).upper()
-            })
-
+        for match in mode_pattern.finditer(text):
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "OPENS",
+                    "target": match.group(1).upper(),
+                }
+            )
 
     # -----------------------------------------------------
     # CLOSE
     # -----------------------------------------------------
 
     for operation in metadata["operations"]["close"]:
+        text = _operation_text(operation)
 
-        match = re.search(
-            r"CLOSE\s+([A-Z0-9-]+)",
-            operation,
-            re.IGNORECASE
+        match = re.match(
+            r"^\s*CLOSE\s+(.+?)\.?$",
+            text,
+            re.IGNORECASE,
         )
 
-        if match:
+        if not match:
+            continue
 
-            relationships.append({
-                "source": file_name,
-                "relationship": "CLOSES",
-                "target": match.group(1).upper()
-            })
+        targets = re.findall(
+            r"\b[A-Z][A-Z0-9-]*\b",
+            match.group(1).upper(),
+        )
 
+        ignored = {
+            "CLOSE",
+            "GOBACK",
+        }
+
+        for target in targets:
+            if target in ignored:
+                continue
+
+            relationships.append(
+                {
+                    "source": file_name,
+                    "relationship": "CLOSES",
+                    "target": target,
+                }
+            )
 
     return relationships
+
+
+# =========================================================
+# NORMALIZATION / DEDUPLICATION
+# =========================================================
+
+def _deduplicate_items(
+    items: list[dict[str, Any]],
+    keys: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    result = []
+    seen = set()
+
+    for item in items:
+        key = tuple(item.get(k) for k in keys)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        result.append(item)
+
+    return result
+
+
+def normalize_metadata(
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    metadata["divisions"] = _deduplicate_items(
+        metadata["divisions"],
+        ("type", "start_line"),
+    )
+
+    metadata["paragraphs"] = _deduplicate_items(
+        metadata["paragraphs"],
+        ("text",),
+    )
+
+    metadata["files"] = _deduplicate_items(
+        metadata["files"],
+        ("type", "name", "start_line"),
+    )
+
+    metadata["copybooks"] = _deduplicate_items(
+        metadata["copybooks"],
+        ("name",),
+    )
+
+    metadata["variables"] = _deduplicate_items(
+        metadata["variables"],
+        ("name",),
+    )
+
+    for operation_type, operations in metadata[
+        "operations"
+    ].items():
+        metadata["operations"][operation_type] = (
+            _deduplicate_items(
+                operations,
+                ("start_byte", "end_byte", "text"),
+            )
+        )
+
+    return metadata
 
 
 # =========================================================
 # PARSE ONE COBOL PROGRAM
 # =========================================================
 
-def parse_cobol_file(file_path):
+def parse_cobol_file(
+    file_path: str | Path,
+) -> dict[str, Any]:
 
-    print("\n" + "=" * 80)
-    print(f"PARSING: {file_path.name}")
-    print("=" * 80)
+    file_path = Path(file_path)
 
-    with open(file_path, "rb") as f:
-        source = f.read()
+    print(
+        "\n"
+        + "=" * 80,
+        flush=True,
+    )
+
+    print(
+        f"PARSING: {file_path.name}",
+        flush=True,
+    )
+
+    print(
+        "=" * 80,
+        flush=True,
+    )
+
+    with file_path.open("rb") as file:
+        source = file.read()
 
     source_text = source.decode(
         "utf-8",
-        errors="replace"
+        errors="replace",
     )
 
-    # Fresh native parser for each COBOL program.
-    parser = get_parser("cobol")
+    # -----------------------------------------------------
+    # Tree-sitter validation
+    # -----------------------------------------------------
 
+    print(
+        "TREE-SITTER: validation start",
+        flush=True,
+    )
+
+    parser = _COBOL_PARSER
     tree = parser.parse(source)
     root = tree.root_node
 
-    metadata = {
+    print(
+        f"TREE-SITTER: validation complete "
+        f"(errors={root.has_error})",
+        flush=True,
+    )
+
+    metadata: dict[str, Any] = {
+        "metadata_version": "2.0",
+        "source_type": "cobol",
         "file": file_path.name,
         "root": root.type,
         "has_errors": root.has_error,
-
         "divisions": [],
         "paragraphs": [],
         "records": [],
         "files": [],
         "variables": [],
         "copybooks": [],
-
         "operations": {
             "perform": [],
             "read": [],
@@ -748,404 +1574,156 @@ def parse_cobol_file(file_path):
             "display": [],
             "if": [],
             "goto": [],
-            "add": []
+            "add": [],
         },
-
         "relationships": [],
-        "parse_errors": []
+        "parse_errors": [],
     }
 
+    # -----------------------------------------------------
+    # Record parse error status
+    #
+    # IMPORTANT: Do NOT walk the tree here to collect ERROR
+    # nodes. Walking the tree on files with errors=True, using
+    # a shared (singleton) parser, causes an internal tree-sitter
+    # C-level deadlock on the 2nd+ consecutive error file.
+    #
+    # The `has_error` flag is sufficient for all downstream
+    # processing. The tree and root node are deleted immediately
+    # to release tree-sitter C memory before structural extraction.
+    # -----------------------------------------------------
 
-    # =====================================================
-    # TREE-SITTER EXTRACTION
-    # =====================================================
+    has_errors = root.has_error
+    metadata["has_errors"] = has_errors
 
-    for node in walk(root):
+    # Release tree-sitter memory immediately — do not hold root
+    # references beyond this point.
+    del tree, root
 
-        node_type = node.type
-        text = node_text(node, source)
+    # -----------------------------------------------------
+    # Structural extraction
+    #
+    # Source-based paragraph/file extraction is intentional.
+    # It is more stable for this COBOL grammar than depending on
+    # every possible Tree-sitter operation node shape.
+    # -----------------------------------------------------
 
-        if node_type in [
-            "identification_division",
-            "environment_division",
-            "data_division",
-            "procedure_division"
-        ]:
-
-            metadata["divisions"].append({
-                "type": node_type,
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "paragraph_header":
-
-            metadata["paragraphs"].append({
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "select_statement":
-
-            metadata["files"].append({
-                "type": "SELECT",
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "file_description":
-
-            metadata["files"].append({
-                "type": "FD",
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "data_description":
-
-            metadata["variables"].append({
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "copy_statement":
-
-            metadata["copybooks"].append({
-                "text": text,
-                "start_line": node.start_point.row + 1
-            })
-
-
-        elif node_type == "perform_statement_call_proc":
-
-            metadata["operations"]["perform"].append(
-                text
-            )
-
-
-        elif node_type == "read_statement":
-
-            metadata["operations"]["read"].append(
-                text
-            )
-
-
-        elif node_type == "write_statement":
-
-            metadata["operations"]["write"].append(
-                text
-            )
-
-
-        elif node_type == "move_statement":
-
-            metadata["operations"]["move"].append(
-                text
-            )
-
-
-        elif node_type == "open_statement":
-
-            metadata["operations"]["open"].append(
-                text
-            )
-
-
-        elif node_type == "close_statement":
-
-            metadata["operations"]["close"].append(
-                text
-            )
-
-
-        elif node_type == "display_statement":
-
-            metadata["operations"]["display"].append(
-                text
-            )
-
-
-        elif node_type == "if_header":
-
-            metadata["operations"]["if"].append(
-                text
-            )
-
-
-        elif node_type == "goto_statement":
-
-            metadata["operations"]["goto"].append(
-                text
-            )
-
-
-        elif node_type == "add_statement":
-
-            metadata["operations"]["add"].append(
-                text
-            )
-
-
-    # =====================================================
-    # PARSE ERRORS
-    # =====================================================
-
-    for node in walk(root):
-
-        if node.type != "ERROR":
-            continue
-
-        # Ignore header comment errors
-        if node.start_point.row <= 5:
-            continue
-
-        metadata["parse_errors"].append({
-            "text": node_text(node, source),
-            "start_line": node.start_point.row + 1,
-            "end_line": node.end_point.row + 1
-        })
-
-
-    # =====================================================
-    # FALLBACK EXTRACTION
-    # =====================================================
-
-    metadata = fallback_extract(
-        source_text,
-        metadata
+    print(
+        "SOURCE: structural extraction start",
+        flush=True,
     )
 
+    metadata["divisions"] = _extract_divisions(
+        source_text
+    )
 
-    # =====================================================
+    metadata["paragraphs"] = _extract_paragraphs(
+        source_text
+    )
+
+    metadata["files"] = extract_files(
+        source_text
+    )
+
+    metadata["variables"] = extract_variables(
+        source_text
+    )
+
+    metadata["copybooks"] = extract_copybooks(
+        source_text
+    )
+
+    print(
+        "SOURCE: structural extraction complete",
+        flush=True,
+    )
+
+    # -----------------------------------------------------
+    # Operation extraction
+    #
+    # IMPORTANT:
+    # Do NOT use Tree-sitter operation node names here.
+    # -----------------------------------------------------
+
+    print(
+        "OPERATIONS: extraction start",
+        flush=True,
+    )
+
+    metadata["operations"] = (
+        _extract_statement_operations(
+            source_text
+        )
+    )
+
+    print(
+        "OPERATIONS: extraction complete",
+        flush=True,
+    )
+
+    # -----------------------------------------------------
     # RECORDS
-    # =====================================================
+    # -----------------------------------------------------
+
+    print(
+        "RECORDS: extraction start",
+        flush=True,
+    )
 
     metadata["records"] = extract_records(
         source_text
     )
 
-
-    # =====================================================
-        # =========================================================
-    # NORMALIZE + DEDUPLICATE METADATA
-    # =========================================================
-
-    # ---------------------------------------------------------
-    # FILES
-    # ---------------------------------------------------------
-
-    unique_files = []
-    seen_files = set()
-
-    for item in metadata["files"]:
-
-        file_type = item.get("type", "")
-        name = item.get("name")
-
-        # Tree-sitter SELECT may not have "name"
-        if not name and file_type == "SELECT":
-
-            match = re.search(
-                r"\bSELECT\s+([A-Z0-9-]+)",
-                item.get("text", ""),
-                re.IGNORECASE
-            )
-
-            if match:
-                name = match.group(1).upper()
-
-        # Tree-sitter FD may not have "name"
-        if not name and file_type == "FD":
-
-            match = re.search(
-                r"\bFD\s+([A-Z0-9-]+)",
-                item.get("text", ""),
-                re.IGNORECASE
-            )
-
-            if match:
-                name = match.group(1).upper()
-
-        if name:
-            name = name.upper()
-
-        # Normalize SELECT
-        if file_type == "SELECT":
-            key = ("SELECT", name)
-
-        # Normalize FD / FD_RECOVERED
-        elif file_type in ("FD", "FD_RECOVERED"):
-            key = ("FD", name)
-
-        else:
-            key = (
-                file_type,
-                name,
-                item.get("start_line")
-            )
-
-        if key not in seen_files:
-
-            seen_files.add(key)
-
-            # Make sure recovered items have a name
-            if name:
-                item["name"] = name
-
-            # Normalize recovered FD type
-            if file_type == "FD_RECOVERED":
-                item["type"] = "FD"
-
-            unique_files.append(item)
-
-    metadata["files"] = unique_files
-
-
-    # ---------------------------------------------------------
-    # COPYBOOKS
-    # ---------------------------------------------------------
-
-    unique_copybooks = []
-    seen_copybooks = set()
-
-    for item in metadata["copybooks"]:
-
-        name = item.get("name")
-
-        # Tree-sitter representation:
-        # {"text": "COPY RPTEXTRACT."}
-
-        if not name:
-
-            match = re.search(
-                r"\bCOPY\s+([A-Z0-9-]+)",
-                item.get("text", ""),
-                re.IGNORECASE
-            )
-
-            if match:
-                name = match.group(1).upper()
-
-        if not name:
-            continue
-
-        name = name.upper()
-
-        if name not in seen_copybooks:
-
-            seen_copybooks.add(name)
-
-            metadata_item = {
-                "name": name,
-                "start_line": item.get("start_line")
-            }
-
-            unique_copybooks.append(
-                metadata_item
-            )
-
-    metadata["copybooks"] = unique_copybooks
-
-
-    # ---------------------------------------------------------
-    # DIVISIONS
-    # ---------------------------------------------------------
-
-    unique_divisions = []
-    seen_divisions = set()
-
-    for item in metadata["divisions"]:
-
-        key = item.get("type")
-
-        if key not in seen_divisions:
-
-            seen_divisions.add(key)
-            unique_divisions.append(item)
-
-    metadata["divisions"] = unique_divisions
-
-
-    # ---------------------------------------------------------
-    # PARAGRAPHS
-    # ---------------------------------------------------------
-
-    unique_paragraphs = []
-    seen_paragraphs = set()
-
-    for item in metadata["paragraphs"]:
-
-        name = (
-            item.get("text", "")
-            .strip()
-            .rstrip(".")
-            .upper()
-        )
-
-        if not name:
-            continue
-
-        if name not in seen_paragraphs:
-
-            seen_paragraphs.add(name)
-            unique_paragraphs.append(item)
-
-    metadata["paragraphs"] = unique_paragraphs
-
-
-    # ---------------------------------------------------------
-    # VARIABLES
-    # ---------------------------------------------------------
-
-    unique_variables = []
-    seen_variables = set()
-
-    for item in metadata["variables"]:
-
-        name = item.get("name")
-
-        if not name:
-
-            text = item.get("text", "")
-
-            match = re.search(
-                r"\b(?:77|01|05)\s+([A-Z0-9-]+)",
-                text,
-                re.IGNORECASE
-            )
-
-            if match:
-                name = match.group(1).upper()
-
-        if not name:
-            continue
-
-        name = name.upper()
-
-        if name not in seen_variables:
-
-            seen_variables.add(name)
-            item["name"] = name
-
-            unique_variables.append(item)
-
-    metadata["variables"] = unique_variables
-
-
-    # =====================================================
-    # RELATIONSHIPS
-    # =====================================================
-
-    metadata["relationships"] = extract_relationships(
-        file_path.name,
+    print(
+        f"RECORDS: extraction complete "
+        f"({len(metadata['records'])})",
+        flush=True,
+    )
+
+    # -----------------------------------------------------
+    # NORMALIZATION
+    # -----------------------------------------------------
+
+    metadata = normalize_metadata(
         metadata
     )
 
+    # -----------------------------------------------------
+    # RELATIONSHIPS
+    # -----------------------------------------------------
+
+    print(
+        "RELATIONSHIPS: extraction start",
+        flush=True,
+    )
+
+    metadata["relationships"] = (
+        extract_relationships(
+            file_path.name,
+            metadata,
+        )
+    )
+
+    print(
+        f"RELATIONSHIPS: extraction complete "
+        f"({len(metadata['relationships'])})",
+        flush=True,
+    )
+
+    # -----------------------------------------------------
+    # OPERATION COUNTS
+    # -----------------------------------------------------
+
+    metadata["operation_counts"] = {
+        operation_type: len(operations)
+        for operation_type, operations
+        in metadata["operations"].items()
+    }
+
+    print(
+        "PARSER: returning metadata",
+        flush=True,
+    )
 
     return metadata
 
@@ -1154,10 +1732,10 @@ def parse_cobol_file(file_path):
 # BATCH PARSING
 # =========================================================
 
-def main():
+def main() -> None:
 
     cobol_files = sorted(
-        BASE_DIR.glob("*.CBL")
+        SOURCE_DIR.glob("*.CBL")
     )
 
     print("=" * 80)
@@ -1165,220 +1743,123 @@ def main():
     print("=" * 80)
 
     print(
-        f"COBOL files found: "
-        f"{len(cobol_files)}"
+        f"COBOL files found: {len(cobol_files)}"
     )
-
-    for file_path in cobol_files:
-        print(f"  - {file_path.name}")
-
-    print()
 
     if not cobol_files:
         print(
-            f"No COBOL files found in: "
-            f"{BASE_DIR}"
+            "No COBOL files found in: "
+            f"{SOURCE_DIR}"
         )
         return
-
-    import subprocess
 
     successful = 0
     failed = 0
 
     for file_path in cobol_files:
 
-        print("=" * 80)
-        print(
-            f"PARSING: "
-            f"{file_path.name}"
-        )
-        print("=" * 80)
-
-        worker_code = f'''
-import sys
-import json
-from pathlib import Path
-
-sys.path.insert(0, "parsers/cobol")
-
-import parse
-
-file_path = Path(r"{file_path}")
-
-metadata = parse.parse_cobol_file(
-    file_path
-)
-
-output_file = (
-    parse.OUTPUT_DIR /
-    f"{{file_path.stem}}_metadata.json"
-)
-
-with output_file.open(
-    "w",
-    encoding="utf-8"
-) as file:
-
-    json.dump(
-        metadata,
-        file,
-        indent=4,
-        ensure_ascii=False
-    )
-
-print(
-    f"OUTPUT: {{output_file}}",
-    flush=True
-)
-
-print(
-    f"SIZE: {{output_file.stat().st_size}}",
-    flush=True
-)
-'''
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                worker_code
-            ],
-            cwd=str(
-                PROJECT_ROOT
+        try:
+            metadata = parse_cobol_file(
+                file_path
             )
-        )
 
-        if result.returncode == 0:
+            output_file = (
+                OUTPUT_DIR
+                / f"{file_path.stem}_metadata.json"
+            )
+
+            with output_file.open(
+                "w",
+                encoding="utf-8",
+            ) as file:
+
+                json.dump(
+                    metadata,
+                    file,
+                    indent=4,
+                    ensure_ascii=False,
+                )
 
             successful += 1
 
             print(
-                f"SUCCESS: "
-                f"{file_path.name}"
+                f"OUTPUT: {output_file}",
+                flush=True,
             )
 
-        else:
+        except Exception as exc:
 
             failed += 1
 
             print(
-                f"FAILED: "
-                f"{file_path.name}"
+                f"FAILED: {file_path.name}: {exc}",
+                flush=True,
             )
 
-            print(
-                f"Exit code: "
-                f"{result.returncode}"
-            )
-
-        print()
-
-    # =====================================================
-    # COMBINED SEMANTIC DATA
-    # =====================================================
+    # -----------------------------------------------------
+    # Combined semantic data
+    # -----------------------------------------------------
 
     semantic_output = (
-        OUTPUT_DIR /
-        "semantic_data.json"
+        OUTPUT_DIR
+        / "semantic_data.json"
     )
 
     combined_metadata = {
-        "programs": []
+        "metadata_version": "2.0",
+        "source_type": "cobol",
+        "programs": [],
     }
 
     for file_path in cobol_files:
 
         metadata_file = (
-            OUTPUT_DIR /
-            f"{file_path.stem}_metadata.json"
+            OUTPUT_DIR
+            / f"{file_path.stem}_metadata.json"
         )
 
         if not metadata_file.exists():
             continue
 
         try:
-
             with metadata_file.open(
                 "r",
-                encoding="utf-8"
+                encoding="utf-8",
             ) as file:
 
-                metadata = json.load(
-                    file
-                )
+                metadata = json.load(file)
 
             combined_metadata[
                 "programs"
-            ].append(
-                metadata
-            )
+            ].append(metadata)
 
-        except Exception as error:
+        except Exception as exc:
 
             print(
                 f"WARNING reading "
-                f"{metadata_file.name}: "
-                f"{error}"
+                f"{metadata_file.name}: {exc}"
             )
 
     with semantic_output.open(
         "w",
-        encoding="utf-8"
+        encoding="utf-8",
     ) as file:
 
         json.dump(
             combined_metadata,
             file,
             indent=4,
-            ensure_ascii=False
+            ensure_ascii=False,
         )
 
     print("=" * 80)
     print("BATCH PARSING COMPLETED")
     print("=" * 80)
-
-    print(
-        f"Programs found : "
-        f"{len(cobol_files)}"
-    )
-
-    print(
-        f"Programs parsed: "
-        f"{successful}"
-    )
-
-    print(
-        f"Programs failed: "
-        f"{failed}"
-    )
-
-    print(
-        f"Combined metadata: "
-        f"{semantic_output}"
-    )
-
-    print()
-    print("Generated files:")
-
-    for metadata_file in sorted(
-        OUTPUT_DIR.glob(
-            "*_metadata.json"
-        )
-    ):
-
-        print(
-            f"  {metadata_file.name}"
-        )
-
-    print(
-        f"  {semantic_output.name}"
-    )
+    print(f"Programs found : {len(cobol_files)}")
+    print(f"Programs parsed: {successful}")
+    print(f"Programs failed: {failed}")
+    print(f"Combined metadata: {semantic_output}")
 
 
 if __name__ == "__main__":
     main()
-
-
-if __name__ == "__main__":
-    main()      

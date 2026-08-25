@@ -1,0 +1,3368 @@
+{
+  "package_id": "PKG-COBOL-POLSTATUS.CBL-7cd19335",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\POLSTATUS.CBL",
+    "file_name": "POLSTATUS.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 319,
+    "size_bytes": 11386
+  },
+  "summary": {
+    "purpose": "Derive and update the status of insurance policies based on effective, expiry and current dates while preserving existing cancelled statuses, and write the updated policy records and any validation errors to output files.",
+    "high_level_narrative": "The program starts by obtaining the system current date and validating it. It opens three sequential files: POLICY-IN (input master policy records), POLICY-OUT (output updated records) and ERROR-OUT (error log). It then reads each input record in a loop. For each record it validates the effective and expiry dates, checks that expiry is not earlier than effective, and logs specific error records (S001, S002, S003) when validation fails. If dates are valid, the program copies the input record to the output layout, determines the new policy status using the rule: preserve 'CN', otherwise if current date < effective date set 'PN', else if current date <= expiry date set 'AC', else set 'EX'. When the status changes, the update date is set to the current date and a change counter is incremented. The updated record is written to POLICY-OUT. After all records are processed, the program closes all files, displays processing counters (read, written, changed, pending, active, expired, cancelled, rejected, I/O errors) and returns an appropriate return code.",
+    "business_domain": "Policy Management",
+    "inputs": [
+      "POLICY-IN sequential file (fields: PI-POLICY-NO, PI-CUSTOMER-ID, PI-AGENT-ID, PI-PRODUCT-TYPE, PI-POLICY-STATUS, PI-EFFECTIVE-DATE, PI-EXPIRY-DATE, PI-WRITTEN-PREMIUM, PI-CREATE-DT, PI-UPDATE-DT)",
+      "System current date (FUNCTION CURRENT-DATE)"
+    ],
+    "outputs": [
+      "POLICY-OUT sequential file (fields: PO-POLICY-NO, PO-CUSTOMER-ID, PO-AGENT-ID, PO-PRODUCT-TYPE, PO-POLICY-STATUS, PO-EFFECTIVE-DATE, PO-EXPIRY-DATE, PO-WRITTEN-PREMIUM, PO-CREATE-DT, PO-UPDATE-DT)",
+      "ERROR-OUT sequential file (fields: ER-POLICY-NO, ER-CODE, ER-MESSAGE)",
+      "Display of processing counters",
+      "RETURN-CODE (0 for success, 12 for fatal error)"
+    ],
+    "key_transformations": [
+      "Validation of calendar dates (numeric check, month range, day range, leap‑year handling)",
+      "Comparison of current date with effective and expiry dates to derive status",
+      "Preservation of existing 'CN' (cancelled) status",
+      "Copy of input record to output record with possible status change",
+      "Update of PO-UPDATE-DT when status changes",
+      "Aggregation of counters for read, written, changed, pending, active, expired, cancelled, rejected, and I/O errors"
+    ],
+    "key_dependencies": [
+      "POLICY-IN, POLICY-OUT and ERROR-OUT file definitions (SELECT statements)",
+      "COBOL intrinsic FUNCTION CURRENT-DATE",
+      "COBOL intrinsic FUNCTION MOD for leap‑year calculation",
+      "Standard COBOL file I/O verbs (OPEN, READ, WRITE, CLOSE)",
+      "Task 5 POLLOAD (provides valid policy master data) – mentioned as a logical dependency"
+    ],
+    "business_rules": [
+      "If existing PI-POLICY-STATUS = 'CN' then retain 'CN' and count as cancelled.",
+      "If current date < PI-EFFECTIVE-DATE then set status to 'PN' (pending) and count pending.",
+      "If current date <= PI-EXPIRY-DATE then set status to 'AC' (active) and count active.",
+      "Otherwise set status to 'EX' (expired) and count expired.",
+      "Do not derive cancellation status because no cancellation date is available.",
+      "Effective date must be a valid calendar date; otherwise write error record with code S001.",
+      "Expiry date must be a valid calendar date; otherwise write error record with code S002.",
+      "Expiry date must not be earlier than effective date; otherwise write error record with code S003.",
+      "When status changes, PO-UPDATE-DT is set to the current processing date.",
+      "All file status codes must be '00' for successful open, read, write, or close; otherwise a fatal error is raised."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "POLSTATUS.CBL",
+    "source_type": "cobol",
+    "purpose": "Read policy master records, validate dates, determine the correct policy status (CN, PN, AC, EX) based on current system date, preserve cancelled policies, write updated policy records and any validation errors to output files, and report processing statistics.",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN (file containing PI-REC records)",
+        "SYSTEM CURRENT DATE (FUNCTION CURRENT-DATE)"
+      ],
+      "outputs": [
+        "POLICY-OUT (file containing PO-REC records)",
+        "ERROR-OUT (file containing ER-REC records)",
+        "Processing counters displayed on the console"
+      ]
+    },
+    "key_logic": [
+      "1. Obtain the system current date (YYYYMMDD) and store in WS-CURRENT-DATE.",
+      "2. Open the three sequential files (input, output, error) and verify file‑status codes.",
+      "3. Loop reading each input record until end‑of‑file or a fatal error occurs.",
+      "4. For each record, validate the EFFECTIVE‑DATE and EXPIRY‑DATE using VALIDATE-CALENDAR-DATE (numeric check, month range, day range, leap‑year handling).",
+      "5. If either date is invalid, write an error record to ERROR‑OUT with a specific error code (S001, S002, S003).",
+      "6. If dates are valid, call DETERMINE-STATUS to compute the new policy status:",
+      "   a. Preserve status 'CN' (cancelled).",
+      "   b. If current date < EFFECTIVE‑DATE → status 'PN' (pending).",
+      "   c. Else if current date <= EXPIRY‑DATE → status 'AC' (active).",
+      "   d. Else → status 'EX' (expired).",
+      "   e. Increment the appropriate status counter and, if the status changed, set PO-UPDATE-DT to the current date and increment WS-CHANGED.",
+      "7. Write the (possibly) updated PO-REC to POLICY‑OUT; on write failure set fatal error.",
+      "8. After processing all records, close all files, display counters, and return an appropriate return‑code.",
+      "9. Supporting routines:",
+      "   - VALIDATE-CALENDAR-DATE: checks numeric format, month 1‑12, day within month length, uses SET-MAX-DAY.",
+      "   - SET-MAX-DAY: determines max day for month, calls CHECK-LEAP-YEAR for February.",
+      "   - CHECK-LEAP-YEAR: implements Gregorian leap‑year rule (divisible by 400 or divisible by 4 but not by 100)."
+    ],
+    "entities": [
+      {
+        "name": "POLSTAT",
+        "entity_type": "PROGRAM",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 1,
+        "description": null
+      },
+      {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 105,
+        "description": null
+      },
+      {
+        "name": "PROCESS-POLICY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 172,
+        "description": null
+      },
+      {
+        "name": "DETERMINE-STATUS",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 199,
+        "description": null
+      },
+      {
+        "name": "WRITE-POLICY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 223,
+        "description": null
+      },
+      {
+        "name": "WRITE-ERROR",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 233,
+        "description": null
+      },
+      {
+        "name": "CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 244,
+        "description": null
+      },
+      {
+        "name": "VALIDATE-CALENDAR-DATE",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 278,
+        "description": null
+      },
+      {
+        "name": "SET-MAX-DAY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 293,
+        "description": null
+      },
+      {
+        "name": "CHECK-LEAP-YEAR",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLSTAT",
+        "data_type": null,
+        "line_number": 308,
+        "description": null
+      },
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 27,
+        "description": null
+      },
+      {
+        "name": "POLICY-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 29,
+        "description": null
+      },
+      {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 31,
+        "description": null
+      },
+      {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 37,
+        "description": null
+      },
+      {
+        "name": "PO-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-OUT",
+        "data_type": null,
+        "line_number": 50,
+        "description": null
+      },
+      {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "ERROR-OUT",
+        "data_type": null,
+        "line_number": 63,
+        "description": null
+      },
+      {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "X(12)",
+        "line_number": 38,
+        "description": null
+      },
+      {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "X(9)",
+        "line_number": 39,
+        "description": null
+      },
+      {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "X(9)",
+        "line_number": 40,
+        "description": null
+      },
+      {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "X(2)",
+        "line_number": 41,
+        "description": null
+      },
+      {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "X(2)",
+        "line_number": 42,
+        "description": null
+      },
+      {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "9(8)",
+        "line_number": 43,
+        "description": null
+      },
+      {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "9(8)",
+        "line_number": 44,
+        "description": null
+      },
+      {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "9(9)V99",
+        "line_number": 45,
+        "description": null
+      },
+      {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "9(8)",
+        "line_number": 46,
+        "description": null
+      },
+      {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "9(8)",
+        "line_number": 47,
+        "description": null
+      },
+      {
+        "name": "PO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "X(12)",
+        "line_number": 51,
+        "description": null
+      },
+      {
+        "name": "PO-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "X(9)",
+        "line_number": 52,
+        "description": null
+      },
+      {
+        "name": "PO-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "X(9)",
+        "line_number": 53,
+        "description": null
+      },
+      {
+        "name": "PO-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "X(2)",
+        "line_number": 54,
+        "description": null
+      },
+      {
+        "name": "PO-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "X(2)",
+        "line_number": 55,
+        "description": null
+      },
+      {
+        "name": "PO-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "9(8)",
+        "line_number": 56,
+        "description": null
+      },
+      {
+        "name": "PO-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "9(8)",
+        "line_number": 57,
+        "description": null
+      },
+      {
+        "name": "PO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "9(9)V99",
+        "line_number": 58,
+        "description": null
+      },
+      {
+        "name": "PO-CREATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "9(8)",
+        "line_number": 59,
+        "description": null
+      },
+      {
+        "name": "PO-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "9(8)",
+        "line_number": 60,
+        "description": null
+      },
+      {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "X(12)",
+        "line_number": 64,
+        "description": null
+      },
+      {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "X(4)",
+        "line_number": 65,
+        "description": null
+      },
+      {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "X(54)",
+        "line_number": 66,
+        "description": null
+      },
+      {
+        "name": "WS-PI-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "XX",
+        "line_number": 70,
+        "description": null
+      },
+      {
+        "name": "WS-PO-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "XX",
+        "line_number": 71,
+        "description": null
+      },
+      {
+        "name": "WS-ER-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "XX",
+        "line_number": 72,
+        "description": null
+      },
+      {
+        "name": "WS-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 74,
+        "description": null
+      },
+      {
+        "name": "END-OF-FILE",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": null,
+        "line_number": 75,
+        "description": null
+      },
+      {
+        "name": "WS-FATAL",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 76,
+        "description": null
+      },
+      {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": null,
+        "line_number": 77,
+        "description": null
+      },
+      {
+        "name": "WS-DATE-VALID",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 78,
+        "description": null
+      },
+      {
+        "name": "WS-PI-OPEN",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 79,
+        "description": null
+      },
+      {
+        "name": "WS-PO-OPEN",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 80,
+        "description": null
+      },
+      {
+        "name": "WS-ER-OPEN",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "X",
+        "line_number": 81,
+        "description": null
+      },
+      {
+        "name": "WS-CURRENT-DATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(8)",
+        "line_number": 83,
+        "description": null
+      },
+      {
+        "name": "WS-DATE-IN",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(8)",
+        "line_number": 84,
+        "description": null
+      },
+      {
+        "name": "WS-YEAR",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(4)",
+        "line_number": 85,
+        "description": null
+      },
+      {
+        "name": "WS-MONTH",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "99",
+        "line_number": 86,
+        "description": null
+      },
+      {
+        "name": "WS-DAY",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "99",
+        "line_number": 87,
+        "description": null
+      },
+      {
+        "name": "WS-MAX-DAY",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "99",
+        "line_number": 88,
+        "description": null
+      },
+      {
+        "name": "WS-LEAP",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "X",
+        "line_number": 89,
+        "description": null
+      },
+      {
+        "name": "WS-REM4",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(4)",
+        "line_number": 90,
+        "description": null
+      },
+      {
+        "name": "WS-REM100",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(4)",
+        "line_number": 91,
+        "description": null
+      },
+      {
+        "name": "WS-REM400",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-DATE",
+        "data_type": "9(4)",
+        "line_number": 92,
+        "description": null
+      },
+      {
+        "name": "WS-READ",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 94,
+        "description": null
+      },
+      {
+        "name": "WS-WRITTEN",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 95,
+        "description": null
+      },
+      {
+        "name": "WS-CHANGED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 96,
+        "description": null
+      },
+      {
+        "name": "WS-PENDING",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 97,
+        "description": null
+      },
+      {
+        "name": "WS-ACTIVE",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 98,
+        "description": null
+      },
+      {
+        "name": "WS-EXPIRED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 99,
+        "description": null
+      },
+      {
+        "name": "WS-CANCELLED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 100,
+        "description": null
+      },
+      {
+        "name": "WS-REJECTED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 101,
+        "description": null
+      },
+      {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "9(9)",
+        "line_number": 102,
+        "description": null
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Extract system current date (YYYYMMDD) from FUNCTION CURRENT-DATE and store in WS-CURRENT-DATE.",
+        "source_entities": [
+          "FUNCTION CURRENT-DATE"
+        ],
+        "target_entities": [
+          "WS-CURRENT-DATE"
+        ],
+        "expression": "WS-CURRENT-DATE = FUNCTION CURRENT-DATE(1:8)",
+        "line_number": 106,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T002",
+        "rule_type": "MAPPING",
+        "description": "Copy input record fields to output record before status evaluation.",
+        "source_entities": [
+          "PI-REC"
+        ],
+        "target_entities": [
+          "PO-REC"
+        ],
+        "expression": "MOVE PI-REC TO PO-REC",
+        "line_number": 200,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T003",
+        "rule_type": "CONDITIONAL",
+        "description": "If existing policy status is 'CN' (cancelled), preserve it in the output record and increment cancelled counter.",
+        "source_entities": [
+          "PI-POLICY-STATUS"
+        ],
+        "target_entities": [
+          "PO-POLICY-STATUS",
+          "WS-CANCELLED"
+        ],
+        "expression": "IF PI-POLICY-STATUS = 'CN' THEN PO-POLICY-STATUS = 'CN'; ADD 1 TO WS-CANCELLED",
+        "line_number": 201,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "If current date < effective date, set status to 'PN' (pending) and increment pending counter.",
+        "source_entities": [
+          "WS-CURRENT-DATE",
+          "PI-EFFECTIVE-DATE"
+        ],
+        "target_entities": [
+          "PO-POLICY-STATUS",
+          "WS-PENDING"
+        ],
+        "expression": "IF WS-CURRENT-DATE < PI-EFFECTIVE-DATE THEN PO-POLICY-STATUS = 'PN'; ADD 1 TO WS-PENDING",
+        "line_number": 205,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "If current date <= expiry date, set status to 'AC' (active) and increment active counter.",
+        "source_entities": [
+          "WS-CURRENT-DATE",
+          "PI-EXPIRY-DATE"
+        ],
+        "target_entities": [
+          "PO-POLICY-STATUS",
+          "WS-ACTIVE"
+        ],
+        "expression": "IF WS-CURRENT-DATE <= PI-EXPIRY-DATE THEN PO-POLICY-STATUS = 'AC'; ADD 1 TO WS-ACTIVE",
+        "line_number": 209,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T006",
+        "rule_type": "CONDITIONAL",
+        "description": "Otherwise set status to 'EX' (expired) and increment expired counter.",
+        "source_entities": [
+          "WS-CURRENT-DATE",
+          "PI-EXPIRY-DATE"
+        ],
+        "target_entities": [
+          "PO-POLICY-STATUS",
+          "WS-EXPIRED"
+        ],
+        "expression": "ELSE PO-POLICY-STATUS = 'EX'; ADD 1 TO WS-EXPIRED",
+        "line_number": 213,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T007",
+        "rule_type": "CALCULATION",
+        "description": "If the derived status differs from the original status, mark record as changed, set PO-UPDATE-DT to current date, and increment changed counter.",
+        "source_entities": [
+          "PO-POLICY-STATUS",
+          "PI-POLICY-STATUS",
+          "WS-CURRENT-DATE"
+        ],
+        "target_entities": [
+          "WS-CHANGED",
+          "PO-UPDATE-DT"
+        ],
+        "expression": "IF PO-POLICY-STATUS NOT = PI-POLICY-STATUS THEN ADD 1 TO WS-CHANGED; MOVE WS-CURRENT-DATE TO PO-UPDATE-DT",
+        "line_number": 218,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T008",
+        "rule_type": "FILTER",
+        "description": "Validate that a date string is numeric, month is 1‑12, and day is within the month’s maximum day; set WS-DATE-VALID to 'Y' when valid.",
+        "source_entities": [
+          "WS-DATE-IN",
+          "WS-YEAR",
+          "WS-MONTH",
+          "WS-DAY",
+          "WS-MAX-DAY"
+        ],
+        "target_entities": [
+          "WS-DATE-VALID"
+        ],
+        "expression": "IF WS-DATE-IN NUMERIC AND WS-YEAR>0 AND 1<=WS-MONTH<=12 AND 1<=WS-DAY<=WS-MAX-DAY THEN WS-DATE-VALID='Y'",
+        "line_number": 279,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T009",
+        "rule_type": "CALCULATION",
+        "description": "Derive year, month, and day components from an 8‑digit date string.",
+        "source_entities": [
+          "WS-DATE-IN"
+        ],
+        "target_entities": [
+          "WS-YEAR",
+          "WS-MONTH",
+          "WS-DAY"
+        ],
+        "expression": "WS-YEAR = WS-DATE-IN(1:4); WS-MONTH = WS-DATE-IN(5:2); WS-DAY = WS-DATE-IN(7:2)",
+        "line_number": 281,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T010",
+        "rule_type": "CALCULATION",
+        "description": "Determine the maximum day for a month, handling February leap‑year logic.",
+        "source_entities": [
+          "WS-MONTH",
+          "WS-LEAP"
+        ],
+        "target_entities": [
+          "WS-MAX-DAY"
+        ],
+        "expression": "EVALUATE WS-MONTH ... WHEN 2 IF WS-LEAP='Y' THEN 29 ELSE 28",
+        "line_number": 294,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T011",
+        "rule_type": "CALCULATION",
+        "description": "Leap‑year rule: year divisible by 400 or divisible by 4 but not by 100.",
+        "source_entities": [
+          "WS-YEAR"
+        ],
+        "target_entities": [
+          "WS-LEAP"
+        ],
+        "expression": "IF MOD(WS-YEAR,400)=0 OR (MOD(WS-YEAR,4)=0 AND MOD(WS-YEAR,100)<>0) THEN WS-LEAP='Y' ELSE WS-LEAP='N'",
+        "line_number": 309,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T012",
+        "rule_type": "BUSINESS_RULE",
+        "description": "If an input record fails any date validation, write an error record with a specific error code (S001, S002, S003) to ERROR‑OUT.",
+        "source_entities": [
+          "PI-EFFECTIVE-DATE",
+          "PI-EXPIRY-DATE",
+          "WS-DATE-VALID",
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "target_entities": [
+          "ER-REC"
+        ],
+        "expression": "WRITE ER-REC WHEN validation fails",
+        "line_number": 173,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T013",
+        "rule_type": "AGGREGATION",
+        "description": "Accumulate processing statistics (read, written, changed, pending, active, expired, cancelled, rejected, I/O errors) in WS-COUNTERS.",
+        "source_entities": [
+          "WS-READ",
+          "WS-WRITTEN",
+          "WS-CHANGED",
+          "WS-PENDING",
+          "WS-ACTIVE",
+          "WS-EXPIRED",
+          "WS-CANCELLED",
+          "WS-REJECTED",
+          "WS-IO-ERRORS"
+        ],
+        "target_entities": [
+          "DISPLAY statements"
+        ],
+        "expression": "ADD 1 TO respective counter at each event",
+        "line_number": 160,
+        "confidence": 0.95
+      }
+    ],
+    "business_rules": [
+      "Preserve existing policy status 'CN' (cancelled) – never derived, only copied.",
+      "If current date < effective date → status = 'PN' (pending).",
+      "If current date <= expiry date → status = 'AC' (active).",
+      "Otherwise → status = 'EX' (expired).",
+      "Effective date must be <= expiry date; otherwise record is rejected with error S003.",
+      "All dates must be numeric, month 1‑12, day valid for month (including leap‑year rules).",
+      "Leap year: divisible by 400 or divisible by 4 but not by 100.",
+      "Any file‑status code other than '00' is treated as a fatal error.",
+      "If a write to POLICY‑OUT or ERROR‑OUT fails, set fatal error and abort processing."
+    ],
+    "dependencies": [
+      "TASK 5 POLLOAD (provides master policy data – mentioned in comment)",
+      "SYSTEM FUNCTION CURRENT‑DATE",
+      "SYSTEM FUNCTION MOD (used in leap‑year calculation)"
+    ],
+    "relationships": [
+      {
+        "source": "POLSTAT",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 145,
+        "description": "READ POLICY-IN reads PI-REC records"
+      },
+      {
+        "source": "POLSTAT",
+        "target": "POLICY-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 224,
+        "description": "WRITE PO-REC writes to POLICY-OUT"
+      },
+      {
+        "source": "POLSTAT",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 235,
+        "description": "WRITE ER-REC writes to ERROR-OUT"
+      },
+      {
+        "source": "PI-REC",
+        "target": "PO-REC",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.97,
+        "evidence_line": 200,
+        "description": "MOVE PI-REC TO PO-REC copies all fields before status change"
+      },
+      {
+        "source": "PI-POLICY-STATUS",
+        "target": "PO-POLICY-STATUS",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.96,
+        "evidence_line": 201,
+        "description": "Status mapping logic in DETERMINE-STATUS"
+      },
+      {
+        "source": "WS-CURRENT-DATE",
+        "target": "PO-POLICY-STATUS",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.96,
+        "evidence_line": 205,
+        "description": "Date comparison determines pending, active, or expired status"
+      },
+      {
+        "source": "PI-EFFECTIVE-DATE",
+        "target": "WS-DATE-VALID",
+        "relationship_type": "FILTERS",
+        "confidence": 0.94,
+        "evidence_line": 173,
+        "description": "Effective date validated before further processing"
+      },
+      {
+        "source": "PI-EXPIRY-DATE",
+        "target": "WS-DATE-VALID",
+        "relationship_type": "FILTERS",
+        "confidence": 0.94,
+        "evidence_line": 180,
+        "description": "Expiry date validated after effective date validation"
+      },
+      {
+        "source": "WS-YEAR",
+        "target": "WS-LEAP",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.96,
+        "evidence_line": 309,
+        "description": "Leap‑year determination based on WS-YEAR"
+      },
+      {
+        "source": "WS-MONTH",
+        "target": "WS-MAX-DAY",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.95,
+        "evidence_line": 294,
+        "description": "SET-MAX-DAY determines max day for month"
+      },
+      {
+        "source": "WS-LEAP",
+        "target": "WS-MAX-DAY",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.95,
+        "evidence_line": 300,
+        "description": "February max day set to 29 if WS-LEAP='Y' else 28"
+      },
+      {
+        "source": "MAIN",
+        "target": "VALIDATE-CALENDAR-DATE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 108,
+        "description": "Initial validation of system date"
+      },
+      {
+        "source": "PROCESS-POLICY",
+        "target": "VALIDATE-CALENDAR-DATE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 174,
+        "description": "Validate effective date"
+      },
+      {
+        "source": "PROCESS-POLICY",
+        "target": "VALIDATE-CALENDAR-DATE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 180,
+        "description": "Validate expiry date"
+      },
+      {
+        "source": "PROCESS-POLICY",
+        "target": "DETERMINE-STATUS",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 193,
+        "description": "Determine new status after successful date validation"
+      },
+      {
+        "source": "PROCESS-POLICY",
+        "target": "WRITE-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 194,
+        "description": "Write updated policy record"
+      },
+      {
+        "source": "PROCESS-POLICY",
+        "target": "WRITE-ERROR",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 178,
+        "description": "Write error record when validation fails"
+      },
+      {
+        "source": "VALIDATE-CALENDAR-DATE",
+        "target": "SET-MAX-DAY",
+        "relationship_type": "CALLS",
+        "confidence": 0.97,
+        "evidence_line": 286,
+        "description": "Determine max day after month validation"
+      },
+      {
+        "source": "SET-MAX-DAY",
+        "target": "CHECK-LEAP-YEAR",
+        "relationship_type": "CALLS",
+        "confidence": 0.97,
+        "evidence_line": 300,
+        "description": "February handling requires leap‑year check"
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "POLICY-IN",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 246,
+        "description": "CLOSE POLICY-IN file"
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "POLICY-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 257,
+        "description": "CLOSE POLICY-OUT file"
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 268,
+        "description": "CLOSE ERROR-OUT file"
+      },
+      {
+        "source": "WS-PI-ST",
+        "target": "WS-PI-OPEN",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.96,
+        "evidence_line": 115,
+        "description": "File‑status '00' maps to open flag"
+      },
+      {
+        "source": "WS-PO-ST",
+        "target": "WS-PO-OPEN",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.96,
+        "evidence_line": 123,
+        "description": "File‑status '00' maps to open flag"
+      },
+      {
+        "source": "WS-ER-ST",
+        "target": "WS-ER-OPEN",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.96,
+        "evidence_line": 131,
+        "description": "File‑status '00' maps to open flag"
+      }
+    ],
+    "confidence": 0.94
+  },
+  "reconciliation": {
+    "parser_facts_count": 3,
+    "llm_findings_count": 69,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "POLICY-OUT",
+      "ERROR-OUT"
+    ],
+    "inferred_entities": [
+      "POLSTAT",
+      "MAIN",
+      "PROCESS-POLICY",
+      "DETERMINE-STATUS",
+      "WRITE-POLICY",
+      "WRITE-ERROR",
+      "CLOSE-FILES",
+      "VALIDATE-CALENDAR-DATE",
+      "SET-MAX-DAY",
+      "CHECK-LEAP-YEAR",
+      "PI-REC",
+      "PO-REC",
+      "ER-REC",
+      "PI-POLICY-NO",
+      "PI-CUSTOMER-ID",
+      "PI-AGENT-ID",
+      "PI-PRODUCT-TYPE",
+      "PI-POLICY-STATUS",
+      "PI-EFFECTIVE-DATE",
+      "PI-EXPIRY-DATE",
+      "PI-UPDATE-DT",
+      "PO-POLICY-NO",
+      "PO-CUSTOMER-ID",
+      "PO-AGENT-ID",
+      "PO-PRODUCT-TYPE",
+      "PO-POLICY-STATUS",
+      "PO-EFFECTIVE-DATE",
+      "PO-EXPIRY-DATE",
+      "PO-UPDATE-DT",
+      "ER-POLICY-NO",
+      "ER-ERROR-CODE",
+      "ER-ERROR-MESSAGE",
+      "WS-CURRENT-DATE",
+      "WS-CHANGED",
+      "STATUS-COUNTERS"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "POLSTAT",
+        "target": "MAIN",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 105,
+        "description": "MAIN procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "PROCESS-POLICY",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 172,
+        "description": "PROCESS-POLICY procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "DETERMINE-STATUS",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 199,
+        "description": "DETERMINE-STATUS procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "WRITE-POLICY",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 223,
+        "description": "WRITE-POLICY procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "WRITE-ERROR",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 233,
+        "description": "WRITE-ERROR procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "CLOSE-FILES",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 244,
+        "description": "CLOSE-FILES procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "VALIDATE-CALENDAR-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 278,
+        "description": "VALIDATE-CALENDAR-DATE procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "SET-MAX-DAY",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 293,
+        "description": "SET-MAX-DAY procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLSTAT",
+        "target": "CHECK-LEAP-YEAR",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 308,
+        "description": "CHECK-LEAP-YEAR procedure defined under program POLSTAT."
+      },
+      {
+        "source": "POLICY-IN",
+        "target": "PI-REC",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 37,
+        "description": "PI-REC is the record layout for the input file POLICY-IN."
+      },
+      {
+        "source": "POLICY-OUT",
+        "target": "PO-REC",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 50,
+        "description": "PO-REC is the record layout for the output file POLICY-OUT."
+      },
+      {
+        "source": "ERROR-OUT",
+        "target": "ER-REC",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 63,
+        "description": "ER-REC is the record layout for the error file ERROR-OUT."
+      },
+      {
+        "source": "VALIDATE-CALENDAR-DATE",
+        "target": "SET-MAX-DAY",
+        "relationship_type": "CALLS",
+        "confidence": 0.95,
+        "evidence_line": 293,
+        "description": "VALIDATE-CALENDAR-DATE invokes SET-MAX-DAY to determine the maximum day for a month."
+      },
+      {
+        "source": "SET-MAX-DAY",
+        "target": "CHECK-LEAP-YEAR",
+        "relationship_type": "CALLS",
+        "confidence": 0.95,
+        "evidence_line": 308,
+        "description": "SET-MAX-DAY calls CHECK-LEAP-YEAR when handling February."
+      },
+      {
+        "source": "DETERMINE-STATUS",
+        "target": "WS-CHANGED",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "DETERMINE-STATUS increments WS-CHANGED when a policy status is modified."
+      },
+      {
+        "source": "DETERMINE-STATUS",
+        "target": "STATUS-COUNTERS",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "DETERMINE-STATUS updates per‑status counters (CN, PN, AC, EX)."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser only reported file names; it did not capture tables, columns, or procedures present in the source.",
+      "Parser output lacked any structural relationships; these were inferred from the LLM knowledge base.",
+      "No naming conflicts were found; all inferred names matched the LLM profile."
+    ],
+    "gaps_detected": [
+      "Exact COBOL data‑type definitions for record fields (e.g., PIC clauses) are not present in the extracted knowledge.",
+      "External file‑handling routines (OPEN, READ, WRITE, CLOSE) and their return‑code handling are described only at a high level.",
+      "Specific error‑code definitions (S001, S002, S003) lack detailed descriptions beyond their identifiers.",
+      "Return‑code values for the program termination status are not enumerated."
+    ],
+    "overall_confidence": 0.92
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "PI-REC",
+        "PO-REC",
+        "ER-REC"
+      ],
+      "columns": [
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PO-POLICY-NO",
+        "PO-CUSTOMER-ID",
+        "PO-AGENT-ID",
+        "PO-PRODUCT-TYPE",
+        "PO-POLICY-STATUS",
+        "PO-EFFECTIVE-DATE",
+        "PO-EXPIRY-DATE",
+        "PO-WRITTEN-PREMIUM",
+        "PO-CREATE-DT",
+        "PO-UPDATE-DT",
+        "ER-POLICY-NO",
+        "ER-CODE",
+        "ER-MESSAGE"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Derive and update the status of insurance policies based on effective, expiry and current dates while preserving existing cancelled statuses, and write the updated policy records and any validation errors to output files.",
+      "narrative": "The program starts by obtaining the system current date and validating it. It opens three sequential files: POLICY-IN (input master policy records), POLICY-OUT (output updated records) and ERROR-OUT (error log). It then reads each input record in a loop. For each record it validates the effective and expiry dates, checks that expiry is not earlier than effective, and logs specific error records (S001, S002, S003) when validation fails. If dates are valid, the program copies the input record to the output layout, determines the new policy status using the rule: preserve 'CN', otherwise if current date < effective date set 'PN', else if current date <= expiry date set 'AC', else set 'EX'. When the status changes, the update date is set to the current date and a change counter is incremented. The updated record is written to POLICY-OUT. After all records are processed, the program closes all files, displays processing counters (read, written, changed, pending, active, expired, cancelled, rejected, I/O errors) and returns an appropriate return code.",
+      "business_domain": "Policy Management",
+      "business_rules": [
+        "If existing PI-POLICY-STATUS = 'CN' then retain 'CN' and count as cancelled.",
+        "If current date < PI-EFFECTIVE-DATE then set status to 'PN' (pending) and count pending.",
+        "If current date <= PI-EXPIRY-DATE then set status to 'AC' (active) and count active.",
+        "Otherwise set status to 'EX' (expired) and count expired.",
+        "Do not derive cancellation status because no cancellation date is available.",
+        "Effective date must be a valid calendar date; otherwise write error record with code S001.",
+        "Expiry date must be a valid calendar date; otherwise write error record with code S002.",
+        "Expiry date must not be earlier than effective date; otherwise write error record with code S003.",
+        "When status changes, PO-UPDATE-DT is set to the current processing date.",
+        "All file status codes must be '00' for successful open, read, write, or close; otherwise a fatal error is raised."
+      ],
+      "key_logic": [
+        "1. Obtain the system current date (YYYYMMDD) and store in WS-CURRENT-DATE.",
+        "2. Open the three sequential files (input, output, error) and verify file‑status codes.",
+        "3. Loop reading each input record until end‑of‑file or a fatal error occurs.",
+        "4. For each record, validate the EFFECTIVE‑DATE and EXPIRY‑DATE using VALIDATE-CALENDAR-DATE (numeric check, month range, day range, leap‑year handling).",
+        "5. If either date is invalid, write an error record to ERROR‑OUT with a specific error code (S001, S002, S003).",
+        "6. If dates are valid, call DETERMINE-STATUS to compute the new policy status:",
+        "   a. Preserve status 'CN' (cancelled).",
+        "   b. If current date < EFFECTIVE‑DATE → status 'PN' (pending).",
+        "   c. Else if current date <= EXPIRY‑DATE → status 'AC' (active).",
+        "   d. Else → status 'EX' (expired).",
+        "   e. Increment the appropriate status counter and, if the status changed, set PO-UPDATE-DT to the current date and increment WS-CHANGED.",
+        "7. Write the (possibly) updated PO-REC to POLICY‑OUT; on write failure set fatal error.",
+        "8. After processing all records, close all files, display counters, and return an appropriate return‑code.",
+        "9. Supporting routines:",
+        "   - VALIDATE-CALENDAR-DATE: checks numeric format, month 1‑12, day within month length, uses SET-MAX-DAY.",
+        "   - SET-MAX-DAY: determines max day for month, calls CHECK-LEAP-YEAR for February.",
+        "   - CHECK-LEAP-YEAR: implements Gregorian leap‑year rule (divisible by 400 or divisible by 4 but not by 100)."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "POLSTAT",
+        "MAIN",
+        "PROCESS-POLICY",
+        "DETERMINE-STATUS",
+        "WRITE-POLICY",
+        "WRITE-ERROR",
+        "CLOSE-FILES",
+        "VALIDATE-CALENDAR-DATE",
+        "SET-MAX-DAY",
+        "CHECK-LEAP-YEAR",
+        "PI-REC",
+        "PO-REC",
+        "ER-REC",
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-UPDATE-DT",
+        "PO-POLICY-NO",
+        "PO-CUSTOMER-ID",
+        "PO-AGENT-ID",
+        "PO-PRODUCT-TYPE",
+        "PO-POLICY-STATUS",
+        "PO-EFFECTIVE-DATE",
+        "PO-EXPIRY-DATE",
+        "PO-UPDATE-DT",
+        "ER-POLICY-NO",
+        "ER-ERROR-CODE",
+        "ER-ERROR-MESSAGE",
+        "WS-CURRENT-DATE",
+        "WS-CHANGED",
+        "STATUS-COUNTERS"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T001",
+          "rule_type": "CALCULATION",
+          "description": "Extract system current date (YYYYMMDD) from FUNCTION CURRENT-DATE and store in WS-CURRENT-DATE.",
+          "source_entities": [
+            "FUNCTION CURRENT-DATE"
+          ],
+          "target_entities": [
+            "WS-CURRENT-DATE"
+          ],
+          "expression": "WS-CURRENT-DATE = FUNCTION CURRENT-DATE(1:8)",
+          "line_number": 106,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T002",
+          "rule_type": "MAPPING",
+          "description": "Copy input record fields to output record before status evaluation.",
+          "source_entities": [
+            "PI-REC"
+          ],
+          "target_entities": [
+            "PO-REC"
+          ],
+          "expression": "MOVE PI-REC TO PO-REC",
+          "line_number": 200,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T003",
+          "rule_type": "CONDITIONAL",
+          "description": "If existing policy status is 'CN' (cancelled), preserve it in the output record and increment cancelled counter.",
+          "source_entities": [
+            "PI-POLICY-STATUS"
+          ],
+          "target_entities": [
+            "PO-POLICY-STATUS",
+            "WS-CANCELLED"
+          ],
+          "expression": "IF PI-POLICY-STATUS = 'CN' THEN PO-POLICY-STATUS = 'CN'; ADD 1 TO WS-CANCELLED",
+          "line_number": 201,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T004",
+          "rule_type": "CONDITIONAL",
+          "description": "If current date < effective date, set status to 'PN' (pending) and increment pending counter.",
+          "source_entities": [
+            "WS-CURRENT-DATE",
+            "PI-EFFECTIVE-DATE"
+          ],
+          "target_entities": [
+            "PO-POLICY-STATUS",
+            "WS-PENDING"
+          ],
+          "expression": "IF WS-CURRENT-DATE < PI-EFFECTIVE-DATE THEN PO-POLICY-STATUS = 'PN'; ADD 1 TO WS-PENDING",
+          "line_number": 205,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T005",
+          "rule_type": "CONDITIONAL",
+          "description": "If current date <= expiry date, set status to 'AC' (active) and increment active counter.",
+          "source_entities": [
+            "WS-CURRENT-DATE",
+            "PI-EXPIRY-DATE"
+          ],
+          "target_entities": [
+            "PO-POLICY-STATUS",
+            "WS-ACTIVE"
+          ],
+          "expression": "IF WS-CURRENT-DATE <= PI-EXPIRY-DATE THEN PO-POLICY-STATUS = 'AC'; ADD 1 TO WS-ACTIVE",
+          "line_number": 209,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T006",
+          "rule_type": "CONDITIONAL",
+          "description": "Otherwise set status to 'EX' (expired) and increment expired counter.",
+          "source_entities": [
+            "WS-CURRENT-DATE",
+            "PI-EXPIRY-DATE"
+          ],
+          "target_entities": [
+            "PO-POLICY-STATUS",
+            "WS-EXPIRED"
+          ],
+          "expression": "ELSE PO-POLICY-STATUS = 'EX'; ADD 1 TO WS-EXPIRED",
+          "line_number": 213,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T007",
+          "rule_type": "CALCULATION",
+          "description": "If the derived status differs from the original status, mark record as changed, set PO-UPDATE-DT to current date, and increment changed counter.",
+          "source_entities": [
+            "PO-POLICY-STATUS",
+            "PI-POLICY-STATUS",
+            "WS-CURRENT-DATE"
+          ],
+          "target_entities": [
+            "WS-CHANGED",
+            "PO-UPDATE-DT"
+          ],
+          "expression": "IF PO-POLICY-STATUS NOT = PI-POLICY-STATUS THEN ADD 1 TO WS-CHANGED; MOVE WS-CURRENT-DATE TO PO-UPDATE-DT",
+          "line_number": 218,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T008",
+          "rule_type": "FILTER",
+          "description": "Validate that a date string is numeric, month is 1‑12, and day is within the month’s maximum day; set WS-DATE-VALID to 'Y' when valid.",
+          "source_entities": [
+            "WS-DATE-IN",
+            "WS-YEAR",
+            "WS-MONTH",
+            "WS-DAY",
+            "WS-MAX-DAY"
+          ],
+          "target_entities": [
+            "WS-DATE-VALID"
+          ],
+          "expression": "IF WS-DATE-IN NUMERIC AND WS-YEAR>0 AND 1<=WS-MONTH<=12 AND 1<=WS-DAY<=WS-MAX-DAY THEN WS-DATE-VALID='Y'",
+          "line_number": 279,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T009",
+          "rule_type": "CALCULATION",
+          "description": "Derive year, month, and day components from an 8‑digit date string.",
+          "source_entities": [
+            "WS-DATE-IN"
+          ],
+          "target_entities": [
+            "WS-YEAR",
+            "WS-MONTH",
+            "WS-DAY"
+          ],
+          "expression": "WS-YEAR = WS-DATE-IN(1:4); WS-MONTH = WS-DATE-IN(5:2); WS-DAY = WS-DATE-IN(7:2)",
+          "line_number": 281,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T010",
+          "rule_type": "CALCULATION",
+          "description": "Determine the maximum day for a month, handling February leap‑year logic.",
+          "source_entities": [
+            "WS-MONTH",
+            "WS-LEAP"
+          ],
+          "target_entities": [
+            "WS-MAX-DAY"
+          ],
+          "expression": "EVALUATE WS-MONTH ... WHEN 2 IF WS-LEAP='Y' THEN 29 ELSE 28",
+          "line_number": 294,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T011",
+          "rule_type": "CALCULATION",
+          "description": "Leap‑year rule: year divisible by 400 or divisible by 4 but not by 100.",
+          "source_entities": [
+            "WS-YEAR"
+          ],
+          "target_entities": [
+            "WS-LEAP"
+          ],
+          "expression": "IF MOD(WS-YEAR,400)=0 OR (MOD(WS-YEAR,4)=0 AND MOD(WS-YEAR,100)<>0) THEN WS-LEAP='Y' ELSE WS-LEAP='N'",
+          "line_number": 309,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T012",
+          "rule_type": "BUSINESS_RULE",
+          "description": "If an input record fails any date validation, write an error record with a specific error code (S001, S002, S003) to ERROR‑OUT.",
+          "source_entities": [
+            "PI-EFFECTIVE-DATE",
+            "PI-EXPIRY-DATE",
+            "WS-DATE-VALID",
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "target_entities": [
+            "ER-REC"
+          ],
+          "expression": "WRITE ER-REC WHEN validation fails",
+          "line_number": 173,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T013",
+          "rule_type": "AGGREGATION",
+          "description": "Accumulate processing statistics (read, written, changed, pending, active, expired, cancelled, rejected, I/O errors) in WS-COUNTERS.",
+          "source_entities": [
+            "WS-READ",
+            "WS-WRITTEN",
+            "WS-CHANGED",
+            "WS-PENDING",
+            "WS-ACTIVE",
+            "WS-EXPIRED",
+            "WS-CANCELLED",
+            "WS-REJECTED",
+            "WS-IO-ERRORS"
+          ],
+          "target_entities": [
+            "DISPLAY statements"
+          ],
+          "expression": "ADD 1 TO respective counter at each event",
+          "line_number": 160,
+          "confidence": 0.95
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "POLSTAT",
+          "target": "MAIN",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 105,
+          "description": "MAIN procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "PROCESS-POLICY",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 172,
+          "description": "PROCESS-POLICY procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "DETERMINE-STATUS",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 199,
+          "description": "DETERMINE-STATUS procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "WRITE-POLICY",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 223,
+          "description": "WRITE-POLICY procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "WRITE-ERROR",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 233,
+          "description": "WRITE-ERROR procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "CLOSE-FILES",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 244,
+          "description": "CLOSE-FILES procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "VALIDATE-CALENDAR-DATE",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 278,
+          "description": "VALIDATE-CALENDAR-DATE procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "SET-MAX-DAY",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 293,
+          "description": "SET-MAX-DAY procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLSTAT",
+          "target": "CHECK-LEAP-YEAR",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 308,
+          "description": "CHECK-LEAP-YEAR procedure defined under program POLSTAT."
+        },
+        {
+          "source": "POLICY-IN",
+          "target": "PI-REC",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": 37,
+          "description": "PI-REC is the record layout for the input file POLICY-IN."
+        },
+        {
+          "source": "POLICY-OUT",
+          "target": "PO-REC",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": 50,
+          "description": "PO-REC is the record layout for the output file POLICY-OUT."
+        },
+        {
+          "source": "ERROR-OUT",
+          "target": "ER-REC",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": 63,
+          "description": "ER-REC is the record layout for the error file ERROR-OUT."
+        },
+        {
+          "source": "VALIDATE-CALENDAR-DATE",
+          "target": "SET-MAX-DAY",
+          "relationship_type": "CALLS",
+          "confidence": 0.95,
+          "evidence_line": 293,
+          "description": "VALIDATE-CALENDAR-DATE invokes SET-MAX-DAY to determine the maximum day for a month."
+        },
+        {
+          "source": "SET-MAX-DAY",
+          "target": "CHECK-LEAP-YEAR",
+          "relationship_type": "CALLS",
+          "confidence": 0.95,
+          "evidence_line": 308,
+          "description": "SET-MAX-DAY calls CHECK-LEAP-YEAR when handling February."
+        },
+        {
+          "source": "DETERMINE-STATUS",
+          "target": "WS-CHANGED",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "DETERMINE-STATUS increments WS-CHANGED when a policy status is modified."
+        },
+        {
+          "source": "DETERMINE-STATUS",
+          "target": "STATUS-COUNTERS",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "DETERMINE-STATUS updates per‑status counters (CN, PN, AC, EX)."
+        }
+      ],
+      "gaps": [
+        "Exact COBOL data‑type definitions for record fields (e.g., PIC clauses) are not present in the extracted knowledge.",
+        "External file‑handling routines (OPEN, READ, WRITE, CLOSE) and their return‑code handling are described only at a high level.",
+        "Specific error‑code definitions (S001, S002, S003) lack detailed descriptions beyond their identifiers.",
+        "Return‑code values for the program termination status are not enumerated."
+      ]
+    },
+    "overall_confidence": 0.92
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:POLSTATUS.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "POLSTATUS.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\POLSTATUS.CBL",
+        "total_lines": 319
+      }
+    },
+    {
+      "id": "PROGRAM:POLSTAT",
+      "label": "Program",
+      "properties": {
+        "name": "POLSTAT",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": null,
+        "line_number": 1
+      }
+    },
+    {
+      "id": "PROCEDURE:MAIN",
+      "label": "Procedure",
+      "properties": {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 105
+      }
+    },
+    {
+      "id": "PROCEDURE:PROCESS-POLICY",
+      "label": "Procedure",
+      "properties": {
+        "name": "PROCESS-POLICY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 172
+      }
+    },
+    {
+      "id": "PROCEDURE:DETERMINE-STATUS",
+      "label": "Procedure",
+      "properties": {
+        "name": "DETERMINE-STATUS",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 199
+      }
+    },
+    {
+      "id": "PROCEDURE:WRITE-POLICY",
+      "label": "Procedure",
+      "properties": {
+        "name": "WRITE-POLICY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 223
+      }
+    },
+    {
+      "id": "PROCEDURE:WRITE-ERROR",
+      "label": "Procedure",
+      "properties": {
+        "name": "WRITE-ERROR",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 233
+      }
+    },
+    {
+      "id": "PROCEDURE:CLOSE-FILES",
+      "label": "Procedure",
+      "properties": {
+        "name": "CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 244
+      }
+    },
+    {
+      "id": "PROCEDURE:VALIDATE-CALENDAR-DATE",
+      "label": "Procedure",
+      "properties": {
+        "name": "VALIDATE-CALENDAR-DATE",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 278
+      }
+    },
+    {
+      "id": "PROCEDURE:SET-MAX-DAY",
+      "label": "Procedure",
+      "properties": {
+        "name": "SET-MAX-DAY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 293
+      }
+    },
+    {
+      "id": "PROCEDURE:CHECK-LEAP-YEAR",
+      "label": "Procedure",
+      "properties": {
+        "name": "CHECK-LEAP-YEAR",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLSTAT",
+        "line_number": 308
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 27
+      }
+    },
+    {
+      "id": "FILE:POLICY-OUT",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 29
+      }
+    },
+    {
+      "id": "FILE:ERROR-OUT",
+      "label": "File",
+      "properties": {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 31
+      }
+    },
+    {
+      "id": "TABLE:PI-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 37
+      }
+    },
+    {
+      "id": "TABLE:PO-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PO-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-OUT",
+        "line_number": 50
+      }
+    },
+    {
+      "id": "TABLE:ER-REC",
+      "label": "Table",
+      "properties": {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "ERROR-OUT",
+        "line_number": 63
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "X(12)",
+        "parent": "PI-REC",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "COLUMN:PI-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "X(9)",
+        "parent": "PI-REC",
+        "line_number": 39
+      }
+    },
+    {
+      "id": "COLUMN:PI-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "X(9)",
+        "parent": "PI-REC",
+        "line_number": 40
+      }
+    },
+    {
+      "id": "COLUMN:PI-PRODUCT-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "X(2)",
+        "parent": "PI-REC",
+        "line_number": 41
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "X(2)",
+        "parent": "PI-REC",
+        "line_number": 42
+      }
+    },
+    {
+      "id": "COLUMN:PI-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PI-REC",
+        "line_number": 43
+      }
+    },
+    {
+      "id": "COLUMN:PI-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PI-REC",
+        "line_number": 44
+      }
+    },
+    {
+      "id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "9(9)V99",
+        "parent": "PI-REC",
+        "line_number": 45
+      }
+    },
+    {
+      "id": "COLUMN:PI-CREATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PI-REC",
+        "line_number": 46
+      }
+    },
+    {
+      "id": "COLUMN:PI-UPDATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PI-REC",
+        "line_number": 47
+      }
+    },
+    {
+      "id": "COLUMN:PO-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "X(12)",
+        "parent": "PO-REC",
+        "line_number": 51
+      }
+    },
+    {
+      "id": "COLUMN:PO-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PO-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "X(9)",
+        "parent": "PO-REC",
+        "line_number": 52
+      }
+    },
+    {
+      "id": "COLUMN:PO-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PO-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "X(9)",
+        "parent": "PO-REC",
+        "line_number": 53
+      }
+    },
+    {
+      "id": "COLUMN:PO-PRODUCT-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PO-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "X(2)",
+        "parent": "PO-REC",
+        "line_number": 54
+      }
+    },
+    {
+      "id": "COLUMN:PO-POLICY-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PO-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "X(2)",
+        "parent": "PO-REC",
+        "line_number": 55
+      }
+    },
+    {
+      "id": "COLUMN:PO-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PO-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PO-REC",
+        "line_number": 56
+      }
+    },
+    {
+      "id": "COLUMN:PO-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PO-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PO-REC",
+        "line_number": 57
+      }
+    },
+    {
+      "id": "COLUMN:PO-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "9(9)V99",
+        "parent": "PO-REC",
+        "line_number": 58
+      }
+    },
+    {
+      "id": "COLUMN:PO-CREATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PO-CREATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PO-REC",
+        "line_number": 59
+      }
+    },
+    {
+      "id": "COLUMN:PO-UPDATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PO-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "9(8)",
+        "parent": "PO-REC",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:ER-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "X(12)",
+        "parent": "ER-REC",
+        "line_number": 64
+      }
+    },
+    {
+      "id": "COLUMN:ER-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "data_type": "X(4)",
+        "parent": "ER-REC",
+        "line_number": 65
+      }
+    },
+    {
+      "id": "COLUMN:ER-MESSAGE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "data_type": "X(54)",
+        "parent": "ER-REC",
+        "line_number": 66
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PI-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PI-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "XX",
+        "parent": "WS-STATUS",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PO-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PO-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "XX",
+        "parent": "WS-STATUS",
+        "line_number": 71
+      }
+    },
+    {
+      "id": "VARIABLE:WS-ER-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-ER-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "XX",
+        "parent": "WS-STATUS",
+        "line_number": 72
+      }
+    },
+    {
+      "id": "VARIABLE:WS-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 74
+      }
+    },
+    {
+      "id": "VARIABLE:END-OF-FILE",
+      "label": "Variable",
+      "properties": {
+        "name": "END-OF-FILE",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": "WS-SW",
+        "line_number": 75
+      }
+    },
+    {
+      "id": "VARIABLE:WS-FATAL",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-FATAL",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 76
+      }
+    },
+    {
+      "id": "VARIABLE:FATAL-ERROR",
+      "label": "Variable",
+      "properties": {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": "WS-SW",
+        "line_number": 77
+      }
+    },
+    {
+      "id": "VARIABLE:WS-DATE-VALID",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-DATE-VALID",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 78
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PI-OPEN",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PI-OPEN",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 79
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PO-OPEN",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PO-OPEN",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 80
+      }
+    },
+    {
+      "id": "VARIABLE:WS-ER-OPEN",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-ER-OPEN",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-SW",
+        "line_number": 81
+      }
+    },
+    {
+      "id": "VARIABLE:WS-CURRENT-DATE",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-CURRENT-DATE",
+        "entity_type": "VARIABLE",
+        "data_type": "9(8)",
+        "parent": "WS-DATE",
+        "line_number": 83
+      }
+    },
+    {
+      "id": "VARIABLE:WS-DATE-IN",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-DATE-IN",
+        "entity_type": "VARIABLE",
+        "data_type": "9(8)",
+        "parent": "WS-DATE",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "VARIABLE:WS-YEAR",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-YEAR",
+        "entity_type": "VARIABLE",
+        "data_type": "9(4)",
+        "parent": "WS-DATE",
+        "line_number": 85
+      }
+    },
+    {
+      "id": "VARIABLE:WS-MONTH",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-MONTH",
+        "entity_type": "VARIABLE",
+        "data_type": "99",
+        "parent": "WS-DATE",
+        "line_number": 86
+      }
+    },
+    {
+      "id": "VARIABLE:WS-DAY",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-DAY",
+        "entity_type": "VARIABLE",
+        "data_type": "99",
+        "parent": "WS-DATE",
+        "line_number": 87
+      }
+    },
+    {
+      "id": "VARIABLE:WS-MAX-DAY",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-MAX-DAY",
+        "entity_type": "VARIABLE",
+        "data_type": "99",
+        "parent": "WS-DATE",
+        "line_number": 88
+      }
+    },
+    {
+      "id": "VARIABLE:WS-LEAP",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-LEAP",
+        "entity_type": "VARIABLE",
+        "data_type": "X",
+        "parent": "WS-DATE",
+        "line_number": 89
+      }
+    },
+    {
+      "id": "VARIABLE:WS-REM4",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-REM4",
+        "entity_type": "VARIABLE",
+        "data_type": "9(4)",
+        "parent": "WS-DATE",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "VARIABLE:WS-REM100",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-REM100",
+        "entity_type": "VARIABLE",
+        "data_type": "9(4)",
+        "parent": "WS-DATE",
+        "line_number": 91
+      }
+    },
+    {
+      "id": "VARIABLE:WS-REM400",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-REM400",
+        "entity_type": "VARIABLE",
+        "data_type": "9(4)",
+        "parent": "WS-DATE",
+        "line_number": 92
+      }
+    },
+    {
+      "id": "VARIABLE:WS-READ",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-READ",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 94
+      }
+    },
+    {
+      "id": "VARIABLE:WS-WRITTEN",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-WRITTEN",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 95
+      }
+    },
+    {
+      "id": "VARIABLE:WS-CHANGED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-CHANGED",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 96
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PENDING",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PENDING",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 97
+      }
+    },
+    {
+      "id": "VARIABLE:WS-ACTIVE",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-ACTIVE",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "VARIABLE:WS-EXPIRED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-EXPIRED",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 99
+      }
+    },
+    {
+      "id": "VARIABLE:WS-CANCELLED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-CANCELLED",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 100
+      }
+    },
+    {
+      "id": "VARIABLE:WS-REJECTED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-REJECTED",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 101
+      }
+    },
+    {
+      "id": "VARIABLE:WS-IO-ERRORS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "VARIABLE",
+        "data_type": "9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 102
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T001",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Extract system current date (YYYYMMDD) from FUNCTION CURRENT-DATE and store in WS-CURRENT-DATE.",
+        "expression": "WS-CURRENT-DATE = FUNCTION CURRENT-DATE(1:8)",
+        "line_number": 106
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T002",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T002",
+        "rule_type": "MAPPING",
+        "description": "Copy input record fields to output record before status evaluation.",
+        "expression": "MOVE PI-REC TO PO-REC",
+        "line_number": 200
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T003",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T003",
+        "rule_type": "CONDITIONAL",
+        "description": "If existing policy status is 'CN' (cancelled), preserve it in the output record and increment cancelled counter.",
+        "expression": "IF PI-POLICY-STATUS = 'CN' THEN PO-POLICY-STATUS = 'CN'; ADD 1 TO WS-CANCELLED",
+        "line_number": 201
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T004",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "If current date < effective date, set status to 'PN' (pending) and increment pending counter.",
+        "expression": "IF WS-CURRENT-DATE < PI-EFFECTIVE-DATE THEN PO-POLICY-STATUS = 'PN'; ADD 1 TO WS-PENDING",
+        "line_number": 205
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T005",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T005",
+        "rule_type": "CONDITIONAL",
+        "description": "If current date <= expiry date, set status to 'AC' (active) and increment active counter.",
+        "expression": "IF WS-CURRENT-DATE <= PI-EXPIRY-DATE THEN PO-POLICY-STATUS = 'AC'; ADD 1 TO WS-ACTIVE",
+        "line_number": 209
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T006",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T006",
+        "rule_type": "CONDITIONAL",
+        "description": "Otherwise set status to 'EX' (expired) and increment expired counter.",
+        "expression": "ELSE PO-POLICY-STATUS = 'EX'; ADD 1 TO WS-EXPIRED",
+        "line_number": 213
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T007",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T007",
+        "rule_type": "CALCULATION",
+        "description": "If the derived status differs from the original status, mark record as changed, set PO-UPDATE-DT to current date, and increment changed counter.",
+        "expression": "IF PO-POLICY-STATUS NOT = PI-POLICY-STATUS THEN ADD 1 TO WS-CHANGED; MOVE WS-CURRENT-DATE TO PO-UPDATE-DT",
+        "line_number": 218
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T008",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T008",
+        "rule_type": "FILTER",
+        "description": "Validate that a date string is numeric, month is 1‑12, and day is within the month’s maximum day; set WS-DATE-VALID to 'Y' when valid.",
+        "expression": "IF WS-DATE-IN NUMERIC AND WS-YEAR>0 AND 1<=WS-MONTH<=12 AND 1<=WS-DAY<=WS-MAX-DAY THEN WS-DATE-VALID='Y'",
+        "line_number": 279
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T009",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T009",
+        "rule_type": "CALCULATION",
+        "description": "Derive year, month, and day components from an 8‑digit date string.",
+        "expression": "WS-YEAR = WS-DATE-IN(1:4); WS-MONTH = WS-DATE-IN(5:2); WS-DAY = WS-DATE-IN(7:2)",
+        "line_number": 281
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T010",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T010",
+        "rule_type": "CALCULATION",
+        "description": "Determine the maximum day for a month, handling February leap‑year logic.",
+        "expression": "EVALUATE WS-MONTH ... WHEN 2 IF WS-LEAP='Y' THEN 29 ELSE 28",
+        "line_number": 294
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T011",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T011",
+        "rule_type": "CALCULATION",
+        "description": "Leap‑year rule: year divisible by 400 or divisible by 4 but not by 100.",
+        "expression": "IF MOD(WS-YEAR,400)=0 OR (MOD(WS-YEAR,4)=0 AND MOD(WS-YEAR,100)<>0) THEN WS-LEAP='Y' ELSE WS-LEAP='N'",
+        "line_number": 309
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T012",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T012",
+        "rule_type": "BUSINESS_RULE",
+        "description": "If an input record fails any date validation, write an error record with a specific error code (S001, S002, S003) to ERROR‑OUT.",
+        "expression": "WRITE ER-REC WHEN validation fails",
+        "line_number": 173
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLSTATUS.CBL:T013",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T013",
+        "rule_type": "AGGREGATION",
+        "description": "Accumulate processing statistics (read, written, changed, pending, active, expired, cancelled, rejected, I/O errors) in WS-COUNTERS.",
+        "expression": "ADD 1 TO respective counter at each event",
+        "line_number": 160
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROGRAM:POLSTAT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:MAIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:PROCESS-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:DETERMINE-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:WRITE-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:WRITE-ERROR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:CLOSE-FILES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:VALIDATE-CALENDAR-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:SET-MAX-DAY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "PROCEDURE:CHECK-LEAP-YEAR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "FILE:POLICY-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "FILE:ERROR-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "TABLE:PI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "TABLE:PO-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "TABLE:ER-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PI-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:PO-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:ER-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:ER-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "COLUMN:ER-MESSAGE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-PI-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-PO-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-ER-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:END-OF-FILE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-FATAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:FATAL-ERROR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-DATE-VALID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-PI-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-PO-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-ER-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-CURRENT-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-DATE-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-YEAR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-MONTH",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-DAY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-MAX-DAY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-LEAP",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-REM4",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-REM100",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-REM400",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-READ",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-WRITTEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-CHANGED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-PENDING",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-ACTIVE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-EXPIRED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-CANCELLED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-REJECTED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLSTATUS.CBL",
+      "target_id": "VARIABLE:WS-IO-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TRANSFORMATION:POLSTATUS.CBL:T002",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:POLSTATUS.CBL:T002",
+      "target_id": "TABLE:PO-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:POLSTATUS.CBL:T012",
+      "target_id": "TABLE:ER-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:MAIN",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 105,
+        "description": "MAIN procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:PROCESS-POLICY",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 172,
+        "description": "PROCESS-POLICY procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:DETERMINE-STATUS",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 199,
+        "description": "DETERMINE-STATUS procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:WRITE-POLICY",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 223,
+        "description": "WRITE-POLICY procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:WRITE-ERROR",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 233,
+        "description": "WRITE-ERROR procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:CLOSE-FILES",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 244,
+        "description": "CLOSE-FILES procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:VALIDATE-CALENDAR-DATE",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 278,
+        "description": "VALIDATE-CALENDAR-DATE procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:SET-MAX-DAY",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 293,
+        "description": "SET-MAX-DAY procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLSTAT",
+      "target_id": "TABLE:CHECK-LEAP-YEAR",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 308,
+        "description": "CHECK-LEAP-YEAR procedure defined under program POLSTAT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:PI-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 37,
+        "description": "PI-REC is the record layout for the input file POLICY-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-OUT",
+      "target_id": "TABLE:PO-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 50,
+        "description": "PO-REC is the record layout for the output file POLICY-OUT."
+      }
+    },
+    {
+      "source_id": "TABLE:ERROR-OUT",
+      "target_id": "TABLE:ER-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 63,
+        "description": "ER-REC is the record layout for the error file ERROR-OUT."
+      }
+    },
+    {
+      "source_id": "TABLE:VALIDATE-CALENDAR-DATE",
+      "target_id": "TABLE:SET-MAX-DAY",
+      "type": "CALLS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 293,
+        "description": "VALIDATE-CALENDAR-DATE invokes SET-MAX-DAY to determine the maximum day for a month."
+      }
+    },
+    {
+      "source_id": "TABLE:SET-MAX-DAY",
+      "target_id": "TABLE:CHECK-LEAP-YEAR",
+      "type": "CALLS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 308,
+        "description": "SET-MAX-DAY calls CHECK-LEAP-YEAR when handling February."
+      }
+    },
+    {
+      "source_id": "TABLE:DETERMINE-STATUS",
+      "target_id": "TABLE:WS-CHANGED",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "DETERMINE-STATUS increments WS-CHANGED when a policy status is modified."
+      }
+    },
+    {
+      "source_id": "TABLE:DETERMINE-STATUS",
+      "target_id": "TABLE:STATUS-COUNTERS",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "DETERMINE-STATUS updates per‑status counters (CN, PN, AC, EX)."
+      }
+    }
+  ]
+}

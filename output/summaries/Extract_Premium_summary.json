@@ -1,0 +1,48 @@
+{
+  "purpose": "Extract premium records from the Guidewire PolicyCenter PostgreSQL source, validate referential integrity to policy periods, enforce financial business rules (BR‑07, BR‑08, etc.), aggregate premiums by policy period, and load the clean data into the data‑warehouse staging layer while quarantining any rejected rows and logging audit information.",
+  "high_level_narrative": "When the package starts it inserts a row into etl.etl_audit_log marking the run as RUNNING. The main data flow then reads all columns from the source table public.premium via an ADO.NET PostgreSQL source. Each row is passed to a Lookup that checks that policy_period_id exists in stg.policy_period; non‑matching rows are sent to the error stream. Matching rows flow to a Derived Column that trims and upper‑cases currency_code. A second Derived Column adds ETL metadata (etl_load_date) and calculates expected_commission_amount (commission_rate * written_premium / 100). The rows are then evaluated by a Conditional Split that enforces business rules: earned_premium ≤ written_premium (BR‑07), rounding tolerance of 1.00 between written, earned and unearned premiums (BR‑08), written_premium ≥ 0, commission_rate between 0 and 100, and transaction_date/as_of_date not in the future. Valid rows are aggregated by policy_period_id, summing written, earned, unearned premiums, commission_amount and operating_expense. The aggregated result is loaded into stg.premium using fast‑load bulk insert. All error rows (lookup no‑match, conditional‑split failures, source read errors) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, the package updates etl.etl_audit_log with end_time, status COMPLETED and row counts. An OnError event handler captures any runtime errors and inserts details into etl.etl_error_log.",
+  "business_domain": "Premium (PolicyCenter) – Insurance data warehouse loading and validation.",
+  "inputs": [
+    "public.premium (Guidewire PolicyCenter source database)",
+    "stg.policy_period (Data warehouse staging table for policy periods)",
+    "etl.etl_audit_log (audit table for logging package execution)",
+    "etl.etl_error_log (error logging table, used by OnError handler)"
+  ],
+  "outputs": [
+    "stg.premium (staging table for validated premium records)",
+    "stg.error_quarantine (table capturing rejected/invalid rows)",
+    "etl.etl_audit_log (updated with end_time, rows_read, rows_inserted, rows_rejected)",
+    "etl.etl_error_log (records runtime errors)"
+  ],
+  "key_transformations": [
+    "SQL SELECT premium_id, policy_period_id, written_premium, earned_premium, unearned_premium, transaction_date, currency_code, commission_rate, commission_amount, operating_expense, as_of_date FROM public.premium",
+    "Lookup validation of policy_period_id against stg.policy_period (full cache, redirect no‑match to error)",
+    "Derived Column: UPPER(TRIM(currency_code)) to standardize currency codes",
+    "Derived Column: GETDATE() → etl_load_date; commission_rate * written_premium / 100 → expected_commission_amount",
+    "Conditional Split applying multiple business rule checks (BR‑07, BR‑08, premium non‑negative, commission_rate range, date not future)",
+    "Aggregation by policy_period_id with SUM of written_premium, earned_premium, unearned_premium, commission_amount, operating_expense",
+    "Union All of all error streams (lookup no‑match, conditional split invalid rows, source error output)",
+    "Fast‑load bulk insert into stg.premium (MaximumInsertCommitSize=10000)",
+    "Insert into stg.error_quarantine for error rows",
+    "Audit log INSERT at start and UPDATE at end with row counts"
+  ],
+  "key_dependencies": [
+    "Connection Manager CM_Guidewire_PG_Source (Npgsql PostgreSQL provider)",
+    "Connection Manager CM_DW_PG_Target (Npgsql PostgreSQL provider)",
+    "Source table public.premium",
+    "Reference table stg.policy_period",
+    "Target tables stg.premium, stg.error_quarantine",
+    "Audit tables etl.etl_audit_log, etl.etl_error_log",
+    "SSIS components: ADO.NET PostgreSQL Source, Lookup, Derived Column, Conditional Split, Aggregation, Union All, OLE DB Destination",
+    "GETDATE() function for current timestamp"
+  ],
+  "business_rules": [
+    "BR‑01 / BR‑05: policy_period_id must exist in stg.policy_period (referential integrity)",
+    "BR‑07: earned_premium must be less than or equal to written_premium",
+    "BR‑08: Absolute difference between written_premium and the sum of earned_premium plus unearned_premium must be ≤ 1.00 (rounding tolerance)",
+    "Written premium must be non‑negative (written_premium ≥ 0)",
+    "Commission rate must be between 0.00 and 100.00 inclusive",
+    "Transaction date and as_of_date must not be in the future (≤ current system date)",
+    "Currency codes are normalized to upper case with no surrounding whitespace"
+  ]
+}

@@ -1,0 +1,38 @@
+# Source Code Summary: Master_ETL_Guidewire
+
+**Business Domain:** Insurance PolicyCenter Data Warehouse (Policy, Claims, Premium, KPI aggregation)
+
+## Purpose
+Orchestrates the full load of Guidewire PolicyCenter data into the insurance data warehouse by executing child ETL packages in foreign‑key dependency order and recording audit information for start, completion, and errors.
+
+## High-Level Narrative
+When the Master_ETL_Guidewire package runs, it first logs a 'RUNNING' entry for the master load in the etl.etl_audit_log table using an Execute SQL Task. It then launches the child extraction packages via Execute Package Tasks. Precedence constraints enforce the required sequence: Account and Producer packages run in parallel, followed by Policy (which waits for both). After Policy, Job and Claims run concurrently. Job must finish before PolicyPeriod, which in turn must finish before Location, Coverage, and Premium packages. Both Premium and Claims must complete before the KPI Aggregates package runs. Once all child packages have succeeded, a final Execute SQL Task updates the audit log entry to 'COMPLETED' and records the end time. An OnError event handler captures any failure and can log it (definition truncated in the source). The package uses a single PostgreSQL ADO.NET connection manager (CM_DW_PG_Target) to write audit records.
+
+## Inputs
+- CM_DW_PG_Target – ADO.NET Npgsql connection to the PostgreSQL data warehouse (insurance_dw)
+- etl.etl_audit_log table (read for status check during end‑log update)
+- Source System 3 Guidewire PostgreSQL (accessed indirectly by child Extract_*.dtsx packages)
+
+## Outputs
+- etl.etl_audit_log table – INSERT start record and UPDATE end record
+- All target dimensional and fact tables populated by child packages: Account, Producer, Policy, Job, Claims, PolicyPeriod, Location, Coverage, Premium, KPI aggregates
+
+## Key Transformations
+- No data transformation is performed in the master package; it solely orchestrates execution and records audit timestamps and status values.
+
+## Key Dependencies
+- Connection manager CM_DW_PG_Target (Npgsql PostgreSQL provider)
+- ExecuteSQLTask (for audit logging)
+- ExecutePackageTask (to run child packages)
+- Child packages: Extract_Account.dtsx, Extract_Producer.dtsx, Extract_Policy.dtsx, Extract_Job.dtsx, Extract_Claims.dtsx, Extract_PolicyPeriod.dtsx, Extract_Location.dtsx, Extract_Coverage.dtsx, Extract_Premium.dtsx, Extract_KPI_Aggregates.dtsx
+- OnError event handler (SQL task to log failures)
+
+## Business Rules
+- Audit logging must insert a row with status='RUNNING' at package start and update the same row to status='COMPLETED' with end_time at package end.
+- Execution order must respect foreign‑key dependencies: Account & Producer → Policy → Job & Claims → PolicyPeriod → Location, Coverage, Premium → KPI Aggregates.
+- Both Account and Producer must complete before Policy starts.
+- Policy must complete before Job and Claims start.
+- Job must complete before PolicyPeriod starts.
+- PolicyPeriod must complete before Location, Coverage, and Premium start.
+- KPI Aggregates package runs only after both Premium and Claims have completed.
+- If any task fails, the OnError handler is triggered to record the failure (error handling logic defined in the truncated event handler).

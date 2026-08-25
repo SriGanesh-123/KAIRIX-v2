@@ -1,0 +1,34 @@
+# Source Code Summary: RPTEXTRACT
+
+**Business Domain:** Insurance Premium and Policy Reporting
+
+## Purpose
+Generate a monthly insurance report by merging policy data with premium data, calculating unearned premium for each policy, and appending a static KPI summary to the output file.
+
+## High-Level Narrative
+The program opens the sequential files POLICY.DAT (policy records) and PREMIUM.DAT (premium records) for input and creates MONTHLY_REPORT.TXT for output. It writes a header line describing the columns. It then enters a loop that reads one policy record at a time; for each policy it reads the next premium record, computes the unearned premium as WRITTEN-PREMIUM minus EARNED-PREMIUM, moves the month constant and all relevant fields into a report‑record structure (defined in the RPTEXTRACT copybook), and writes the assembled line to the report file. When the end of the policy file is reached, the loop terminates. After the data rows, the program performs a sub‑paragraph that writes a series of hard‑coded KPI summary lines (total policies, active, pending, expired, cancelled, and a validation that WRITTEN = EARNED + UNEARNED). Finally, it closes all files and stops execution.
+
+## Inputs
+- POLICY-IN (POLICY.DAT) – sequential file containing policy number, customer ID, agent ID, product code, and status
+- PREMIUM-IN (PREMIUM.DAT) – sequential file containing policy number, written premium, and earned premium
+
+## Outputs
+- REPORT-OUT (MONTHLY_REPORT.TXT) – sequential text file containing the header, one line per policy with calculated unearned premium, and a KPI summary section
+
+## Key Transformations
+- Compute WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM for each policy
+- Map month constant (WS-REPORT-MONTH) and all policy/premium fields into the report record layout (RPTEXTRACT copybook)
+- Concatenate fields into a pipe‑delimited line written to the output file
+- Append static KPI summary lines with pre‑calculated totals
+
+## Key Dependencies
+- Copybook RPTEXTRACT (defines REPORT-RECORD layout fields such as RPT-REPORT-MONTH, RPT-POLICY-NO, etc.)
+- File definitions in the ENVIRONMENT DIVISION for POLICY-IN, PREMIUM-IN, and REPORT-OUT
+- Sequential file I/O operations (OPEN, READ, WRITE, CLOSE) provided by the COBOL runtime
+
+## Business Rules
+- Unearned premium must equal written premium minus earned premium
+- Report month is fixed to the value '202607' (July 2026)
+- Each policy record is assumed to have a matching premium record in the same order
+- KPI summary totals are hard‑coded (e.g., TOTAL POLICIES = 14500, ACTIVE POLICIES = 13100, etc.)
+- Status codes are carried through unchanged from the policy file to the report

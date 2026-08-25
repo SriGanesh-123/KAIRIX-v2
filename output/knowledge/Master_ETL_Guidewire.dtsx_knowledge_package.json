@@ -1,0 +1,2565 @@
+{
+  "package_id": "PKG-SSIS-Master_ETL_Guidewire.dtsx-99fb2ed0",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Master_ETL_Guidewire.dtsx",
+    "file_name": "Master_ETL_Guidewire.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 146,
+    "size_bytes": 12753
+  },
+  "summary": {
+    "purpose": "Orchestrates the full load of Guidewire PolicyCenter data into the insurance data warehouse by executing child ETL packages in foreign‑key dependency order and recording audit information for start, completion, and errors.",
+    "high_level_narrative": "When the Master_ETL_Guidewire package runs, it first logs a 'RUNNING' entry for the master load in the etl.etl_audit_log table using an Execute SQL Task. It then launches the child extraction packages via Execute Package Tasks. Precedence constraints enforce the required sequence: Account and Producer packages run in parallel, followed by Policy (which waits for both). After Policy, Job and Claims run concurrently. Job must finish before PolicyPeriod, which in turn must finish before Location, Coverage, and Premium packages. Both Premium and Claims must complete before the KPI Aggregates package runs. Once all child packages have succeeded, a final Execute SQL Task updates the audit log entry to 'COMPLETED' and records the end time. An OnError event handler captures any failure and can log it (definition truncated in the source). The package uses a single PostgreSQL ADO.NET connection manager (CM_DW_PG_Target) to write audit records.",
+    "business_domain": "Insurance PolicyCenter Data Warehouse (Policy, Claims, Premium, KPI aggregation)",
+    "inputs": [
+      "CM_DW_PG_Target – ADO.NET Npgsql connection to the PostgreSQL data warehouse (insurance_dw)",
+      "etl.etl_audit_log table (read for status check during end‑log update)",
+      "Source System 3 Guidewire PostgreSQL (accessed indirectly by child Extract_*.dtsx packages)"
+    ],
+    "outputs": [
+      "etl.etl_audit_log table – INSERT start record and UPDATE end record",
+      "All target dimensional and fact tables populated by child packages: Account, Producer, Policy, Job, Claims, PolicyPeriod, Location, Coverage, Premium, KPI aggregates"
+    ],
+    "key_transformations": [
+      "No data transformation is performed in the master package; it solely orchestrates execution and records audit timestamps and status values."
+    ],
+    "key_dependencies": [
+      "Connection manager CM_DW_PG_Target (Npgsql PostgreSQL provider)",
+      "ExecuteSQLTask (for audit logging)",
+      "ExecutePackageTask (to run child packages)",
+      "Child packages: Extract_Account.dtsx, Extract_Producer.dtsx, Extract_Policy.dtsx, Extract_Job.dtsx, Extract_Claims.dtsx, Extract_PolicyPeriod.dtsx, Extract_Location.dtsx, Extract_Coverage.dtsx, Extract_Premium.dtsx, Extract_KPI_Aggregates.dtsx",
+      "OnError event handler (SQL task to log failures)"
+    ],
+    "business_rules": [
+      "Audit logging must insert a row with status='RUNNING' at package start and update the same row to status='COMPLETED' with end_time at package end.",
+      "Execution order must respect foreign‑key dependencies: Account & Producer → Policy → Job & Claims → PolicyPeriod → Location, Coverage, Premium → KPI Aggregates.",
+      "Both Account and Producer must complete before Policy starts.",
+      "Policy must complete before Job and Claims start.",
+      "Job must complete before PolicyPeriod starts.",
+      "PolicyPeriod must complete before Location, Coverage, and Premium start.",
+      "KPI Aggregates package runs only after both Premium and Claims have completed.",
+      "If any task fails, the OnError handler is triggered to record the failure (error handling logic defined in the truncated event handler)."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Master_ETL_Guidewire.dtsx",
+    "source_type": "ssis",
+    "purpose": "Master orchestration SSIS package for the Guidewire PolicyCenter source system. It logs the start and end of a full load, then executes all child ETL packages in foreign‑key dependency order (Account/Producer → Policy → Job/Claims → PolicyPeriod → Location/Coverage/Premium → KPI Aggregates) to populate the insurance data warehouse.",
+    "inputs_outputs": {
+      "inputs": [
+        "Connection manager CM_DW_PG_Target (PostgreSQL target database)",
+        "Child packages: Extract_Account.dtsx, Extract_Producer.dtsx, Extract_Policy.dtsx, Extract_Job.dtsx, Extract_Claims.dtsx, Extract_PolicyPeriod.dtsx, Extract_Location.dtsx, Extract_Coverage.dtsx, Extract_Premium.dtsx, Extract_KPI_Aggregates.dtsx",
+        "Source system Guidewire PolicyCenter (accessed by child packages)"
+      ],
+      "outputs": [
+        "Data loaded into the data warehouse tables (not listed in this master package)",
+        "Audit log entries in etl.etl_audit_log (package start, end, status)"
+      ]
+    },
+    "key_logic": [
+      "1. Execute SQL task 'SQL - Log Master Start' to INSERT a row into etl.etl_audit_log with status 'RUNNING'.",
+      "2. In parallel, start the Account and Producer child packages (ExecutePackage tasks).",
+      "3. After both Account and Producer complete, run the Policy child package.",
+      "4. When Policy finishes, run Job and Claims child packages concurrently.",
+      "5. After Job finishes, run PolicyPeriod child package.",
+      "6. When PolicyPeriod finishes, run Location, Coverage, and Premium child packages concurrently.",
+      "7. After Premium finishes, run KPIAggregates child package.",
+      "8. After Claims finishes, also run KPIAggregates (both paths converge).",
+      "9. When KPIAggregates completes, execute SQL task 'SQL - Log Master End' to UPDATE the audit log row with end_time and status 'COMPLETED'."
+    ],
+    "entities": [
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 7,
+        "description": "ADO.NET Npgsql connection manager to the data warehouse PostgreSQL database."
+      },
+      {
+        "name": "SQL - Log Master Start",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 15,
+        "description": "ExecuteSQLTask that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "SQL - Log Master End",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 115,
+        "description": "ExecuteSQLTask that updates the audit log with end_time and status."
+      },
+      {
+        "name": "Run Account",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 22,
+        "description": "ExecutePackageTask that runs child package Extract_Account.dtsx."
+      },
+      {
+        "name": "Run Producer",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 30,
+        "description": "ExecutePackageTask that runs child package Extract_Producer.dtsx."
+      },
+      {
+        "name": "Run Policy",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 38,
+        "description": "ExecutePackageTask that runs child package Extract_Policy.dtsx."
+      },
+      {
+        "name": "Run Job",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 46,
+        "description": "ExecutePackageTask that runs child package Extract_Job.dtsx."
+      },
+      {
+        "name": "Run Claims",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 54,
+        "description": "ExecutePackageTask that runs child package Extract_Claims.dtsx."
+      },
+      {
+        "name": "Run PolicyPeriod",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 62,
+        "description": "ExecutePackageTask that runs child package Extract_PolicyPeriod.dtsx."
+      },
+      {
+        "name": "Run Location",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 70,
+        "description": "ExecutePackageTask that runs child package Extract_Location.dtsx."
+      },
+      {
+        "name": "Run Coverage",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 78,
+        "description": "ExecutePackageTask that runs child package Extract_Coverage.dtsx."
+      },
+      {
+        "name": "Run Premium",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 86,
+        "description": "ExecutePackageTask that runs child package Extract_Premium.dtsx."
+      },
+      {
+        "name": "Run KPIAggregates",
+        "entity_type": "TASK",
+        "parent_entity": "Master_ETL_Guidewire",
+        "data_type": null,
+        "line_number": 94,
+        "description": "ExecutePackageTask that runs child package Extract_KPI_Aggregates.dtsx."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": "insurance_dw",
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log table used for package execution tracking."
+      },
+      {
+        "name": "Extract_Account.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Account data."
+      },
+      {
+        "name": "Extract_Producer.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Producer data."
+      },
+      {
+        "name": "Extract_Policy.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Policy data."
+      },
+      {
+        "name": "Extract_Job.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Job data."
+      },
+      {
+        "name": "Extract_Claims.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Claims data."
+      },
+      {
+        "name": "Extract_PolicyPeriod.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts PolicyPeriod data."
+      },
+      {
+        "name": "Extract_Location.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Location data."
+      },
+      {
+        "name": "Extract_Coverage.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Coverage data."
+      },
+      {
+        "name": "Extract_Premium.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that extracts Premium data."
+      },
+      {
+        "name": "Extract_KPI_Aggregates.dtsx",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Child SSIS package that calculates KPI aggregates."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Insert a start record into etl.etl_audit_log with package name, task name, current timestamp and status 'RUNNING'.",
+        "source_entities": [
+          "CM_DW_PG_Target",
+          "SQL - Log Master Start"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Master_ETL_Guidewire', 'Full Load', now(), 'RUNNING')",
+        "line_number": 15,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Update the audit log row for this package setting end_time to now() and status to 'COMPLETED'.",
+        "source_entities": [
+          "CM_DW_PG_Target",
+          "SQL - Log Master End"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED' WHERE package_name = 'Master_ETL_Guidewire' AND status = 'RUNNING'",
+        "line_number": 115,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Account' calls child package file Extract_Account.dtsx.",
+        "source_entities": [
+          "Run Account"
+        ],
+        "target_entities": [
+          "Extract_Account.dtsx"
+        ],
+        "expression": null,
+        "line_number": 22,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Producer' calls child package file Extract_Producer.dtsx.",
+        "source_entities": [
+          "Run Producer"
+        ],
+        "target_entities": [
+          "Extract_Producer.dtsx"
+        ],
+        "expression": null,
+        "line_number": 30,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Policy' calls child package file Extract_Policy.dtsx.",
+        "source_entities": [
+          "Run Policy"
+        ],
+        "target_entities": [
+          "Extract_Policy.dtsx"
+        ],
+        "expression": null,
+        "line_number": 38,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Job' calls child package file Extract_Job.dtsx.",
+        "source_entities": [
+          "Run Job"
+        ],
+        "target_entities": [
+          "Extract_Job.dtsx"
+        ],
+        "expression": null,
+        "line_number": 46,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Claims' calls child package file Extract_Claims.dtsx.",
+        "source_entities": [
+          "Run Claims"
+        ],
+        "target_entities": [
+          "Extract_Claims.dtsx"
+        ],
+        "expression": null,
+        "line_number": 54,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run PolicyPeriod' calls child package file Extract_PolicyPeriod.dtsx.",
+        "source_entities": [
+          "Run PolicyPeriod"
+        ],
+        "target_entities": [
+          "Extract_PolicyPeriod.dtsx"
+        ],
+        "expression": null,
+        "line_number": 62,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Location' calls child package file Extract_Location.dtsx.",
+        "source_entities": [
+          "Run Location"
+        ],
+        "target_entities": [
+          "Extract_Location.dtsx"
+        ],
+        "expression": null,
+        "line_number": 70,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Coverage' calls child package file Extract_Coverage.dtsx.",
+        "source_entities": [
+          "Run Coverage"
+        ],
+        "target_entities": [
+          "Extract_Coverage.dtsx"
+        ],
+        "expression": null,
+        "line_number": 78,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Premium' calls child package file Extract_Premium.dtsx.",
+        "source_entities": [
+          "Run Premium"
+        ],
+        "target_entities": [
+          "Extract_Premium.dtsx"
+        ],
+        "expression": null,
+        "line_number": 86,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T12",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run KPIAggregates' calls child package file Extract_KPI_Aggregates.dtsx.",
+        "source_entities": [
+          "Run KPIAggregates"
+        ],
+        "target_entities": [
+          "Extract_KPI_Aggregates.dtsx"
+        ],
+        "expression": null,
+        "line_number": 94,
+        "confidence": 0.95
+      }
+    ],
+    "business_rules": [
+      "Audit log entry status must be set to 'RUNNING' at package start and to 'COMPLETED' at package end.",
+      "Start and end timestamps are captured using the database function now().",
+      "Child packages are executed in foreign‑key dependency order as defined by precedence constraints.",
+      "Both Account and Producer must complete before Policy runs.",
+      "Policy must complete before Job and Claims run.",
+      "Job must complete before PolicyPeriod runs.",
+      "PolicyPeriod must complete before Location, Coverage, and Premium run.",
+      "KPIAggregates runs after both Premium and Claims have completed."
+    ],
+    "dependencies": [
+      "Connection manager CM_DW_PG_Target (PostgreSQL target)",
+      "Table etl.etl_audit_log in database insurance_dw",
+      "Child packages: Extract_Account.dtsx, Extract_Producer.dtsx, Extract_Policy.dtsx, Extract_Job.dtsx, Extract_Claims.dtsx, Extract_PolicyPeriod.dtsx, Extract_Location.dtsx, Extract_Coverage.dtsx, Extract_Premium.dtsx, Extract_KPI_Aggregates.dtsx"
+    ],
+    "relationships": [
+      {
+        "source": "SQL - Log Master Start",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 15,
+        "description": "SQL task uses the connection manager to execute the INSERT statement."
+      },
+      {
+        "source": "SQL - Log Master Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 15,
+        "description": "INSERT statement writes a row to the audit log table."
+      },
+      {
+        "source": "SQL - Log Master End",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 115,
+        "description": "SQL task uses the connection manager to execute the UPDATE statement."
+      },
+      {
+        "source": "SQL - Log Master End",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 115,
+        "description": "UPDATE statement modifies the audit log row."
+      },
+      {
+        "source": "Run Account",
+        "target": "Extract_Account.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 22,
+        "description": "ExecutePackageTask runs the Account extraction package."
+      },
+      {
+        "source": "Run Producer",
+        "target": "Extract_Producer.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 30,
+        "description": "ExecutePackageTask runs the Producer extraction package."
+      },
+      {
+        "source": "Run Policy",
+        "target": "Extract_Policy.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 38,
+        "description": "ExecutePackageTask runs the Policy extraction package."
+      },
+      {
+        "source": "Run Job",
+        "target": "Extract_Job.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 46,
+        "description": "ExecutePackageTask runs the Job extraction package."
+      },
+      {
+        "source": "Run Claims",
+        "target": "Extract_Claims.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 54,
+        "description": "ExecutePackageTask runs the Claims extraction package."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Extract_PolicyPeriod.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 62,
+        "description": "ExecutePackageTask runs the PolicyPeriod extraction package."
+      },
+      {
+        "source": "Run Location",
+        "target": "Extract_Location.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 70,
+        "description": "ExecutePackageTask runs the Location extraction package."
+      },
+      {
+        "source": "Run Coverage",
+        "target": "Extract_Coverage.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 78,
+        "description": "ExecutePackageTask runs the Coverage extraction package."
+      },
+      {
+        "source": "Run Premium",
+        "target": "Extract_Premium.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 86,
+        "description": "ExecutePackageTask runs the Premium extraction package."
+      },
+      {
+        "source": "Run KPIAggregates",
+        "target": "Extract_KPI_Aggregates.dtsx",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 94,
+        "description": "ExecutePackageTask runs the KPI aggregates package."
+      },
+      {
+        "source": "SQL_MasterStart",
+        "target": "Run Account",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 1,
+        "description": "Precedence constraint StartToG1a ensures Account runs after start logging."
+      },
+      {
+        "source": "SQL_MasterStart",
+        "target": "Run Producer",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 1,
+        "description": "Precedence constraint StartToG1b ensures Producer runs after start logging."
+      },
+      {
+        "source": "Run Account",
+        "target": "Run Policy",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 3,
+        "description": "Precedence constraint G1toPolicy_a ensures Policy runs after Account."
+      },
+      {
+        "source": "Run Producer",
+        "target": "Run Policy",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 4,
+        "description": "Precedence constraint G1toPolicy_b ensures Policy runs after Producer."
+      },
+      {
+        "source": "Run Policy",
+        "target": "Run Job",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 5,
+        "description": "Precedence constraint PolicyToJob."
+      },
+      {
+        "source": "Run Policy",
+        "target": "Run Claims",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 6,
+        "description": "Precedence constraint PolicyToClaims."
+      },
+      {
+        "source": "Run Job",
+        "target": "Run PolicyPeriod",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 7,
+        "description": "Precedence constraint JobToPolicyPeriod."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Location",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 8,
+        "description": "Precedence constraint PolicyPeriodToEPT_Location."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Coverage",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 9,
+        "description": "Precedence constraint PolicyPeriodToEPT_Coverage."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Premium",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 10,
+        "description": "Precedence constraint PolicyPeriodToEPT_Premium."
+      },
+      {
+        "source": "Run Premium",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 11,
+        "description": "Precedence constraint PremiumToKPI."
+      },
+      {
+        "source": "Run Claims",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 12,
+        "description": "Precedence constraint ClaimsToKPI."
+      },
+      {
+        "source": "Run KPIAggregates",
+        "target": "SQL_MasterEnd",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 13,
+        "description": "Precedence constraint KPIToEnd."
+      }
+    ],
+    "confidence": 0.92
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 24,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "Master_ETL_Guidewire",
+      "CM_DW_PG_Target",
+      "SQL - Log Master Start",
+      "SQL - Log Master End",
+      "Run Account",
+      "Run Producer",
+      "Run Policy",
+      "Run Job",
+      "Run Claims",
+      "Run PolicyPeriod",
+      "Run Location",
+      "Run Coverage",
+      "Run Premium",
+      "Run KPIAggregates",
+      "etl.etl_audit_log",
+      "Extract_Account.dtsx",
+      "Extract_Producer.dtsx",
+      "Extract_Policy.dtsx",
+      "Extract_Job.dtsx",
+      "Extract_Claims.dtsx",
+      "Extract_PolicyPeriod.dtsx",
+      "Extract_Location.dtsx",
+      "Extract_Coverage.dtsx",
+      "Extract_Premium.dtsx",
+      "Extract_KPI_Aggregates.dtsx"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 7,
+        "description": "Package uses the PostgreSQL connection manager."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "SQL - Log Master Start",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 15,
+        "description": "SQL task that logs package start."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "SQL - Log Master End",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 115,
+        "description": "SQL task that logs package end."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Account",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 22,
+        "description": "ExecutePackage task for Extract_Account.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Producer",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 30,
+        "description": "ExecutePackage task for Extract_Producer.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Policy",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 38,
+        "description": "ExecutePackage task for Extract_Policy.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Job",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 46,
+        "description": "ExecutePackage task for Extract_Job.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Claims",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 54,
+        "description": "ExecutePackage task for Extract_Claims.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run PolicyPeriod",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 62,
+        "description": "ExecutePackage task for Extract_PolicyPeriod.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Location",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 70,
+        "description": "ExecutePackage task for Extract_Location.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Coverage",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 78,
+        "description": "ExecutePackage task for Extract_Coverage.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run Premium",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 86,
+        "description": "ExecutePackage task for Extract_Premium.dtsx."
+      },
+      {
+        "source": "Master_ETL_Guidewire",
+        "target": "Run KPIAggregates",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": 94,
+        "description": "ExecutePackage task for Extract_KPI_Aggregates.dtsx."
+      },
+      {
+        "source": "Run Account",
+        "target": "Extract_Account.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Producer",
+        "target": "Extract_Producer.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Policy",
+        "target": "Extract_Policy.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Job",
+        "target": "Extract_Job.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Claims",
+        "target": "Extract_Claims.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Extract_PolicyPeriod.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Location",
+        "target": "Extract_Location.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Coverage",
+        "target": "Extract_Coverage.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run Premium",
+        "target": "Extract_Premium.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "Run KPIAggregates",
+        "target": "Extract_KPI_Aggregates.dtsx",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "SQL - Log Master Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Inserts start record."
+      },
+      {
+        "source": "SQL - Log Master End",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Updates end_time and status."
+      },
+      {
+        "source": "Run Account",
+        "target": "Run Policy",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Policy runs after Account completes."
+      },
+      {
+        "source": "Run Producer",
+        "target": "Run Policy",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Policy runs after Producer completes."
+      },
+      {
+        "source": "Run Policy",
+        "target": "Run Job",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Job runs after Policy."
+      },
+      {
+        "source": "Run Policy",
+        "target": "Run Claims",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Claims run after Policy."
+      },
+      {
+        "source": "Run Job",
+        "target": "Run PolicyPeriod",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "PolicyPeriod runs after Job."
+      },
+      {
+        "source": "Run Claims",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Claims."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Location",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Location runs after PolicyPeriod."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Coverage",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Coverage runs after PolicyPeriod."
+      },
+      {
+        "source": "Run PolicyPeriod",
+        "target": "Run Premium",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Premium runs after PolicyPeriod."
+      },
+      {
+        "source": "Run Premium",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Premium."
+      },
+      {
+        "source": "Run Location",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Location."
+      },
+      {
+        "source": "Run Coverage",
+        "target": "Run KPIAggregates",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Coverage."
+      },
+      {
+        "source": "Run KPIAggregates",
+        "target": "SQL - Log Master End",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Audit end log written after KPIAggregates completes."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no tables, columns, or file entries, while LLM extracted a full set of entities; therefore all entities are treated as inferred.",
+      "No naming conflicts were detected between parser output and LLM extraction."
+    ],
+    "gaps_detected": [
+      "The specific data warehouse tables populated by child packages are not listed in the master package.",
+      "Schema details of etl.etl_audit_log (column names, data types) are missing.",
+      "Internal logic and transformations inside each child package (e.g., Extract_Policy.dtsx) are not captured.",
+      "Potential error‑handling and retry mechanisms are not described."
+    ],
+    "overall_confidence": 0.88
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "CM_DW_PG_Target",
+        "etl.etl_audit_log"
+      ],
+      "columns": [],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Orchestrates the full load of Guidewire PolicyCenter data into the insurance data warehouse by executing child ETL packages in foreign‑key dependency order and recording audit information for start, completion, and errors.",
+      "narrative": "When the Master_ETL_Guidewire package runs, it first logs a 'RUNNING' entry for the master load in the etl.etl_audit_log table using an Execute SQL Task. It then launches the child extraction packages via Execute Package Tasks. Precedence constraints enforce the required sequence: Account and Producer packages run in parallel, followed by Policy (which waits for both). After Policy, Job and Claims run concurrently. Job must finish before PolicyPeriod, which in turn must finish before Location, Coverage, and Premium packages. Both Premium and Claims must complete before the KPI Aggregates package runs. Once all child packages have succeeded, a final Execute SQL Task updates the audit log entry to 'COMPLETED' and records the end time. An OnError event handler captures any failure and can log it (definition truncated in the source). The package uses a single PostgreSQL ADO.NET connection manager (CM_DW_PG_Target) to write audit records.",
+      "business_domain": "Insurance PolicyCenter Data Warehouse (Policy, Claims, Premium, KPI aggregation)",
+      "business_rules": [
+        "Audit logging must insert a row with status='RUNNING' at package start and update the same row to status='COMPLETED' with end_time at package end.",
+        "Execution order must respect foreign‑key dependencies: Account & Producer → Policy → Job & Claims → PolicyPeriod → Location, Coverage, Premium → KPI Aggregates.",
+        "Both Account and Producer must complete before Policy starts.",
+        "Policy must complete before Job and Claims start.",
+        "Job must complete before PolicyPeriod starts.",
+        "PolicyPeriod must complete before Location, Coverage, and Premium start.",
+        "KPI Aggregates package runs only after both Premium and Claims have completed.",
+        "If any task fails, the OnError handler is triggered to record the failure (error handling logic defined in the truncated event handler)."
+      ],
+      "key_logic": [
+        "1. Execute SQL task 'SQL - Log Master Start' to INSERT a row into etl.etl_audit_log with status 'RUNNING'.",
+        "2. In parallel, start the Account and Producer child packages (ExecutePackage tasks).",
+        "3. After both Account and Producer complete, run the Policy child package.",
+        "4. When Policy finishes, run Job and Claims child packages concurrently.",
+        "5. After Job finishes, run PolicyPeriod child package.",
+        "6. When PolicyPeriod finishes, run Location, Coverage, and Premium child packages concurrently.",
+        "7. After Premium finishes, run KPIAggregates child package.",
+        "8. After Claims finishes, also run KPIAggregates (both paths converge).",
+        "9. When KPIAggregates completes, execute SQL task 'SQL - Log Master End' to UPDATE the audit log row with end_time and status 'COMPLETED'."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "Master_ETL_Guidewire",
+        "CM_DW_PG_Target",
+        "SQL - Log Master Start",
+        "SQL - Log Master End",
+        "Run Account",
+        "Run Producer",
+        "Run Policy",
+        "Run Job",
+        "Run Claims",
+        "Run PolicyPeriod",
+        "Run Location",
+        "Run Coverage",
+        "Run Premium",
+        "Run KPIAggregates",
+        "etl.etl_audit_log",
+        "Extract_Account.dtsx",
+        "Extract_Producer.dtsx",
+        "Extract_Policy.dtsx",
+        "Extract_Job.dtsx",
+        "Extract_Claims.dtsx",
+        "Extract_PolicyPeriod.dtsx",
+        "Extract_Location.dtsx",
+        "Extract_Coverage.dtsx",
+        "Extract_Premium.dtsx",
+        "Extract_KPI_Aggregates.dtsx"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "CALCULATION",
+          "description": "Insert a start record into etl.etl_audit_log with package name, task name, current timestamp and status 'RUNNING'.",
+          "source_entities": [
+            "CM_DW_PG_Target",
+            "SQL - Log Master Start"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Master_ETL_Guidewire', 'Full Load', now(), 'RUNNING')",
+          "line_number": 15,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "CALCULATION",
+          "description": "Update the audit log row for this package setting end_time to now() and status to 'COMPLETED'.",
+          "source_entities": [
+            "CM_DW_PG_Target",
+            "SQL - Log Master End"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED' WHERE package_name = 'Master_ETL_Guidewire' AND status = 'RUNNING'",
+          "line_number": 115,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Account' calls child package file Extract_Account.dtsx.",
+          "source_entities": [
+            "Run Account"
+          ],
+          "target_entities": [
+            "Extract_Account.dtsx"
+          ],
+          "expression": null,
+          "line_number": 22,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Producer' calls child package file Extract_Producer.dtsx.",
+          "source_entities": [
+            "Run Producer"
+          ],
+          "target_entities": [
+            "Extract_Producer.dtsx"
+          ],
+          "expression": null,
+          "line_number": 30,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Policy' calls child package file Extract_Policy.dtsx.",
+          "source_entities": [
+            "Run Policy"
+          ],
+          "target_entities": [
+            "Extract_Policy.dtsx"
+          ],
+          "expression": null,
+          "line_number": 38,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Job' calls child package file Extract_Job.dtsx.",
+          "source_entities": [
+            "Run Job"
+          ],
+          "target_entities": [
+            "Extract_Job.dtsx"
+          ],
+          "expression": null,
+          "line_number": 46,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Claims' calls child package file Extract_Claims.dtsx.",
+          "source_entities": [
+            "Run Claims"
+          ],
+          "target_entities": [
+            "Extract_Claims.dtsx"
+          ],
+          "expression": null,
+          "line_number": 54,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run PolicyPeriod' calls child package file Extract_PolicyPeriod.dtsx.",
+          "source_entities": [
+            "Run PolicyPeriod"
+          ],
+          "target_entities": [
+            "Extract_PolicyPeriod.dtsx"
+          ],
+          "expression": null,
+          "line_number": 62,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Location' calls child package file Extract_Location.dtsx.",
+          "source_entities": [
+            "Run Location"
+          ],
+          "target_entities": [
+            "Extract_Location.dtsx"
+          ],
+          "expression": null,
+          "line_number": 70,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Coverage' calls child package file Extract_Coverage.dtsx.",
+          "source_entities": [
+            "Run Coverage"
+          ],
+          "target_entities": [
+            "Extract_Coverage.dtsx"
+          ],
+          "expression": null,
+          "line_number": 78,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T11",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run Premium' calls child package file Extract_Premium.dtsx.",
+          "source_entities": [
+            "Run Premium"
+          ],
+          "target_entities": [
+            "Extract_Premium.dtsx"
+          ],
+          "expression": null,
+          "line_number": 86,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T12",
+          "rule_type": "MAPPING",
+          "description": "ExecutePackageTask 'Run KPIAggregates' calls child package file Extract_KPI_Aggregates.dtsx.",
+          "source_entities": [
+            "Run KPIAggregates"
+          ],
+          "target_entities": [
+            "Extract_KPI_Aggregates.dtsx"
+          ],
+          "expression": null,
+          "line_number": 94,
+          "confidence": 0.95
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "CM_DW_PG_Target",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": 7,
+          "description": "Package uses the PostgreSQL connection manager."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "SQL - Log Master Start",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 15,
+          "description": "SQL task that logs package start."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "SQL - Log Master End",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 115,
+          "description": "SQL task that logs package end."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Account",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 22,
+          "description": "ExecutePackage task for Extract_Account.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Producer",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 30,
+          "description": "ExecutePackage task for Extract_Producer.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Policy",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 38,
+          "description": "ExecutePackage task for Extract_Policy.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Job",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 46,
+          "description": "ExecutePackage task for Extract_Job.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Claims",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 54,
+          "description": "ExecutePackage task for Extract_Claims.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run PolicyPeriod",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 62,
+          "description": "ExecutePackage task for Extract_PolicyPeriod.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Location",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 70,
+          "description": "ExecutePackage task for Extract_Location.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Coverage",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 78,
+          "description": "ExecutePackage task for Extract_Coverage.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run Premium",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 86,
+          "description": "ExecutePackage task for Extract_Premium.dtsx."
+        },
+        {
+          "source": "Master_ETL_Guidewire",
+          "target": "Run KPIAggregates",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": 94,
+          "description": "ExecutePackage task for Extract_KPI_Aggregates.dtsx."
+        },
+        {
+          "source": "Run Account",
+          "target": "Extract_Account.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Producer",
+          "target": "Extract_Producer.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Policy",
+          "target": "Extract_Policy.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Job",
+          "target": "Extract_Job.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Claims",
+          "target": "Extract_Claims.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run PolicyPeriod",
+          "target": "Extract_PolicyPeriod.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Location",
+          "target": "Extract_Location.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Coverage",
+          "target": "Extract_Coverage.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run Premium",
+          "target": "Extract_Premium.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "Run KPIAggregates",
+          "target": "Extract_KPI_Aggregates.dtsx",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": null
+        },
+        {
+          "source": "SQL - Log Master Start",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Inserts start record."
+        },
+        {
+          "source": "SQL - Log Master End",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Updates end_time and status."
+        },
+        {
+          "source": "Run Account",
+          "target": "Run Policy",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Policy runs after Account completes."
+        },
+        {
+          "source": "Run Producer",
+          "target": "Run Policy",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Policy runs after Producer completes."
+        },
+        {
+          "source": "Run Policy",
+          "target": "Run Job",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Job runs after Policy."
+        },
+        {
+          "source": "Run Policy",
+          "target": "Run Claims",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Claims run after Policy."
+        },
+        {
+          "source": "Run Job",
+          "target": "Run PolicyPeriod",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "PolicyPeriod runs after Job."
+        },
+        {
+          "source": "Run Claims",
+          "target": "Run KPIAggregates",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "KPIAggregates runs after Claims."
+        },
+        {
+          "source": "Run PolicyPeriod",
+          "target": "Run Location",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Location runs after PolicyPeriod."
+        },
+        {
+          "source": "Run PolicyPeriod",
+          "target": "Run Coverage",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Coverage runs after PolicyPeriod."
+        },
+        {
+          "source": "Run PolicyPeriod",
+          "target": "Run Premium",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Premium runs after PolicyPeriod."
+        },
+        {
+          "source": "Run Premium",
+          "target": "Run KPIAggregates",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "KPIAggregates runs after Premium."
+        },
+        {
+          "source": "Run Location",
+          "target": "Run KPIAggregates",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "KPIAggregates runs after Location."
+        },
+        {
+          "source": "Run Coverage",
+          "target": "Run KPIAggregates",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "KPIAggregates runs after Coverage."
+        },
+        {
+          "source": "Run KPIAggregates",
+          "target": "SQL - Log Master End",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Audit end log written after KPIAggregates completes."
+        }
+      ],
+      "gaps": [
+        "The specific data warehouse tables populated by child packages are not listed in the master package.",
+        "Schema details of etl.etl_audit_log (column names, data types) are missing.",
+        "Internal logic and transformations inside each child package (e.g., Extract_Policy.dtsx) are not captured.",
+        "Potential error‑handling and retry mechanisms are not described."
+      ]
+    },
+    "overall_confidence": 0.88
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Master_ETL_Guidewire.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Master_ETL_Guidewire.dtsx",
+        "total_lines": 146
+      }
+    },
+    {
+      "id": "TABLE:CM_DW_PG_Target",
+      "label": "Table",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 7
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Master Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Master Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 15
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Master End",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Master End",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "TASK:Run Account",
+      "label": "Task",
+      "properties": {
+        "name": "Run Account",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 22
+      }
+    },
+    {
+      "id": "TASK:Run Producer",
+      "label": "Task",
+      "properties": {
+        "name": "Run Producer",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 30
+      }
+    },
+    {
+      "id": "TASK:Run Policy",
+      "label": "Task",
+      "properties": {
+        "name": "Run Policy",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "TASK:Run Job",
+      "label": "Task",
+      "properties": {
+        "name": "Run Job",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 46
+      }
+    },
+    {
+      "id": "TASK:Run Claims",
+      "label": "Task",
+      "properties": {
+        "name": "Run Claims",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 54
+      }
+    },
+    {
+      "id": "TASK:Run PolicyPeriod",
+      "label": "Task",
+      "properties": {
+        "name": "Run PolicyPeriod",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 62
+      }
+    },
+    {
+      "id": "TASK:Run Location",
+      "label": "Task",
+      "properties": {
+        "name": "Run Location",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TASK:Run Coverage",
+      "label": "Task",
+      "properties": {
+        "name": "Run Coverage",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 78
+      }
+    },
+    {
+      "id": "TASK:Run Premium",
+      "label": "Task",
+      "properties": {
+        "name": "Run Premium",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 86
+      }
+    },
+    {
+      "id": "TASK:Run KPIAggregates",
+      "label": "Task",
+      "properties": {
+        "name": "Run KPIAggregates",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Master_ETL_Guidewire",
+        "line_number": 94
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "insurance_dw",
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Account.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Account.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Producer.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Producer.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Policy.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Policy.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Job.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Job.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Claims.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Claims.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_PolicyPeriod.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_PolicyPeriod.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Location.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Location.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Coverage.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Coverage.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_Premium.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_Premium.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "FILE:Extract_KPI_Aggregates.dtsx",
+      "label": "File",
+      "properties": {
+        "name": "Extract_KPI_Aggregates.dtsx",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Insert a start record into etl.etl_audit_log with package name, task name, current timestamp and status 'RUNNING'.",
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Master_ETL_Guidewire', 'Full Load', now(), 'RUNNING')",
+        "line_number": 15
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Update the audit log row for this package setting end_time to now() and status to 'COMPLETED'.",
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED' WHERE package_name = 'Master_ETL_Guidewire' AND status = 'RUNNING'",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Account' calls child package file Extract_Account.dtsx.",
+        "expression": null,
+        "line_number": 22
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Producer' calls child package file Extract_Producer.dtsx.",
+        "expression": null,
+        "line_number": 30
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Policy' calls child package file Extract_Policy.dtsx.",
+        "expression": null,
+        "line_number": 38
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Job' calls child package file Extract_Job.dtsx.",
+        "expression": null,
+        "line_number": 46
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Claims' calls child package file Extract_Claims.dtsx.",
+        "expression": null,
+        "line_number": 54
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run PolicyPeriod' calls child package file Extract_PolicyPeriod.dtsx.",
+        "expression": null,
+        "line_number": 62
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Location' calls child package file Extract_Location.dtsx.",
+        "expression": null,
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Coverage' calls child package file Extract_Coverage.dtsx.",
+        "expression": null,
+        "line_number": 78
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T11",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run Premium' calls child package file Extract_Premium.dtsx.",
+        "expression": null,
+        "line_number": 86
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T12",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T12",
+        "rule_type": "MAPPING",
+        "description": "ExecutePackageTask 'Run KPIAggregates' calls child package file Extract_KPI_Aggregates.dtsx.",
+        "expression": null,
+        "line_number": 94
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:SQL - Log Master Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:SQL - Log Master End",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Account",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Producer",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Claims",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run PolicyPeriod",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Location",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run Premium",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TASK:Run KPIAggregates",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Account.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Producer.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Policy.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Job.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Claims.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_PolicyPeriod.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Location.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Coverage.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_Premium.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Master_ETL_Guidewire.dtsx",
+      "target_id": "FILE:Extract_KPI_Aggregates.dtsx",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:CM_DW_PG_Target",
+      "target_id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T1",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:CM_DW_PG_Target",
+      "target_id": "TRANSFORMATION:Master_ETL_Guidewire.dtsx:T2",
+      "type": "INPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 7,
+        "description": "Package uses the PostgreSQL connection manager."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:SQL - Log Master Start",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 15,
+        "description": "SQL task that logs package start."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:SQL - Log Master End",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 115,
+        "description": "SQL task that logs package end."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Account",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 22,
+        "description": "ExecutePackage task for Extract_Account.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Producer",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 30,
+        "description": "ExecutePackage task for Extract_Producer.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Policy",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 38,
+        "description": "ExecutePackage task for Extract_Policy.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Job",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 46,
+        "description": "ExecutePackage task for Extract_Job.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Claims",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 54,
+        "description": "ExecutePackage task for Extract_Claims.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run PolicyPeriod",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 62,
+        "description": "ExecutePackage task for Extract_PolicyPeriod.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Location",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 70,
+        "description": "ExecutePackage task for Extract_Location.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 78,
+        "description": "ExecutePackage task for Extract_Coverage.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run Premium",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 86,
+        "description": "ExecutePackage task for Extract_Premium.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Master_ETL_Guidewire",
+      "target_id": "TABLE:Run KPIAggregates",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 94,
+        "description": "ExecutePackage task for Extract_KPI_Aggregates.dtsx."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Account",
+      "target_id": "TABLE:Extract_Account.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Producer",
+      "target_id": "TABLE:Extract_Producer.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Policy",
+      "target_id": "TABLE:Extract_Policy.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Job",
+      "target_id": "TABLE:Extract_Job.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Claims",
+      "target_id": "TABLE:Extract_Claims.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run PolicyPeriod",
+      "target_id": "TABLE:Extract_PolicyPeriod.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Location",
+      "target_id": "TABLE:Extract_Location.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Coverage",
+      "target_id": "TABLE:Extract_Coverage.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run Premium",
+      "target_id": "TABLE:Extract_Premium.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:Run KPIAggregates",
+      "target_id": "TABLE:Extract_KPI_Aggregates.dtsx",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Master Start",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Inserts start record."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Master End",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Updates end_time and status."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Account",
+      "target_id": "TABLE:Run Policy",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Policy runs after Account completes."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Producer",
+      "target_id": "TABLE:Run Policy",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Policy runs after Producer completes."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Policy",
+      "target_id": "TABLE:Run Job",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Job runs after Policy."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Policy",
+      "target_id": "TABLE:Run Claims",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Claims run after Policy."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Job",
+      "target_id": "TABLE:Run PolicyPeriod",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "PolicyPeriod runs after Job."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Claims",
+      "target_id": "TABLE:Run KPIAggregates",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Claims."
+      }
+    },
+    {
+      "source_id": "TABLE:Run PolicyPeriod",
+      "target_id": "TABLE:Run Location",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Location runs after PolicyPeriod."
+      }
+    },
+    {
+      "source_id": "TABLE:Run PolicyPeriod",
+      "target_id": "TABLE:Run Coverage",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Coverage runs after PolicyPeriod."
+      }
+    },
+    {
+      "source_id": "TABLE:Run PolicyPeriod",
+      "target_id": "TABLE:Run Premium",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Premium runs after PolicyPeriod."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Premium",
+      "target_id": "TABLE:Run KPIAggregates",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Premium."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Location",
+      "target_id": "TABLE:Run KPIAggregates",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Location."
+      }
+    },
+    {
+      "source_id": "TABLE:Run Coverage",
+      "target_id": "TABLE:Run KPIAggregates",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "KPIAggregates runs after Coverage."
+      }
+    },
+    {
+      "source_id": "TABLE:Run KPIAggregates",
+      "target_id": "TABLE:SQL - Log Master End",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Audit end log written after KPIAggregates completes."
+      }
+    }
+  ]
+}

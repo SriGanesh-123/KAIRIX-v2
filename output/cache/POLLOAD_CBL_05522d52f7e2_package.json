@@ -1,0 +1,2418 @@
+{
+  "package_id": "PKG-COBOL-POLLOAD.CBL-bdccc081",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\POLLOAD.CBL",
+    "file_name": "POLLOAD.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 206,
+    "size_bytes": 5951
+  },
+  "summary": {
+    "purpose": "Load policy master records from a line‑sequential input file into a VSAM KSDS (indexed) file, performing basic validation and duplicate detection.",
+    "high_level_narrative": "The program POLLOAD starts by displaying a start message and opening the sequential input file (POLICY‑IN) and the VSAM indexed file (POLICY‑MASTER). It then enters a loop that reads one record at a time from POLICY‑IN until end‑of‑file. For each record, it increments a read counter, validates that the policy number field is not blank, and if valid, moves each input field to the corresponding field in the VSAM record layout defined by the POLYMAST copybook. The program attempts to write the populated VSAM record; on a duplicate key (invalid key) it logs a duplicate‑policy error and increments an error counter, otherwise it increments a write counter. After all input records are processed, the program closes both files, displays totals for records read, written, and errors, and ends execution.",
+    "business_domain": "Personal Lines Policy Management",
+    "inputs": [
+      "POLICY-IN (line sequential file containing raw policy data)"
+    ],
+    "outputs": [
+      "POLICY-MASTER (VSAM KSDS indexed file storing policy master records)"
+    ],
+    "key_transformations": [
+      "Validation: reject records where PI-POLICY-NUMBER is blank and count as error.",
+      "Field mapping: move each PI‑* field from the input record to the corresponding VSAM field (e.g., PI-POLICY-NUMBER → POLICY-NUMBER, PI-CUSTOMER-ID → CUSTOMER-ID, etc.).",
+      "Duplicate detection: VSAM write with INVALID KEY clause treats duplicate POLICY-NUMBER as an error.",
+      "Counting: increment WS-READ-COUNT for each input record, WS-WRITE-COUNT for successful writes, WS-ERROR-COUNT for validation or duplicate errors."
+    ],
+    "key_dependencies": [
+      "Copybook POLYMAST (defines the VSAM record layout for POLICY-MASTER)",
+      "File definitions for POLICY-IN (sequential) and POLICY-MASTER (indexed VSAM)",
+      "COBOL runtime file‑status handling (WS-IN-STATUS, WS-VSAM-STATUS)"
+    ],
+    "business_rules": [
+      "A policy record must contain a non‑blank policy number; otherwise it is considered invalid.",
+      "Policy numbers must be unique in the POLICY-MASTER VSAM file; duplicate keys are rejected and logged as errors.",
+      "All fields from the input record are transferred directly to the VSAM record without transformation.",
+      "Processing stops only after the entire input file has been read; no partial roll‑back is performed."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "POLLOAD.CBL",
+    "source_type": "cobol",
+    "purpose": "Load policy master records from a sequential input file into a VSAM KSDS, performing validation, duplicate detection, and counting of processed, written and error records.",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN (sequential file)",
+        "Copybook POLYMAST (defines VSAM record layout)",
+        "WS-IN-STATUS, WS-VSAM-STATUS, WS-EOF, WS-READ-COUNT, WS-WRITE-COUNT, WS-ERROR-COUNT (working‑storage variables)"
+      ],
+      "outputs": [
+        "POLICY-MASTER (VSAM KSDS)",
+        "WS-READ-COUNT, WS-WRITE-COUNT, WS-ERROR-COUNT (counters reported on screen)"
+      ]
+    },
+    "key_logic": [
+      "1. Initialize counters and open input and VSAM files; abort if file status is not '00'.",
+      "2. Loop until end‑of‑file flag (WS-EOF) is set:",
+      "   a. Read one record from POLICY-IN; increment WS-READ-COUNT on success.",
+      "   b. Validate that PI-POLICY-NUMBER is not blank; if blank, increment WS-ERROR-COUNT and skip write.",
+      "   c. Map all PI‑* fields to the corresponding VSAM fields defined in POLYMAST.",
+      "   d. Write the mapped record to POLICY-MASTER; on duplicate key increment WS-ERROR-COUNT, otherwise increment WS-WRITE-COUNT.",
+      "3. After the loop, close both files and display totals for reads, writes and errors."
+    ],
+    "entities": [
+      {
+        "name": "POLLOAD",
+        "entity_type": "PROGRAM",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 8,
+        "description": "Main COBOL program that loads policy master records."
+      },
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 17,
+        "description": "Input sequential file (assigned to device POLIN)."
+      },
+      {
+        "name": "POLICY-MASTER",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 22,
+        "description": "VSAM KSDS file (assigned to device POLYMAST)."
+      },
+      {
+        "name": "POLYMAST",
+        "entity_type": "COPYBOOK",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 51,
+        "description": "Copybook that defines the layout of the VSAM record."
+      },
+      {
+        "name": "POLICY-IN-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 33,
+        "description": "Record layout for the input file."
+      },
+      {
+        "name": "PI-POLICY-NUMBER",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(15)",
+        "line_number": 35,
+        "description": null
+      },
+      {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 36,
+        "description": null
+      },
+      {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 37,
+        "description": null
+      },
+      {
+        "name": "PI-PRODUCT-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 38,
+        "description": null
+      },
+      {
+        "name": "PI-POLICY-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(30)",
+        "line_number": 39,
+        "description": null
+      },
+      {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 40,
+        "description": null
+      },
+      {
+        "name": "PI-EXPIRATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 41,
+        "description": null
+      },
+      {
+        "name": "PI-CURRENT-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(20)",
+        "line_number": 42,
+        "description": null
+      },
+      {
+        "name": "PI-PAYMENT-FREQUENCY",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(20)",
+        "line_number": 43,
+        "description": null
+      },
+      {
+        "name": "PI-POLICY-TERM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC 9(02)",
+        "line_number": 44,
+        "description": null
+      },
+      {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC 9(10)V99",
+        "line_number": 45,
+        "description": null
+      },
+      {
+        "name": "PI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC 9(10)V99",
+        "line_number": 46,
+        "description": null
+      },
+      {
+        "name": "PI-RENEWAL-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-IN-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 47,
+        "description": null
+      },
+      {
+        "name": "WS-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC X",
+        "line_number": 57,
+        "description": "End‑of‑file flag ('Y' when no more input records)."
+      },
+      {
+        "name": "WS-IN-STATUS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC XX",
+        "line_number": 59,
+        "description": "File status after opening POLICY-IN."
+      },
+      {
+        "name": "WS-VSAM-STATUS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC XX",
+        "line_number": 60,
+        "description": "File status after opening POLICY-MASTER."
+      },
+      {
+        "name": "WS-READ-COUNT",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(7)",
+        "line_number": 62,
+        "description": "Counter for successfully read input records."
+      },
+      {
+        "name": "WS-WRITE-COUNT",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(7)",
+        "line_number": 63,
+        "description": "Counter for successfully written VSAM records."
+      },
+      {
+        "name": "WS-ERROR-COUNT",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(7)",
+        "line_number": 64,
+        "description": "Counter for validation or duplicate‑key errors."
+      },
+      {
+        "name": "MAIN-PROCESS",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 66,
+        "description": "Top‑level paragraph that drives the processing loop."
+      },
+      {
+        "name": "1000-INITIALIZE",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 89,
+        "description": "Initializes counters and opens files."
+      },
+      {
+        "name": "2000-READ-INPUT",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 113,
+        "description": "Reads one record from POLICY-IN."
+      },
+      {
+        "name": "3000-VALIDATE",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 129,
+        "description": "Validates mandatory fields (policy number)."
+      },
+      {
+        "name": "3000-EXIT",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 157,
+        "description": "Exit point for validation paragraph."
+      },
+      {
+        "name": "4000-WRITE-VSAM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 164,
+        "description": "Writes the mapped record to the VSAM file and handles duplicate keys."
+      },
+      {
+        "name": "9000-CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "POLLOAD",
+        "data_type": null,
+        "line_number": 185,
+        "description": "Closes files and displays processing totals."
+      },
+      {
+        "name": "POLICY-NUMBER",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": "Key field in VSAM record (defined in copybook)."
+      },
+      {
+        "name": "CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "PRODUCT-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "POLICY-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "EXPIRATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "CURRENT-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "PAYMENT-FREQUENCY",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "POLICY-TERM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "RENEWAL-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLYMAST",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map each input field (PI-*) to the corresponding VSAM field defined in POLYMAST.",
+        "source_entities": [
+          "PI-POLICY-NUMBER",
+          "PI-CUSTOMER-ID",
+          "PI-AGENT-ID",
+          "PI-PRODUCT-CODE",
+          "PI-POLICY-TYPE",
+          "PI-EFFECTIVE-DATE",
+          "PI-EXPIRATION-DATE",
+          "PI-CURRENT-STATUS",
+          "PI-PAYMENT-FREQUENCY",
+          "PI-POLICY-TERM",
+          "PI-WRITTEN-PREMIUM",
+          "PI-EARNED-PREMIUM",
+          "PI-RENEWAL-DATE"
+        ],
+        "target_entities": [
+          "POLICY-NUMBER",
+          "CUSTOMER-ID",
+          "AGENT-ID",
+          "PRODUCT-CODE",
+          "POLICY-TYPE",
+          "EFFECTIVE-DATE",
+          "EXPIRATION-DATE",
+          "CURRENT-STATUS",
+          "PAYMENT-FREQUENCY",
+          "POLICY-TERM",
+          "WRITTEN-PREMIUM",
+          "EARNED-PREMIUM",
+          "RENEWAL-DATE"
+        ],
+        "expression": "MOVE ... TO ... statements (lines 143‑155)",
+        "line_number": 143,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "FILTER",
+        "description": "Reject record when PI-POLICY-NUMBER is blank; increment error count and skip further processing.",
+        "source_entities": [
+          "PI-POLICY-NUMBER",
+          "WS-ERROR-COUNT"
+        ],
+        "target_entities": [
+          "WS-ERROR-COUNT"
+        ],
+        "expression": "IF PI-POLICY-NUMBER = SPACES THEN DISPLAY 'INVALID POLICY NUMBER' AND ADD 1 TO WS-ERROR-COUNT",
+        "line_number": 133,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Abort program if opening POLICY-IN fails (WS-IN-STATUS <> \"00\").",
+        "source_entities": [
+          "WS-IN-STATUS"
+        ],
+        "target_entities": [],
+        "expression": "IF WS-IN-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+        "line_number": 95,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Abort program if opening POLICY-MASTER fails (WS-VSAM-STATUS <> \"00\").",
+        "source_entities": [
+          "WS-VSAM-STATUS"
+        ],
+        "target_entities": [],
+        "expression": "IF WS-VSAM-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+        "line_number": 103,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "AGGREGATION",
+        "description": "Count each successful input read.",
+        "source_entities": [
+          "WS-READ-COUNT"
+        ],
+        "target_entities": [
+          "WS-READ-COUNT"
+        ],
+        "expression": "ADD 1 TO WS-READ-COUNT (executed on NOT AT END of READ)",
+        "line_number": 117,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "AGGREGATION",
+        "description": "Count each successful VSAM write.",
+        "source_entities": [
+          "WS-WRITE-COUNT"
+        ],
+        "target_entities": [
+          "WS-WRITE-COUNT"
+        ],
+        "expression": "ADD 1 TO WS-WRITE-COUNT (NOT INVALID KEY branch)",
+        "line_number": 170,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Count duplicate‑key errors on VSAM write.",
+        "source_entities": [
+          "WS-ERROR-COUNT"
+        ],
+        "target_entities": [
+          "WS-ERROR-COUNT"
+        ],
+        "expression": "ADD 1 TO WS-ERROR-COUNT (INVALID KEY branch)",
+        "line_number": 168,
+        "confidence": 0.95
+      }
+    ],
+    "business_rules": [
+      "Policy number must not be blank; otherwise the record is considered invalid.",
+      "File status after OPEN must be \"00\"; any other status aborts processing.",
+      "Duplicate policy numbers (key violation on VSAM write) are treated as errors and not written.",
+      "All numeric counters start at zero and are incremented as processing proceeds."
+    ],
+    "dependencies": [
+      "Copybook POLYMAST (defines VSAM record fields)",
+      "External device POLIN (input sequential file)",
+      "External device POLYMAST (VSAM KSDS dataset)"
+    ],
+    "relationships": [
+      {
+        "source": "POLLOAD",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 115,
+        "description": "READ statement in paragraph 2000-READ-INPUT reads from POLICY-IN."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "POLICY-MASTER",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 166,
+        "description": "WRITE statement in paragraph 4000-WRITE-VSAM writes to POLICY-MASTER."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "POLYMAST",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": 51,
+        "description": "COPY statement includes POLYMAST copybook."
+      },
+      {
+        "source": "POLICY-IN",
+        "target": "POLICY-IN-REC",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 33,
+        "description": "FD POLICY-IN defines record POLICY-IN-REC."
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-POLICY-NUMBER",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 35,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-CUSTOMER-ID",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 36,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-AGENT-ID",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 37,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-PRODUCT-CODE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 38,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-POLICY-TYPE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 39,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-EFFECTIVE-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 40,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-EXPIRATION-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 41,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-CURRENT-STATUS",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 42,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-PAYMENT-FREQUENCY",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 43,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-POLICY-TERM",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 44,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-WRITTEN-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 45,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-EARNED-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 46,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-RENEWAL-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 47,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "POLICY-NUMBER",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Key field defined in copybook."
+      },
+      {
+        "source": "POLYMAST",
+        "target": "CUSTOMER-ID",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "AGENT-ID",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "PRODUCT-CODE",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "POLICY-TYPE",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "EFFECTIVE-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "EXPIRATION-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "CURRENT-STATUS",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "PAYMENT-FREQUENCY",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "POLICY-TERM",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "WRITTEN-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "EARNED-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "POLYMAST",
+        "target": "RENEWAL-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": null
+      },
+      {
+        "source": "MAIN-PROCESS",
+        "target": "1000-INITIALIZE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 68,
+        "description": "PERFORM 1000-INITIALIZE"
+      },
+      {
+        "source": "MAIN-PROCESS",
+        "target": "2000-READ-INPUT",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 72,
+        "description": "PERFORM 2000-READ-INPUT inside loop"
+      },
+      {
+        "source": "MAIN-PROCESS",
+        "target": "3000-VALIDATE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 75,
+        "description": "PERFORM 3000-VALIDATE after successful read"
+      },
+      {
+        "source": "MAIN-PROCESS",
+        "target": "4000-WRITE-VSAM",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 76,
+        "description": "PERFORM 4000-WRITE-VSAM after validation"
+      },
+      {
+        "source": "MAIN-PROCESS",
+        "target": "9000-CLOSE-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 81,
+        "description": "PERFORM 9000-CLOSE-FILES after loop"
+      },
+      {
+        "source": "1000-INITIALIZE",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.97,
+        "evidence_line": 93,
+        "description": "OPEN INPUT POLICY-IN"
+      },
+      {
+        "source": "1000-INITIALIZE",
+        "target": "POLICY-MASTER",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": 101,
+        "description": "OPEN OUTPUT POLICY-MASTER"
+      },
+      {
+        "source": "2000-READ-INPUT",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 115,
+        "description": "READ POLICY-IN"
+      },
+      {
+        "source": "4000-WRITE-VSAM",
+        "target": "POLICY-MASTER",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": 166,
+        "description": "WRITE POLICY-MASTER-RECORD"
+      },
+      {
+        "source": "9000-CLOSE-FILES",
+        "target": "POLICY-IN",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 187,
+        "description": "CLOSE POLICY-IN"
+      },
+      {
+        "source": "9000-CLOSE-FILES",
+        "target": "POLICY-MASTER",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 189,
+        "description": "CLOSE POLICY-MASTER"
+      },
+      {
+        "source": "3000-VALIDATE",
+        "target": "PI-POLICY-NUMBER",
+        "relationship_type": "FILTERS",
+        "confidence": 0.95,
+        "evidence_line": 133,
+        "description": "Check for blank policy number"
+      },
+      {
+        "source": "3000-VALIDATE",
+        "target": "WS-ERROR-COUNT",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.95,
+        "evidence_line": 133,
+        "description": "Increment error count on invalid policy number"
+      },
+      {
+        "source": "4000-WRITE-VSAM",
+        "target": "WS-ERROR-COUNT",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.95,
+        "evidence_line": 168,
+        "description": "Increment error count on duplicate key (INVALID KEY)"
+      },
+      {
+        "source": "4000-WRITE-VSAM",
+        "target": "WS-WRITE-COUNT",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.95,
+        "evidence_line": 170,
+        "description": "Increment write count on successful write"
+      },
+      {
+        "source": "T1",
+        "target": "POLICY-NUMBER",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.95,
+        "evidence_line": 143,
+        "description": "Derived from PI-POLICY-NUMBER via MOVE"
+      }
+    ],
+    "confidence": 0.86
+  },
+  "reconciliation": {
+    "parser_facts_count": 2,
+    "llm_findings_count": 44,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "POLICY-MASTER"
+    ],
+    "inferred_entities": [
+      "POLLOAD",
+      "POLYMAST",
+      "POLICY-IN-REC",
+      "PI-POLICY-NUMBER",
+      "PI-CUSTOMER-ID",
+      "PI-AGENT-ID",
+      "PI-PRODUCT-CODE",
+      "PI-POLICY-TYPE",
+      "PI-EFFECTIVE-DATE",
+      "PI-EXPIRATION-DATE",
+      "PI-CURRENT-STATUS",
+      "PI-PAYMENT-FREQUENCY",
+      "PI-POLICY-TERM",
+      "PI-WRITTEN-PREMIUM",
+      "PI-EARNED-PREMIUM",
+      "PI-RENEWAL-DATE",
+      "WS-EOF",
+      "WS-IN-STATUS",
+      "WS-VSAM-STATUS",
+      "WS-READ-COUNT",
+      "WS-WRITE-COUNT",
+      "WS-ERROR-COUNT"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "POLLOAD",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 8,
+        "description": "Main program reads the sequential input file."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "POLICY-MASTER",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 8,
+        "description": "Main program writes validated records to the VSAM KSDS."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "POLYMAST",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": 51,
+        "description": "Program includes the copybook that defines the VSAM record layout."
+      },
+      {
+        "source": "POLICY-IN",
+        "target": "POLICY-IN-REC",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 17,
+        "description": "Input file is defined by the POLICY-IN-REC record layout."
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-POLICY-NUMBER",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.9,
+        "evidence_line": 35,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-CUSTOMER-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.9,
+        "evidence_line": 36,
+        "description": null
+      },
+      {
+        "source": "POLICY-IN-REC",
+        "target": "PI-POLICY-TERM",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.9,
+        "evidence_line": 44,
+        "description": null
+      },
+      {
+        "source": "POLLOAD",
+        "target": "WS-READ-COUNT",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for each successful read."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "WS-WRITE-COUNT",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for each successful write."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "WS-ERROR-COUNT",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for validation or duplicate errors."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "PI-POLICY-NUMBER",
+        "relationship_type": "USES",
+        "confidence": 0.8,
+        "evidence_line": 35,
+        "description": "Blank policy number triggers error count and skip."
+      },
+      {
+        "source": "POLLOAD",
+        "target": "POLICY-MASTER",
+        "relationship_type": "USES",
+        "confidence": 0.8,
+        "evidence_line": 22,
+        "description": "Duplicate key on write increments error count."
+      }
+    ],
+    "discrepancies": [
+      "Parser AST listed only file names; it did not capture program name, copybook, record layout, columns, or working‑storage variables.",
+      "Parser did not provide any relationship information; all relationships were inferred from the LLM profile.",
+      "Column and variable entities are present in the LLM profile but absent from deterministic output."
+    ],
+    "gaps_detected": [
+      "No explicit definition of the duplicate‑key detection mechanism (e.g., unique index definition) is provided.",
+      "Mapping of many input fields to VSAM fields beyond the listed columns is not detailed.",
+      "Error‑handling routines for file‑status failures are mentioned but not described.",
+      "External dependencies such as device definitions for POLIN and POLYMAST are not captured."
+    ],
+    "overall_confidence": 0.88
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "POLICY-IN-REC"
+      ],
+      "columns": [
+        "PI-POLICY-NUMBER",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-CODE",
+        "PI-POLICY-TYPE",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRATION-DATE",
+        "PI-CURRENT-STATUS",
+        "PI-PAYMENT-FREQUENCY",
+        "PI-POLICY-TERM",
+        "PI-WRITTEN-PREMIUM",
+        "PI-EARNED-PREMIUM",
+        "PI-RENEWAL-DATE",
+        "POLICY-NUMBER",
+        "CUSTOMER-ID",
+        "AGENT-ID",
+        "PRODUCT-CODE",
+        "POLICY-TYPE",
+        "EFFECTIVE-DATE",
+        "EXPIRATION-DATE",
+        "CURRENT-STATUS",
+        "PAYMENT-FREQUENCY",
+        "POLICY-TERM",
+        "WRITTEN-PREMIUM",
+        "EARNED-PREMIUM",
+        "RENEWAL-DATE"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Load policy master records from a line‑sequential input file into a VSAM KSDS (indexed) file, performing basic validation and duplicate detection.",
+      "narrative": "The program POLLOAD starts by displaying a start message and opening the sequential input file (POLICY‑IN) and the VSAM indexed file (POLICY‑MASTER). It then enters a loop that reads one record at a time from POLICY‑IN until end‑of‑file. For each record, it increments a read counter, validates that the policy number field is not blank, and if valid, moves each input field to the corresponding field in the VSAM record layout defined by the POLYMAST copybook. The program attempts to write the populated VSAM record; on a duplicate key (invalid key) it logs a duplicate‑policy error and increments an error counter, otherwise it increments a write counter. After all input records are processed, the program closes both files, displays totals for records read, written, and errors, and ends execution.",
+      "business_domain": "Personal Lines Policy Management",
+      "business_rules": [
+        "A policy record must contain a non‑blank policy number; otherwise it is considered invalid.",
+        "Policy numbers must be unique in the POLICY-MASTER VSAM file; duplicate keys are rejected and logged as errors.",
+        "All fields from the input record are transferred directly to the VSAM record without transformation.",
+        "Processing stops only after the entire input file has been read; no partial roll‑back is performed."
+      ],
+      "key_logic": [
+        "1. Initialize counters and open input and VSAM files; abort if file status is not '00'.",
+        "2. Loop until end‑of‑file flag (WS-EOF) is set:",
+        "   a. Read one record from POLICY-IN; increment WS-READ-COUNT on success.",
+        "   b. Validate that PI-POLICY-NUMBER is not blank; if blank, increment WS-ERROR-COUNT and skip write.",
+        "   c. Map all PI‑* fields to the corresponding VSAM fields defined in POLYMAST.",
+        "   d. Write the mapped record to POLICY-MASTER; on duplicate key increment WS-ERROR-COUNT, otherwise increment WS-WRITE-COUNT.",
+        "3. After the loop, close both files and display totals for reads, writes and errors."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "POLLOAD",
+        "POLYMAST",
+        "POLICY-IN-REC",
+        "PI-POLICY-NUMBER",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-CODE",
+        "PI-POLICY-TYPE",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRATION-DATE",
+        "PI-CURRENT-STATUS",
+        "PI-PAYMENT-FREQUENCY",
+        "PI-POLICY-TERM",
+        "PI-WRITTEN-PREMIUM",
+        "PI-EARNED-PREMIUM",
+        "PI-RENEWAL-DATE",
+        "WS-EOF",
+        "WS-IN-STATUS",
+        "WS-VSAM-STATUS",
+        "WS-READ-COUNT",
+        "WS-WRITE-COUNT",
+        "WS-ERROR-COUNT"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "MAPPING",
+          "description": "Map each input field (PI-*) to the corresponding VSAM field defined in POLYMAST.",
+          "source_entities": [
+            "PI-POLICY-NUMBER",
+            "PI-CUSTOMER-ID",
+            "PI-AGENT-ID",
+            "PI-PRODUCT-CODE",
+            "PI-POLICY-TYPE",
+            "PI-EFFECTIVE-DATE",
+            "PI-EXPIRATION-DATE",
+            "PI-CURRENT-STATUS",
+            "PI-PAYMENT-FREQUENCY",
+            "PI-POLICY-TERM",
+            "PI-WRITTEN-PREMIUM",
+            "PI-EARNED-PREMIUM",
+            "PI-RENEWAL-DATE"
+          ],
+          "target_entities": [
+            "POLICY-NUMBER",
+            "CUSTOMER-ID",
+            "AGENT-ID",
+            "PRODUCT-CODE",
+            "POLICY-TYPE",
+            "EFFECTIVE-DATE",
+            "EXPIRATION-DATE",
+            "CURRENT-STATUS",
+            "PAYMENT-FREQUENCY",
+            "POLICY-TERM",
+            "WRITTEN-PREMIUM",
+            "EARNED-PREMIUM",
+            "RENEWAL-DATE"
+          ],
+          "expression": "MOVE ... TO ... statements (lines 143‑155)",
+          "line_number": 143,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "FILTER",
+          "description": "Reject record when PI-POLICY-NUMBER is blank; increment error count and skip further processing.",
+          "source_entities": [
+            "PI-POLICY-NUMBER",
+            "WS-ERROR-COUNT"
+          ],
+          "target_entities": [
+            "WS-ERROR-COUNT"
+          ],
+          "expression": "IF PI-POLICY-NUMBER = SPACES THEN DISPLAY 'INVALID POLICY NUMBER' AND ADD 1 TO WS-ERROR-COUNT",
+          "line_number": 133,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Abort program if opening POLICY-IN fails (WS-IN-STATUS <> \"00\").",
+          "source_entities": [
+            "WS-IN-STATUS"
+          ],
+          "target_entities": [],
+          "expression": "IF WS-IN-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+          "line_number": 95,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Abort program if opening POLICY-MASTER fails (WS-VSAM-STATUS <> \"00\").",
+          "source_entities": [
+            "WS-VSAM-STATUS"
+          ],
+          "target_entities": [],
+          "expression": "IF WS-VSAM-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+          "line_number": 103,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "AGGREGATION",
+          "description": "Count each successful input read.",
+          "source_entities": [
+            "WS-READ-COUNT"
+          ],
+          "target_entities": [
+            "WS-READ-COUNT"
+          ],
+          "expression": "ADD 1 TO WS-READ-COUNT (executed on NOT AT END of READ)",
+          "line_number": 117,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "AGGREGATION",
+          "description": "Count each successful VSAM write.",
+          "source_entities": [
+            "WS-WRITE-COUNT"
+          ],
+          "target_entities": [
+            "WS-WRITE-COUNT"
+          ],
+          "expression": "ADD 1 TO WS-WRITE-COUNT (NOT INVALID KEY branch)",
+          "line_number": 170,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "AGGREGATION",
+          "description": "Count duplicate‑key errors on VSAM write.",
+          "source_entities": [
+            "WS-ERROR-COUNT"
+          ],
+          "target_entities": [
+            "WS-ERROR-COUNT"
+          ],
+          "expression": "ADD 1 TO WS-ERROR-COUNT (INVALID KEY branch)",
+          "line_number": 168,
+          "confidence": 0.95
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "POLLOAD",
+          "target": "POLICY-IN",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": 8,
+          "description": "Main program reads the sequential input file."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "POLICY-MASTER",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.96,
+          "evidence_line": 8,
+          "description": "Main program writes validated records to the VSAM KSDS."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "POLYMAST",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": 51,
+          "description": "Program includes the copybook that defines the VSAM record layout."
+        },
+        {
+          "source": "POLICY-IN",
+          "target": "POLICY-IN-REC",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": 17,
+          "description": "Input file is defined by the POLICY-IN-REC record layout."
+        },
+        {
+          "source": "POLICY-IN-REC",
+          "target": "PI-POLICY-NUMBER",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.9,
+          "evidence_line": 35,
+          "description": null
+        },
+        {
+          "source": "POLICY-IN-REC",
+          "target": "PI-CUSTOMER-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.9,
+          "evidence_line": 36,
+          "description": null
+        },
+        {
+          "source": "POLICY-IN-REC",
+          "target": "PI-POLICY-TERM",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.9,
+          "evidence_line": 44,
+          "description": null
+        },
+        {
+          "source": "POLLOAD",
+          "target": "WS-READ-COUNT",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": 62,
+          "description": "Counter incremented for each successful read."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "WS-WRITE-COUNT",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": 62,
+          "description": "Counter incremented for each successful write."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "WS-ERROR-COUNT",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": 62,
+          "description": "Counter incremented for validation or duplicate errors."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "PI-POLICY-NUMBER",
+          "relationship_type": "USES",
+          "confidence": 0.8,
+          "evidence_line": 35,
+          "description": "Blank policy number triggers error count and skip."
+        },
+        {
+          "source": "POLLOAD",
+          "target": "POLICY-MASTER",
+          "relationship_type": "USES",
+          "confidence": 0.8,
+          "evidence_line": 22,
+          "description": "Duplicate key on write increments error count."
+        }
+      ],
+      "gaps": [
+        "No explicit definition of the duplicate‑key detection mechanism (e.g., unique index definition) is provided.",
+        "Mapping of many input fields to VSAM fields beyond the listed columns is not detailed.",
+        "Error‑handling routines for file‑status failures are mentioned but not described.",
+        "External dependencies such as device definitions for POLIN and POLYMAST are not captured."
+      ]
+    },
+    "overall_confidence": 0.88
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:POLLOAD.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "POLLOAD.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\POLLOAD.CBL",
+        "total_lines": 206
+      }
+    },
+    {
+      "id": "PROGRAM:POLLOAD",
+      "label": "Program",
+      "properties": {
+        "name": "POLLOAD",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": null,
+        "line_number": 8
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 17
+      }
+    },
+    {
+      "id": "FILE:POLICY-MASTER",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-MASTER",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 22
+      }
+    },
+    {
+      "id": "COPYBOOK:POLYMAST",
+      "label": "Copybook",
+      "properties": {
+        "name": "POLYMAST",
+        "entity_type": "COPYBOOK",
+        "data_type": null,
+        "parent": null,
+        "line_number": 51
+      }
+    },
+    {
+      "id": "TABLE:POLICY-IN-REC",
+      "label": "Table",
+      "properties": {
+        "name": "POLICY-IN-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 33
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-NUMBER",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-NUMBER",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(15)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 35
+      }
+    },
+    {
+      "id": "COLUMN:PI-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 36
+      }
+    },
+    {
+      "id": "COLUMN:PI-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 37
+      }
+    },
+    {
+      "id": "COLUMN:PI-PRODUCT-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PRODUCT-CODE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(30)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 39
+      }
+    },
+    {
+      "id": "COLUMN:PI-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 40
+      }
+    },
+    {
+      "id": "COLUMN:PI-EXPIRATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EXPIRATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 41
+      }
+    },
+    {
+      "id": "COLUMN:PI-CURRENT-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CURRENT-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(20)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 42
+      }
+    },
+    {
+      "id": "COLUMN:PI-PAYMENT-FREQUENCY",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PAYMENT-FREQUENCY",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(20)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 43
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-TERM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-TERM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(02)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 44
+      }
+    },
+    {
+      "id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(10)V99",
+        "parent": "POLICY-IN-REC",
+        "line_number": 45
+      }
+    },
+    {
+      "id": "COLUMN:PI-EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(10)V99",
+        "parent": "POLICY-IN-REC",
+        "line_number": 46
+      }
+    },
+    {
+      "id": "COLUMN:PI-RENEWAL-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-RENEWAL-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-IN-REC",
+        "line_number": 47
+      }
+    },
+    {
+      "id": "VARIABLE:WS-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": null,
+        "line_number": 57
+      }
+    },
+    {
+      "id": "VARIABLE:WS-IN-STATUS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-IN-STATUS",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": null,
+        "line_number": 59
+      }
+    },
+    {
+      "id": "VARIABLE:WS-VSAM-STATUS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-VSAM-STATUS",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": null,
+        "line_number": 60
+      }
+    },
+    {
+      "id": "VARIABLE:WS-READ-COUNT",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-READ-COUNT",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(7)",
+        "parent": null,
+        "line_number": 62
+      }
+    },
+    {
+      "id": "VARIABLE:WS-WRITE-COUNT",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-WRITE-COUNT",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(7)",
+        "parent": null,
+        "line_number": 63
+      }
+    },
+    {
+      "id": "VARIABLE:WS-ERROR-COUNT",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-ERROR-COUNT",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(7)",
+        "parent": null,
+        "line_number": 64
+      }
+    },
+    {
+      "id": "PROCEDURE:MAIN-PROCESS",
+      "label": "Procedure",
+      "properties": {
+        "name": "MAIN-PROCESS",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 66
+      }
+    },
+    {
+      "id": "PROCEDURE:1000-INITIALIZE",
+      "label": "Procedure",
+      "properties": {
+        "name": "1000-INITIALIZE",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 89
+      }
+    },
+    {
+      "id": "PROCEDURE:2000-READ-INPUT",
+      "label": "Procedure",
+      "properties": {
+        "name": "2000-READ-INPUT",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 113
+      }
+    },
+    {
+      "id": "PROCEDURE:3000-VALIDATE",
+      "label": "Procedure",
+      "properties": {
+        "name": "3000-VALIDATE",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 129
+      }
+    },
+    {
+      "id": "PROCEDURE:3000-EXIT",
+      "label": "Procedure",
+      "properties": {
+        "name": "3000-EXIT",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 157
+      }
+    },
+    {
+      "id": "PROCEDURE:4000-WRITE-VSAM",
+      "label": "Procedure",
+      "properties": {
+        "name": "4000-WRITE-VSAM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 164
+      }
+    },
+    {
+      "id": "PROCEDURE:9000-CLOSE-FILES",
+      "label": "Procedure",
+      "properties": {
+        "name": "9000-CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "POLLOAD",
+        "line_number": 185
+      }
+    },
+    {
+      "id": "COLUMN:POLICY-NUMBER",
+      "label": "Column",
+      "properties": {
+        "name": "POLICY-NUMBER",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:PRODUCT-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "PRODUCT-CODE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:POLICY-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "POLICY-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:EXPIRATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "EXPIRATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:CURRENT-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "CURRENT-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:PAYMENT-FREQUENCY",
+      "label": "Column",
+      "properties": {
+        "name": "PAYMENT-FREQUENCY",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:POLICY-TERM",
+      "label": "Column",
+      "properties": {
+        "name": "POLICY-TERM",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:RENEWAL-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "RENEWAL-DATE",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "POLYMAST",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map each input field (PI-*) to the corresponding VSAM field defined in POLYMAST.",
+        "expression": "MOVE ... TO ... statements (lines 143‑155)",
+        "line_number": 143
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "FILTER",
+        "description": "Reject record when PI-POLICY-NUMBER is blank; increment error count and skip further processing.",
+        "expression": "IF PI-POLICY-NUMBER = SPACES THEN DISPLAY 'INVALID POLICY NUMBER' AND ADD 1 TO WS-ERROR-COUNT",
+        "line_number": 133
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Abort program if opening POLICY-IN fails (WS-IN-STATUS <> \"00\").",
+        "expression": "IF WS-IN-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+        "line_number": 95
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Abort program if opening POLICY-MASTER fails (WS-VSAM-STATUS <> \"00\").",
+        "expression": "IF WS-VSAM-STATUS NOT = \"00\" DISPLAY error and STOP RUN",
+        "line_number": 103
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "AGGREGATION",
+        "description": "Count each successful input read.",
+        "expression": "ADD 1 TO WS-READ-COUNT (executed on NOT AT END of READ)",
+        "line_number": 117
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "AGGREGATION",
+        "description": "Count each successful VSAM write.",
+        "expression": "ADD 1 TO WS-WRITE-COUNT (NOT INVALID KEY branch)",
+        "line_number": 170
+      }
+    },
+    {
+      "id": "TRANSFORMATION:POLLOAD.CBL:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Count duplicate‑key errors on VSAM write.",
+        "expression": "ADD 1 TO WS-ERROR-COUNT (INVALID KEY branch)",
+        "line_number": 168
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROGRAM:POLLOAD",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "FILE:POLICY-MASTER",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COPYBOOK:POLYMAST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "TABLE:POLICY-IN-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-POLICY-NUMBER",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-PRODUCT-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-POLICY-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-EXPIRATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-CURRENT-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-PAYMENT-FREQUENCY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-POLICY-TERM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PI-RENEWAL-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-IN-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-VSAM-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-READ-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-WRITE-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "VARIABLE:WS-ERROR-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:MAIN-PROCESS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:1000-INITIALIZE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:2000-READ-INPUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:3000-VALIDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:3000-EXIT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:4000-WRITE-VSAM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "PROCEDURE:9000-CLOSE-FILES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:POLICY-NUMBER",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PRODUCT-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:POLICY-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:EXPIRATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:CURRENT-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:PAYMENT-FREQUENCY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:POLICY-TERM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:POLLOAD.CBL",
+      "target_id": "COLUMN:RENEWAL-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:POLICY-IN",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 8,
+        "description": "Main program reads the sequential input file."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:POLICY-MASTER",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 8,
+        "description": "Main program writes validated records to the VSAM KSDS."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:POLYMAST",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": 51,
+        "description": "Program includes the copybook that defines the VSAM record layout."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:POLICY-IN-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 17,
+        "description": "Input file is defined by the POLICY-IN-REC record layout."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN-REC",
+      "target_id": "TABLE:PI-POLICY-NUMBER",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 35,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN-REC",
+      "target_id": "TABLE:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 36,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN-REC",
+      "target_id": "TABLE:PI-POLICY-TERM",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 44,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:WS-READ-COUNT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for each successful read."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:WS-WRITE-COUNT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for each successful write."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:WS-ERROR-COUNT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": 62,
+        "description": "Counter incremented for validation or duplicate errors."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:PI-POLICY-NUMBER",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.8,
+        "evidence_line": 35,
+        "description": "Blank policy number triggers error count and skip."
+      }
+    },
+    {
+      "source_id": "TABLE:POLLOAD",
+      "target_id": "TABLE:POLICY-MASTER",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.8,
+        "evidence_line": 22,
+        "description": "Duplicate key on write increments error count."
+      }
+    }
+  ]
+}

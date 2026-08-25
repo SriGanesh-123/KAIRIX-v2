@@ -1,0 +1,43 @@
+{
+  "purpose": "Extracts, cleanses, validates and loads PRODUCER master data from the Guidewire PolicyCenter PostgreSQL replica into the insurance data warehouse, while logging audit information and quarantining invalid rows.",
+  "high_level_narrative": "When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.producer via the CM_Guidewire_PG_Source connection. Each row passes through a Derived Column component that trims whitespace from producer_name and forces state_code to upper case. A second Derived Column adds an ETL metadata column etl_load_date (current timestamp). The rows are then evaluated by a Conditional Split that enforces three business rules: commission_rate between 0 and 100, producer_type limited to AGENCY, BROKER, AGENT or INDIVIDUAL, and created_date not in the future. Valid rows are bulk‑loaded (fast load, 10,000 rows per batch) into the staging table stg.producer on the CM_DW_PG_Target connection. Invalid rows, source read errors, and any lookup‑no‑match rows are merged by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, an Execute SQL task updates the audit log with end_time, status COMPLETED and the row counts (rows_read, rows_inserted, rows_rejected). If any task raises an error, the OnError event handler inserts a record into etl.etl_error_log with details of the failure.",
+  "business_domain": "Policy / Producer Master Data (Guidewire PolicyCenter)",
+  "inputs": [
+    "public.producer (Guidewire PolicyCenter PostgreSQL source table)",
+    "CM_Guidewire_PG_Source connection (read‑only replica)",
+    "CM_DW_PG_Target connection (target data warehouse)",
+    "etl.etl_audit_log (used for logging start/end, not a source of business data)",
+    "etl.etl_error_log (used for error logging)"
+  ],
+  "outputs": [
+    "stg.producer (staging table in insurance_dw schema)",
+    "stg.error_quarantine (table for rejected/invalid rows)",
+    "etl.etl_audit_log (audit record with start/end timestamps and row counts)",
+    "etl.etl_error_log (error record when package fails)"
+  ],
+  "key_transformations": [
+    "SELECT producer_id, producer_code, producer_name, commission_rate, producer_type, state_code, producer_status, created_date FROM public.producer",
+    "TRIM(producer_name) to remove leading/trailing whitespace",
+    "UPPER(TRIM(state_code)) to standardize state codes",
+    "Add ETL metadata column etl_load_date = GETDATE()",
+    "Conditional split applying business rules (commission_rate range, allowed producer_type values, created_date <= current date)",
+    "Union All to combine source error output, invalid rows, and lookup‑no‑match rows into a single error stream",
+    "Fast bulk load into stg.producer with commit size of 10,000 rows"
+  ],
+  "key_dependencies": [
+    "Connection Manager CM_Guidewire_PG_Source (ADO.NET Npgsql provider)",
+    "Connection Manager CM_DW_PG_Target (ADO.NET Npgsql provider)",
+    "Execute SQL Task – Log Package Start (etl.etl_audit_log)",
+    "Execute SQL Task – Log Package End (etl.etl_audit_log update)",
+    "Execute SQL Task – Log Error (etl.etl_error_log)",
+    "Data Flow components: ADO.NET PGSource, Derived Column (twice), Conditional Split, Union All, OLE DB Destination (stg.producer), OLE DB Destination (stg.error_quarantine)",
+    "Target tables: stg.producer, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log"
+  ],
+  "business_rules": [
+    "commission_rate must be greater than or equal to 0.00 and less than or equal to 100.00",
+    "producer_type must be one of the allowed values: 'AGENCY', 'BROKER', 'AGENT', 'INDIVIDUAL'",
+    "created_date must not be in the future (created_date <= current system date)",
+    "Whitespace is trimmed from producer_name and state_code is normalized to upper case",
+    "Rows failing any rule are routed to the error quarantine table"
+  ]
+}

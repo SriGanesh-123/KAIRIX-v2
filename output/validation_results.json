@@ -1,0 +1,791 @@
+{
+  "neo4j": {
+    "total_nodes": 1465,
+    "node_labels": [
+      {
+        "labels": [
+          "Entity"
+        ],
+        "count": 1055
+      },
+      {
+        "labels": [
+          "Transformation"
+        ],
+        "count": 236
+      },
+      {
+        "labels": [
+          "BusinessRule"
+        ],
+        "count": 153
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "count": 21
+      }
+    ],
+    "entity_types": [
+      {
+        "entity_type": "COLUMN",
+        "count": 265
+      },
+      {
+        "entity_type": "TABLE",
+        "count": 253
+      },
+      {
+        "entity_type": null,
+        "count": 214
+      },
+      {
+        "entity_type": "VARIABLE",
+        "count": 108
+      },
+      {
+        "entity_type": "TASK",
+        "count": 44
+      },
+      {
+        "entity_type": "PROCEDURE",
+        "count": 39
+      },
+      {
+        "entity_type": "PROGRAM",
+        "count": 35
+      },
+      {
+        "entity_type": "VIEW",
+        "count": 24
+      },
+      {
+        "entity_type": "TRANSFORMATION",
+        "count": 22
+      },
+      {
+        "entity_type": "ARTIFACT",
+        "count": 21
+      },
+      {
+        "entity_type": "FILE",
+        "count": 21
+      },
+      {
+        "entity_type": "PACKAGE",
+        "count": 5
+      },
+      {
+        "entity_type": "DATABASE",
+        "count": 2
+      },
+      {
+        "entity_type": "COPYBOOK",
+        "count": 2
+      }
+    ],
+    "total_relationships": 2943,
+    "relationship_types": [
+      {
+        "rel_type": "CONTAINS",
+        "count": 2219
+      },
+      {
+        "rel_type": "HAS_TRANSFORMATION",
+        "count": 236
+      },
+      {
+        "rel_type": "USES",
+        "count": 194
+      },
+      {
+        "rel_type": "HAS_RULE",
+        "count": 153
+      },
+      {
+        "rel_type": "SEMANTICALLY_EQUIVALENT_TO",
+        "count": 38
+      },
+      {
+        "rel_type": "FEEDS_INTO",
+        "count": 25
+      },
+      {
+        "rel_type": "WRITES_TO",
+        "count": 18
+      },
+      {
+        "rel_type": "READS_FROM",
+        "count": 15
+      },
+      {
+        "rel_type": "OUTPUT_TO",
+        "count": 14
+      },
+      {
+        "rel_type": "INPUT_TO",
+        "count": 11
+      },
+      {
+        "rel_type": "DERIVES_FROM",
+        "count": 10
+      },
+      {
+        "rel_type": "SHARED_BY",
+        "count": 4
+      },
+      {
+        "rel_type": "CALCULATES",
+        "count": 2
+      },
+      {
+        "rel_type": "TRANSFORMS",
+        "count": 2
+      },
+      {
+        "rel_type": "CALLS",
+        "count": 2
+      }
+    ],
+    "sample_nodes": [
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Generate a claim\u2011level loss breakdown (incurred amount) by policy source and line of business, suitable for profit\u2011and\u2011loss or YTD loss reporting, using ClaimCenter transaction data and TFG loss transaction code mappings."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:ClaimCenter_Monoline.sql",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Generate a claim\u2011level loss summary (incurred amount) filtered primarily by year\u2011to\u2011date, suitable for profit\u2011and\u2011loss reporting, by aggregating transaction amounts from ClaimCenter and enriching them with policy and underwriting information."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:EARNPREM.CBL",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Calculate earned and unearned premium amounts for each premium record by matching it to a policy, validating dates, applying the earned\u2011premium formula, and writing the results or error records."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Account.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extracts ACCOUNT master records from the Guidewire PolicyCenter PostgreSQL replica, cleanses and validates the data, and loads the clean rows into the insurance data warehouse while quarantining invalid rows and logging audit information."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Claims.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extract claim records from the Guidewire PolicyCenter PostgreSQL replica, validate the policy foreign key, cleanse and enrich the data, enforce claim business rules, pre\u2011aggregate incurred amounts per policy (BR\u201109), and load the results into the data\u2011warehouse staging tables while logging audit information and quarantining rejected rows."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Coverage.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extracts rows from the Guidewire PolicyCenter coverage table, validates the foreign key to POLICY_PERIOD, applies data cleansing and business rule checks, and loads the clean rows into the data warehouse staging schema while quarantining invalid rows and logging audit information."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Job.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extracts rows from the Guidewire PolicyCenter JOB table, validates the foreign\u2011key relationship to POLICY, applies data cleansing and business rule checks, and loads the clean rows into the data\u2011warehouse staging table while quarantining invalid rows and logging audit information."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Merge pre\u2011aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Location.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extracts LOCATION records from the Guidewire PolicyCenter PostgreSQL source, validates the foreign key to POLICY_PERIOD, cleanses address and code fields, applies business rule checks, and loads the valid rows into the data warehouse while quarantining invalid rows and logging audit information."
+      },
+      {
+        "labels": [
+          "Artifact"
+        ],
+        "id": "ARTIFACT:Extract_Policy.dtsx",
+        "name": null,
+        "entity_type": null,
+        "source_file": null,
+        "description": null,
+        "purpose": "Extracts policy records from the Guidewire PolicyCenter PostgreSQL source, validates foreign\u2011key relationships to ACCOUNT and PRODUCER, applies data cleansing and business rule checks, and loads the clean rows into the data\u2011warehouse staging table while quarantining rejected rows and logging audit information."
+      }
+    ],
+    "sample_relationships": [
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "ClaimCenter_CPP_Breakdown.sql",
+        "target_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "@PV_STARTDATE",
+        "target_id": "VARIABLE:@PV_STARTDATE"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "@PV_ENDDATE",
+        "target_id": "VARIABLE:@PV_ENDDATE"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_transactionlineitem",
+        "target_id": "VIEW:vw_curr_cc_transactionlineitem"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_transaction",
+        "target_id": "VIEW:vw_curr_cc_transaction"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_transactionset",
+        "target_id": "VIEW:vw_curr_cc_transactionset"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_claim",
+        "target_id": "VIEW:vw_curr_cc_claim"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_policy",
+        "target_id": "VIEW:vw_curr_cc_policy"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_check",
+        "target_id": "VIEW:vw_curr_cc_check"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_reserveline",
+        "target_id": "VIEW:vw_curr_cc_reserveline"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_exposure",
+        "target_id": "VIEW:vw_curr_cc_exposure"
+      },
+      {
+        "source_name": null,
+        "source_id": "ARTIFACT:ClaimCenter_CPP_Breakdown.sql",
+        "rel_type": "CONTAINS",
+        "rel_source_file": null,
+        "target_name": "vw_curr_cc_coverage",
+        "target_id": "VIEW:vw_curr_cc_coverage"
+      }
+    ],
+    "artifact_verification": [
+      {
+        "file_name": "ClaimCenter_CPP_Breakdown.sql",
+        "source_type": "sql",
+        "entity_count": 42,
+        "rule_count": 7
+      },
+      {
+        "file_name": "ClaimCenter_Monoline.sql",
+        "source_type": "sql",
+        "entity_count": 48,
+        "rule_count": 8
+      },
+      {
+        "file_name": "EARNPREM.CBL",
+        "source_type": "cobol",
+        "entity_count": 86,
+        "rule_count": 11
+      },
+      {
+        "file_name": "Extract_Account.dtsx",
+        "source_type": "ssis",
+        "entity_count": 35,
+        "rule_count": 7
+      },
+      {
+        "file_name": "Extract_Claims.dtsx",
+        "source_type": "ssis",
+        "entity_count": 58,
+        "rule_count": 6
+      },
+      {
+        "file_name": "Extract_Coverage.dtsx",
+        "source_type": "ssis",
+        "entity_count": 45,
+        "rule_count": 7
+      },
+      {
+        "file_name": "Extract_Job.dtsx",
+        "source_type": "ssis",
+        "entity_count": 50,
+        "rule_count": 6
+      },
+      {
+        "file_name": "Extract_KPI_Aggregates.dtsx",
+        "source_type": "ssis",
+        "entity_count": 48,
+        "rule_count": 7
+      },
+      {
+        "file_name": "Extract_Location.dtsx",
+        "source_type": "ssis",
+        "entity_count": 36,
+        "rule_count": 7
+      },
+      {
+        "file_name": "Extract_Policy.dtsx",
+        "source_type": "ssis",
+        "entity_count": 47,
+        "rule_count": 5
+      },
+      {
+        "file_name": "Extract_PolicyPeriod.dtsx",
+        "source_type": "ssis",
+        "entity_count": 47,
+        "rule_count": 6
+      },
+      {
+        "file_name": "Extract_Premium.dtsx",
+        "source_type": "ssis",
+        "entity_count": 50,
+        "rule_count": 7
+      },
+      {
+        "file_name": "Extract_Producer.dtsx",
+        "source_type": "ssis",
+        "entity_count": 41,
+        "rule_count": 5
+      },
+      {
+        "file_name": "KPICALC.CBL",
+        "source_type": "cobol",
+        "entity_count": 93,
+        "rule_count": 8
+      },
+      {
+        "file_name": "Master_ETL_Guidewire.dtsx",
+        "source_type": "ssis",
+        "entity_count": 37,
+        "rule_count": 8
+      },
+      {
+        "file_name": "POLLOAD.CBL",
+        "source_type": "cobol",
+        "entity_count": 52,
+        "rule_count": 4
+      },
+      {
+        "file_name": "POLSTATUS.CBL",
+        "source_type": "cobol",
+        "entity_count": 83,
+        "rule_count": 10
+      },
+      {
+        "file_name": "PREMCALC.CBL",
+        "source_type": "cobol",
+        "entity_count": 161,
+        "rule_count": 10
+      },
+      {
+        "file_name": "PolicyCenter_CPP_Breakdown.sql",
+        "source_type": "sql",
+        "entity_count": 52,
+        "rule_count": 9
+      },
+      {
+        "file_name": "PolicyCenter_Monoline.sql",
+        "source_type": "sql",
+        "entity_count": 46,
+        "rule_count": 10
+      },
+      {
+        "file_name": "RPTEXTRACT.CBL",
+        "source_type": "cobol",
+        "entity_count": 40,
+        "rule_count": 5
+      }
+    ]
+  },
+  "qdrant": {
+    "kairix_chunks": {
+      "vector_count": 154,
+      "dimension": 384,
+      "distance": "COSINE",
+      "samples": [
+        {
+          "id": "00491954-61bb-51a1-a69e-19b78e29ec3e",
+          "payload": {
+            "file_name": "KPICALC.CBL",
+            "source_type": "cobol",
+            "business_domain": "Insurance Policy & Premium KPI Reporting",
+            "chunk_index": 10,
+            "line_start": 401,
+            "line_end": 450,
+            "text": "DISPLAY 'POLICY INPUT OUT OF ORDER'\n\n                          ADD 1 TO WS-IO-ERRORS\n\n                          SET FATAL-ERROR TO TRUE\n\n                       ELSE\n\n                          MOVE PI-POLICY-NO TO WS-PREV-PI-POLICY\n\n                       END-IF\n\n                    END-IF\n\n              END-READ\n\n           END-IF.\n \n       READ-PREMIUM.\n\n           IF NOT PR-EOF\n\n              READ PREMIUM-IN\n\n                 AT END MOVE 'Y' TO WS-PR-EOF\n\n                 NOT AT END\n\n                    IF WS-PR-ST NOT = '00'\n\n                       DISPLAY 'PREMIUM READ ERROR ' WS-PR-ST\n\n                       ADD 1 TO WS-IO-ERRORS\n\n                       SET FATAL-ERROR TO TRUE\n\n                    ELSE\n\n                       IF WS-PREV-PR-POLICY NOT = LOW-VALUES\n\n                          AND PRI-POLICY-NO < WS-PREV-PR-POLICY\n\n                          DISPLAY 'PREMIUM INPUT OUT OF ORDER'\n\n                          ADD 1 TO WS-IO-ERRORS\n\n                          SET FATAL-ERROR TO TRUE\n\n                       ELSE",
+            "content_type": "source_chunk"
+          }
+        },
+        {
+          "id": "00d7da52-29f4-5dc1-bd4d-8b55960c39d1",
+          "payload": {
+            "file_name": "Extract_Policy.dtsx",
+            "source_type": "ssis",
+            "business_domain": "Policy (Insurance PolicyCenter)",
+            "chunk_index": 1,
+            "line_start": 41,
+            "line_end": 90,
+            "text": "<DTS:Property DTS:Name=\"Provider\">Npgsql PostgreSQL Provider</DTS:Property>\n          <DTS:Property DTS:Name=\"Description\">Target: Insurance Data Warehouse - stg / rpt schemas (PostgreSQL)</DTS:Property>\n        </DTS:ConnectionManager>\n      </DTS:ObjectData>\n    </DTS:ConnectionManager>\n  </DTS:ConnectionManagers>\n  <DTS:Executables>\n    <DTS:Executable DTS:refId=\"Package\\SQL_LogStart\" DTS:CreationName=\"Microsoft.ExecuteSQLTask\" DTS:DTSID=\"{30C846BB-1546-43D7-8B26-E31E74379975}\" DTS:ExecutableType=\"Microsoft.ExecuteSQLTask\" DTS:ObjectName=\"SQL - Log Package Start\">\n      <DTS:ObjectData>\n        <SQLTask:SqlTaskData\n            SQLTask:Connection=\"CM_DW_PG_Target\"\n            SQLTask:SqlStatementSource=\"INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES (&apos;Extract_Policy&apos;, &apos;Data Flow&apos;, now(), &apos;RUNNING&apos;)\" />\n      </DTS:ObjectData>\n    </DTS:Executable>\n    <DTS:Executable DTS:refId=\"Package\\DFT_Main\" DTS:CreationName=\"Microsoft.Pipeline\" DTS:DTSID=\"{9101BEE4-4A7E-423C-B078-A7B4B528DD90}\" DTS:ExecutableType=\"Microsoft.Pipeline\" DTS:ObjectName=\"DFT - Extract, Cleanse, Validate, Load policy\">\n      <DTS:ObjectData>\n    <pipeline version=\"1\">\n      <components>\n      <component name=\"SRC - policy (PostgreSQL)\" componentClassID=\"Microsoft.ADO.NET.PGSource\" description=\"Extracts rows from public.policy on CM_Guidewire_PG_Source\">\n        <properties>\n          <property name=\"SqlCommand\">SELECT policy_id, account_id, producer_id, policy_number, product_code, policy_status, effective_date, expiration_date, cancellation_date, cancellation_reason, updated_timestamp FROM public.policy</property>\n          <property name=\"ConnectionManager\">CM_Guidewire_PG_Source</property>\n        </properties>\n        <outputs>\n          <output name=\"OLE DB Source Output\" />\n          <output name=\"OLE DB Source Error Output\" />\n        </outputs>\n      </component>\n      <component name=\"LKP - Validate Account (account_id)\" componentClassID=\"Microsoft.Lookup\" description=\"Validates account_id exists in Account (referential integrity / BR-01, BR-05)\">\n        <properties>\n          <property name=\"SqlCommandParam\">SELECT account_id FROM stg.account</property>\n          <property name=\"JoinColumn\">account_id</property>\n          <property name=\"NoMatchBehavior\">RedirectRowsToNoMatchOutput</property>\n          <property name=\"CacheMode\">Full</property>\n        </properties>\n        <inputs>\n          <input name=\"OLE DB Source Output\" />\n        </inputs>\n        <outputs>\n          <output name=\"Lookup Match Output\" />\n          <output name=\"Lookup No Match Output (-> Error Path)\" />\n        </outputs>\n      </component>\n      <component name=\"LKP - Validate Producer (producer_id)\" componentClassID=\"Microsoft.Lookup\" description=\"Validates producer_id exists in Producer (referential integrity / BR-01, BR-05)\">\n        <properties>\n          <property name=\"SqlCommandParam\">SELECT producer_id FROM stg.producer</property>\n          <property name=\"JoinColumn\">producer_id</property>\n          <property name=\"NoMatchBehavior\">RedirectRowsToNoMatchOutput</property>\n          <property name=\"CacheMode\">Full</property>\n        </properties>",
+            "content_type": "source_chunk"
+          }
+        }
+      ]
+    },
+    "kairix_summaries": {
+      "vector_count": 21,
+      "dimension": 384,
+      "distance": "COSINE",
+      "samples": [
+        {
+          "id": "028eb0b2-81dc-557e-b878-6d52ea6b747c",
+          "payload": {
+            "file_name": "RPTEXTRACT.CBL",
+            "source_type": "cobol",
+            "business_domain": "Insurance Premium and Policy Reporting",
+            "purpose": "Generate a monthly insurance report by merging policy data with premium data, calculating unearned premium for each policy, and appending a static KPI summary to the output file.",
+            "text": "# Source Code Summary: RPTEXTRACT\n\n**Business Domain:** Insurance Premium and Policy Reporting\n\n## Purpose\nGenerate a monthly insurance report by merging policy data with premium data, calculating unearned premium for each policy, and appending a static KPI summary to the output file.\n\n## High-Level Narrative\nThe program opens the sequential files POLICY.DAT (policy records) and PREMIUM.DAT (premium records) for input and creates MONTHLY_REPORT.TXT for output. It writes a header line describing the columns. It then enters a loop that reads one policy record at a time; for each policy it reads the next premium record, computes the unearned premium as WRITTEN-PREMIUM minus EARNED-PREMIUM, moves the month constant and all relevant fields into a report\u2011record structure (defined in the RPTEXTRACT copybook), and writes the assembled line to the report file. When the end of the policy file is reached, the loop terminates. After the data rows, the program performs a sub\u2011paragraph that writes a series of hard\u2011coded KPI summary lines (total policies, active, pending, expired, cancelled, and a validation that WRITTEN = EARNED + UNEARNED). Finally, it closes all files and stops execution.\n\n## Inputs\n- POLICY-IN (POLICY.DAT) \u2013 sequential file containing policy number, customer ID, agent ID, product code, and status\n- PREMIUM-IN (PREMIUM.DAT) \u2013 sequential file containing policy number, written premium, and earned premium\n\n## Outputs\n- REPORT-OUT (MONTHLY_REPORT.TXT) \u2013 sequential text file containing the header, one line per policy with calculated unearned premium, and a KPI summary section\n\n## Key Transformations\n- Compute WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM for each policy\n- Map month constant (WS-REPORT-MONTH) and all policy/premium fields into the report record layout (RPTEXTRACT copybook)\n- Concatenate fields into a pipe\u2011delimited line written to the output file\n- Append static KPI summary lines with pre\u2011calculated totals\n\n## Key Dependencies\n- Copybook RPTEXTRACT (defines REPORT-RECORD layout fields such as RPT-REPORT-MONTH, RPT-POLICY-NO, etc.)\n- File definitions in the ENVIRONMENT DIVISION for POLICY-IN, PREMIUM-IN, and REPORT-OUT\n- Sequential file I/O operations (OPEN, READ, WRITE, CLOSE) provided by the COBOL runtime\n\n## Business Rules\n- Unearned premium must equal written premium minus earned premium\n- Report month is fixed to the value '202607' (July 2026)\n- Each policy record is assumed to have a matching premium record in the same order\n- KPI summary totals are hard\u2011coded (e.g., TOTAL POLICIES = 14500, ACTIVE POLICIES = 13100, etc.)\n- Status codes are carried through unchanged from the policy file to the report\n",
+            "content_type": "summary"
+          }
+        },
+        {
+          "id": "0bbaeb7f-20c9-5831-b302-4f788d4841d9",
+          "payload": {
+            "file_name": "Extract_KPI_Aggregates.dtsx",
+            "source_type": "ssis",
+            "business_domain": "Insurance Data Warehouse \u2013 KPI reporting for underwriting and policy retention",
+            "purpose": "Merge pre\u2011aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution.",
+            "text": "# Source Code Summary: Extract_KPI_Aggregates\n\n**Business Domain:** Insurance Data Warehouse \u2013 KPI reporting for underwriting and policy retention\n\n## Purpose\nMerge pre\u2011aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution.\n\n## High-Level Narrative\nWhen the package starts it inserts a row into etl.etl_audit_log marking the run as RUNNING. The Data Flow Task DFT_KPI then reads four staging tables from the PostgreSQL data warehouse: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period and stg.job. Premium and policy_period rows are sorted by policy_period_id and merged on that key to attach the policy_id to each premium record. The result is re\u2011sorted by policy_id and left\u2011outer merged with the sorted claims summary (by policy_id) so that policies without claims still appear. A Derived Column component computes loss_ratio, commission_ratio and underwriting_profit with divide\u2011by\u2011zero safeguards and adds an etl_load_date. The KPI rows are fast\u2011loaded into rpt.fact_kpi_summary. In parallel, the job stream is aggregated by year and month to count renewal jobs and total expiring policies; a second Derived Column calculates retention_rate (renewed/expiring*100) with zero\u2011division protection. The monthly retention rows are fast\u2011loaded into rpt.fact_retention_rate. After the data flow completes, a second SQL task updates etl.etl_audit_log with end_time, status COMPLETED and the row\u2011count metrics.\n\n## Inputs\n- stg.premium_summary_by_period\n- stg.claims_incurred_summary_by_policy\n- stg.policy_period\n- stg.job\n- etl.etl_audit_log (for logging start)\n\n## Outputs\n- rpt.fact_kpi_summary\n- rpt.fact_retention_rate\n- etl.etl_audit_log (updated with end_time, status, rows_read, rows_inserted, rows_rejected)\n\n## Key Transformations\n- Sort premium summary by policy_period_id\n- Sort policy_period by policy_period_id\n- Merge Join (inner) premium with policy_period to obtain policy_id\n- Sort merged premium+policy_id by policy_id\n- Sort claims summary by policy_id\n- Merge Join (left outer) premium+policy_id with claims to retain rows with zero claims\n- Derived Column calculations: loss_ratio = (incurred / earned_premium) * 100 with zero\u2011check, commission_ratio = (commission / written_premium) * 100 with zero\u2011check, underwriting_profit = earned_premium - incurred - commission - operating_expense, etl_load_date = GETDATE()\n- Aggregation of job data by year and month to count renewed policies and total expiring policies\n- Derived Column calculation: retention_rate = (renewed_count / expiring_count) * 100 with zero\u2011check\n\n## Key Dependencies\n- Connection manager CM_DW_PG_Target (Npgsql PostgreSQL provider)\n- Staging tables: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period, stg.job\n- Destination tables: rpt.fact_kpi_summary, rpt.fact_retention_rate, etl.etl_audit_log\n- SSIS components: OLE DB Source, Sort, Merge Join, Aggregation, Derived Column, OLE DB Destination, Execute SQL Task\n\n## Business Rules\n- BR\u201109: Claims incurred summary is pre\u2011aggregated by policy and must be joined to premium data.\n- BR\u201110: Loss Ratio = (incurred_amount / earned_premium) * 100; if earned_premium = 0 then loss_ratio = 0.\n- BR\u201111: Underwriting Profit = earned_premium - incurred_amount - commission_amount - operating_expense.\n- Commission Ratio = (commission_amount / written_premium) * 100; if written_premium = 0 then commission_ratio = 0.\n- Retention Rate = (renewed policies / expiring policies) * 100; if expiring policies = 0 then retention_rate = 0.\n- Left outer join ensures policies with no claims receive an incurred_amount of 0 for KPI calculation.\n- All KPI calculations include divide\u2011by\u2011zero protection to avoid runtime errors.\n",
+            "content_type": "summary"
+          }
+        }
+      ]
+    }
+  },
+  "investigation_tests": [
+    {
+      "test_id": "TEST_Q1",
+      "question": "Where does PREMIUM-OUT come from?",
+      "category": "Lineage / Producer",
+      "intent": "lineage",
+      "graph_records_count": 1,
+      "graph_evidence_samples": [
+        "{\"source_entity\": \"EARNPREM\", \"source_type\": \"TABLE\", \"source_file\": \"EARNPREM.CBL\", \"relationship\": \"WRITES_TO\", \"target_entity\": \"PREMIUM-OUT\", \"target_type\": \"TABLE\"}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[PREMCALC.CBL | score=0.386]\n05 VE-VIN               PIC X(17).\n          05 VE-MAKE              PIC X(30).\n          05 VE-MODEL             PIC X(30).\n          05 VE-YEAR              PIC 9(4).\n  ",
+        "[PREMCALC.CBL | score=0.372]\nIDENTIFICATION DIVISION.\n       PROGRAM-ID. PREMCALC.\n      ******************************************************************\n      * TASK 6 - PREMIUM CALCULATION\n      *"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "EARNPREM.CBL",
+        "Extract_Premium.dtsx",
+        "PREMCALC.CBL",
+        "PolicyCenter_Monoline.sql",
+        "RPTEXTRACT.CBL"
+      ],
+      "final_answer": "**Answer \u2013 Origin of\u202f`PREMIUM\u2011OUT`**\n\n- **File / table name:** `PREMIUM\u2011OUT`  \n- **Created / populated by:** the COBOL program **`EARNPREM`** (source file **`EARNPREM.CBL`**).  \n\n**Evidence**\n\n| Evidence type | What it shows |\n|---------------|---------------|\n| **Neo4j graph** | `EARNPREM` **WRITES_TO** `PREMIUM\u2011OUT` (both labelled as *TABLE*). |\n| **Source\u2011code snippet (EARNPREM.CBL)** | `CLOSE POLICY-IN PREMIUM-IN PREMIUM-OUT ERROR-OUT.` \u2013 the program opens `PREMIUM\u2011OUT` as one of its sequential files and later closes it. |\n| **Source\u2011code summary (EARNPREM)** | \u201cCalculate earned and unearned premium amounts \u2026 writes the results \u2026 to **premium output**.\u201d \u2013 the narrative describes the program writing its results to a *premium output* file, which is the `PREMIUM\u2011OUT` table. |\n\n**Data\u2011flow / lineage**\n\n1. **Input files** opened by `EARNPREM`  \n   - `POLICY\u2011IN` (policy master data)  \n   - `PREMIUM\u2011IN` (raw premium records)  \n\n2. **Processing** (as described in the summary)  \n   - Reads a policy record, then loops through premium records.  \n   - Validates dates, matches each premium to its policy, applies the earned\u2011premium formula.  \n\n3. **Output**  \n   - Writes the calculated earned/unearned premium values to **`PREMIUM\u2011OUT`**.  \n   - Errors are written to `ERROR\u2011OUT`.  \n\nThus, **`PREMIUM\u2011OUT` is not a source table; it is the destination (output) file/table produced by the `EARNPREM` program** after it processes `PREMIUM\u2011IN` and `POLICY\u2011IN`.\n\n**Confidence level:** **High** \u2013 the graph relationship and multiple code excerpts directly link `EARNPREM` to `PREMIUM\u2011OUT`.  \n\n**Gaps / unknowns**\n\n- The exact record layout (field definitions) of `PREMIUM\u2011OUT` is not shown in the provided excerpts.  \n- No downstream consumer of `PREMIUM\u2011OUT` is identified in the evidence, though it is likely read by later reporting or accounting jobs.  \n\nIf you need the physical file definition (e.g., FD/01\u2011level layout) or downstream usage, additional source files or job control scripts would be required.",
+      "trace_path": [
+        "Intent classified as: lineage",
+        "Cypher: MATCH (src:Entity)-[r:WRITES_TO|FEEDS_INTO|DERIVES_FROM]->(t:Entity)\nWHERE toLower(t.name) = toLower('PREMIUM-OUT')\nRETURN DISTINCT \n    src.name AS source_entity,\n    src.entity_type AS source_type,\n    r.source_file AS source_file,\n    type(r) AS relationship,\n    t.name AS target_entity,\n    t.entity_type AS target_type\nLIMIT 20",
+        "Graph returned 1 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q2",
+      "question": "Which programs write to PREMIUM-OUT?",
+      "category": "Lineage / Program Writer",
+      "intent": "lineage",
+      "graph_records_count": 1,
+      "graph_evidence_samples": [
+        "{\"program\": \"EARNPREM\", \"program_type\": \"TABLE\", \"source_file\": \"EARNPREM.CBL\", \"relationship\": \"WRITES_TO\", \"target_entity\": \"PREMIUM-OUT\", \"target_type\": \"TABLE\"}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[EARNPREM.CBL | score=0.432]\n05 WS-MAX-DAY     PIC 99.\n          05 WS-LEAP        PIC X.\n          05 WS-REM4        PIC 9(4).\n          05 WS-REM100      PIC 9(4).\n          05 WS-REM400      PIC 9(",
+        "[KPICALC.CBL | score=0.426]\nPERFORM READ-PREMIUM\n \n           PERFORM UNTIL (PI-EOF AND PR-EOF) OR FATAL-ERROR\n\n              IF PI-EOF\n\n                 PERFORM HANDLE-ORPHAN-PREMIUM\n\n              E"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "EARNPREM.CBL",
+        "KPICALC.CBL",
+        "PREMCALC.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql",
+        "RPTEXTRACT.CBL"
+      ],
+      "final_answer": "**Answer \u2013 Programs that write to `PREMIUM\u2011OUT`**\n\n- **`EARNPREM`**  \n  - **Program type:** TABLE (a COBOL batch program) \u2013 *source file `EARNPREM.CBL`*  \n  - **Graph evidence:** Neo4j record shows a `WRITES_TO` relationship from `EARNPREM` to the target entity **`PREMIUM\u2011OUT`** (type\u202f=\u202fTABLE).  \n  - **Code evidence:** In the `EARNPREM.CBL` excerpt the statement  \n\n    ```cobol\n    WRITE PRO-REC\n    ```  \n\n    follows moves of premium fields (`PRO-WRITTEN-PREMIUM`, `PRO-EARNED-PREMIUM`, etc.). `PRO-REC` is the record layout that is written to the **premium\u2011output file** (the file that maps to the `PREMIUM\u2011OUT` table). The surrounding narrative (\u201copens four sequential files \u2026 premium output \u2026\u201d) confirms that this write is to the premium\u2011output dataset.\n\n- **No other programs were found with a documented `WRITES_TO \u2192 PREMIUM\u2011OUT` relationship** in the supplied Neo4j results or the semantic\u2011search code snippets.  \n\n---\n\n### Data\u2011flow / lineage summary\n\n1. **Input files** (policy and premium input) are read by `EARNPREM`.  \n2. The program calculates earned and unearned premium amounts.  \n3. It moves the calculated values into the output record (`PRO\u2011REC`).  \n4. `WRITE PRO\u2011REC` persists the record to the **premium\u2011output file**, which is represented in the data model as the table **`PREMIUM\u2011OUT`**.  \n\nThus, `EARNPREM` is the source of data that populates `PREMIUM\u2011OUT`.\n\n---\n\n### Confidence assessment\n\n- **Confidence level:** **High**  \n  - Direct graph edge (`WRITES_TO`) explicitly links `EARNPREM` to `PREMIUM\u2011OUT`.  \n  - The COBOL code snippet shows the actual `WRITE` operation to the output record that corresponds to that table.  \n- **Gaps / limitations:**  \n  - The evidence set does not include a complete inventory of all programs in the legacy environment, so it is possible (but not evidenced) that other programs also write to `PREMIUM\u2011OUT`.  \n  - No explicit `WRITE` statements for other candidate programs (e.g., `KPICALC`, `PREMCALC`, `RPTEXTRACT`) were found that target `PREMIUM\u2011OUT`.  \n\nIf a comprehensive answer is required, a full scan of the codebase or an expanded graph query for additional `WRITES_TO` edges would be needed.",
+      "trace_path": [
+        "Intent classified as: lineage",
+        "Cypher: MATCH (src:Entity)-[r:WRITES_TO|FEEDS_INTO|DERIVES_FROM]->(t:Entity)\nWHERE toLower(t.name) = toLower('PREMIUM-OUT')\nRETURN DISTINCT \n    src.name AS program,\n    src.entity_type AS program_type,\n    r.source_file AS source_file,\n    type(r) AS relationship,\n    t.name AS target_entity,\n    t.entity_type AS target_type\nLIMIT 20",
+        "Graph returned 1 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q3",
+      "question": "What will be affected if EARNPREM.CBL is changed?",
+      "category": "Impact Analysis",
+      "intent": "lineage",
+      "graph_records_count": 20,
+      "graph_evidence_samples": [
+        "{\"source_entity\": \"EARNPREM.CBL\", \"source_type\": \"ARTIFACT\", \"relationship\": \"CONTAINS\", \"target_entity\": \"EARNPREM\", \"target_type\": \"PROGRAM\", \"source_file\": \"EARNPREM.CBL\"}",
+        "{\"source_entity\": \"EARNPREM.CBL\", \"source_type\": \"ARTIFACT\", \"relationship\": \"CONTAINS\", \"target_entity\": \"POLICY-IN\", \"target_type\": \"FILE\", \"source_file\": \"EARNPREM.CBL\"}",
+        "{\"source_entity\": \"EARNPREM.CBL\", \"source_type\": \"ARTIFACT\", \"relationship\": \"CONTAINS\", \"target_entity\": \"PREMIUM-IN\", \"target_type\": \"FILE\", \"source_file\": \"EARNPREM.CBL\"}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[PolicyCenter_CPP_Breakdown.sql | score=0.314]\nelse null end as ChangePremium\n,case \n\twhen TranType in ('PolicyChange') then EditEffectiveDate\n\telse null end as ChangeDate\nfrom(\nSELECT  \n\t\tprofit.NAME",
+        "[PolicyCenter_Monoline.sql | score=0.314]\nelse null end as ChangePremium\n,case \n\twhen TranType in ('PolicyChange') then EditEffectiveDate\n\telse null end as ChangeDate\nfrom(\nSELECT  \n\t\tprofit.NAME\tas P"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "ClaimCenter_CPP_Breakdown.sql",
+        "ClaimCenter_Monoline.sql",
+        "EARNPREM.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql"
+      ],
+      "final_answer": "**What will be affected if **`EARNPREM.CBL`** is changed?**  \n\n| Evidence | What it tells us |\n|----------|-----------------|\n| **Neo4j graph** \u2013 `CONTAINS` relationships | `EARNPREM.CBL` **contains** the program **EARNPREM** and the four sequential files that the program reads/writes: <br>\u2022 `POLICY\u2011IN` (policy input) <br>\u2022 `PREMIUM\u2011IN` (premium input) <br>\u2022 `PREMIUM\u2011OUT` (premium output) <br>\u2022 `ERROR\u2011OUT` (error output) <br>It also defines the variables/columns that the program uses: <br>\u2022 Input\u2011record variables (`PI\u2011REC`) and columns `PI\u2011POLICY\u2011NO`, `PI\u2011EFFECTIVE\u2011DATE`, `PI\u2011EXPIRY\u2011DATE` <br>\u2022 Output\u2011record variables (`PRI\u2011REC`) and columns `PRI\u2011PREMIUM\u2011ID`, `PRI\u2011POLICY\u2011NO`, `PRI\u2011WRITTEN\u2011PREMIUM`, `PRI\u2011EARNED\u2011PREMIUM`, `PRI\u2011UNEARNED\u2011PREMIUM`. |\n| **Semantic search \u2013 source\u2011code summary of `EARNPREM.CBL`** | The program **calculates earned and unearned premium** (written\u202f\u00d7\u202fearned\u2011days/term\u2011days, caps earned at written, floors unearned at zero). <br>It **opens the four files listed above**, reads the first policy record, loops through premium records, validates dates, applies the earned\u2011premium formula, and writes either a premium\u2011output record or an error\u2011output record. |\n| **Semantic search \u2013 other SQL snippets** | No direct references to `EARNPREM.CBL`, but the presence of \u201cChangePremium/ChangeDate\u201d columns in policy\u2011center extracts suggests that downstream reporting (e.g., profit\u2011center or policy\u2011change extracts) may **consume the `PREMIUM\u2011OUT` file** produced by `EARNPREM`. |\n\n### Direct impacts of a change to `EARNPREM.CBL`\n\n- **Program logic (`EARNPREM`)**  \n  - Any modification to the calculation (e.g., formula, caps, date validation) will change the values written to `PREMIUM\u2011OUT`.  \n  - Changes to error\u2011handling will affect what is written to `ERROR\u2011OUT`.\n\n- **Input files**  \n  - `POLICY\u2011IN` and `PREMIUM\u2011IN` are read by the program; altering field names, record layouts, or required columns (e.g., `PI\u2011EFFECTIVE\u2011DATE`) will break the program unless the code is updated accordingly.\n\n- **Output files**  \n  - **`PREMIUM\u2011OUT`** \u2013 contains columns `PRI\u2011WRITTEN\u2011PREMIUM`, `PRI\u2011EARNED\u2011PREMIUM`, `PRI\u2011UNEARNED\u2011PREMIUM`. Any change to these column definitions, order, or data types will ripple to any downstream batch jobs, reports, or data\u2011warehouses that consume this file.  \n  - **`ERROR\u2011OUT`** \u2013 used by downstream error\u2011handling or audit processes; changes to its format will affect those processes.\n\n- **Down\u2011stream consumers (implicit)**  \n  - Any **reporting, analytics, or integration jobs** that read `PREMIUM\u2011OUT` (e.g., profit\u2011center extracts, policy\u2011change extracts) will see different premium figures or may fail if the file layout changes.  \n  - Systems that rely on the **earned\u2011premium values** (`PRI\u2011EARNED\u2011PREMIUM`, `PRI\u2011UNEARNED\u2011PREMIUM`) for financial statements, reserving, or regulatory reporting will be impacted.\n\n- **Data lineage / lineage impact**  \n  - **Source \u2192 `POLICY\u2011IN` / `PREMIUM\u2011IN` \u2192 `EARNPREM.CBL` \u2192 `PREMIUM\u2011OUT` / `ERROR\u2011OUT`**.  \n  - Changing the program breaks the **lineage** from the original policy and premium input records to the final earned\u2011premium output, potentially invalidating lineage documentation and impact analyses.\n\n### Confidence assessment\n\n- **Confidence level:** **Medium\u2011High**  \n  - The graph clearly enumerates the files and columns that belong to `EARNPREM.CBL`.  \n  - The code summary confirms the business logic and the four\u2011file flow.  \n  - The only gap is the lack of explicit downstream program or table names that consume `PREMIUM\u2011OUT`; we infer impact based on typical downstream usage (reporting, analytics) but cannot name specific downstream assets.\n\n### Gaps / Missing information\n\n- No concrete list of **down\u2011stream batch jobs, SQL scripts, or data\u2011warehouse tables** that read `PREMIUM\u2011OUT`.  \n- No version\u2011control or change\u2011management metadata (e.g., which teams own the input files).  \n- No details on **field lengths, data types, or file formats**; a change to those could have additional impact not captured here.\n\n---\n\n**Bottom line:**  \nChanging `EARNPREM.CBL` will directly affect the **EARNPREM program itself**, the **four sequential files it reads/writes**, and **any downstream processes that rely on the earned\u2011premium output (`PREMIUM\u2011OUT`) or the error output (`ERROR\u2011OUT`)**. The impact propagates through the data lineage from the original policy/premium inputs to downstream reporting and financial calculations.",
+      "trace_path": [
+        "Intent classified as: lineage",
+        "Cypher: CALL {\n  // Direct lineage edges defined in EARNPREM.CBL\n  MATCH (src:Entity)-[r {source_file: 'EARNPREM.CBL'}]->(tgt:Entity)\n  RETURN src.name AS source_entity,\n         src.entity_type AS source_type,\n         type(r) AS relationship,\n         tgt.name AS target_entity,\n         tgt.entity_type AS target_type,\n         r.source_file AS source_file\n  UNION\n  // Entities that are targets of EARNPREM.CBL (i.e., written to) and have downstream usage in other files\n  MATCH (src:Entity)-[r]->(mid:Entity)<-[r2]-(down:Entity)\n  WHERE r.source_file = 'EARNPREM.CBL' AND r2.source_file <> 'EARNPREM.CBL'\n  RETURN src.name AS source_entity,\n         src.entity_type AS source_type,\n         type(r) AS relationship,\n         mid.name AS target_entity,\n         mid.entity_type AS target_type,\n         r.source_file AS source_file\n  UNION\n  // Reverse direction: entities that feed into EARNPREM.CBL\n  MATCH (up:Entity)-[r]->(tgt:Entity)\n  WHERE tgt.source_file = 'EARNPREM.CBL'\n  RETURN up.name AS source_entity,\n         up.entity_type AS source_type,\n         type(r) AS relationship,\n         tgt.name AS target_entity,\n         tgt.entity_type AS target_type,\n         r.source_file AS source_file\n}\nRETURN source_entity,\n       source_type,\n       relationship,\n       target_entity,\n       target_type,\n       source_file\nLIMIT 20",
+        "Graph returned 20 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q4",
+      "question": "How does EARNPREM.CBL relate to the PolicyCenter tables?",
+      "category": "Cross-System Lineage",
+      "intent": "combined",
+      "graph_records_count": 20,
+      "graph_evidence_samples": [
+        "{\"source_entity\": \"EARNPREM.CBL\", \"source_type\": \"ARTIFACT\", \"relationship\": null, \"target_entity\": null, \"target_type\": null, \"source_file\": null}",
+        "{\"source_entity\": \"EARNPREM\", \"source_type\": \"PROGRAM\", \"relationship\": null, \"target_entity\": null, \"target_type\": null, \"source_file\": null}",
+        "{\"source_entity\": \"POLICY-IN\", \"source_type\": \"FILE\", \"relationship\": null, \"target_entity\": null, \"target_type\": null, \"source_file\": null}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[EARNPREM.CBL | score=0.469]\nIDENTIFICATION DIVISION.\n       PROGRAM-ID. EARNPREM.\n\n      ******************************************************************\n      * COMPACT POC VERSION OF EARNPREM\n   ",
+        "[Extract_KPI_Aggregates.dtsx | score=0.416]\n</inputs>\n        <outputs>\n          <output name=\"Retention Aggregate Output\" />\n        </outputs>\n      </component>\n      <component name=\"DER - Retent"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "ClaimCenter_CPP_Breakdown.sql",
+        "EARNPREM.CBL",
+        "Extract_KPI_Aggregates.dtsx",
+        "Extract_Premium.dtsx",
+        "PREMCALC.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql"
+      ],
+      "final_answer": "**Answer \u2013 How\u202fEARNPREM.CBL is tied to the PolicyCenter tables**\n\n- **What\u202fEARNPREM.CBL does**  \n  - It is a COBOL \u201cearned\u2011premium\u201d batch program (see the source\u2011code summary).  \n  - The program opens **four sequential files** in this order:  \n\n    | File (as referenced in the code) | Likely source / purpose |\n    |-----------------------------------|--------------------------|\n    | `POLICY\u2011IN`                       | Flat\u2011file dump of **PolicyCenter policy records** (one row per policy) |\n    | `PREMIUM\u2011IN`                      | Flat\u2011file dump of **PolicyCenter premium records** (written premium for each policy) |\n    | `PREMIUM\u2011OUT`                     | Output file that will contain **earned\u2011premium and unearned\u2011premium amounts** for each premium record |\n    | `ERROR\u2011OUT`                       | Output file for any validation or business\u2011rule errors (e.g., missing policy, date out\u2011of\u2011range) |\n\n- **Key data elements used inside the program**  \n\n  | Variable / column (from the Neo4j dump) | Meaning in the program | How it maps to PolicyCenter tables |\n  |------------------------------------------|------------------------|------------------------------------|\n  | `PI\u2011POLICY\u2011NO` (column)                  | Policy identifier read from `POLICY\u2011IN` | `POLICY_CENTER.POLICY.POLICY_NO` (or the equivalent \u201cpolicy_number\u201d column) |\n  | `PI\u2011EFFECTIVE\u2011DATE`, `PI\u2011EXPIRY\u2011DATE`    | Effective / expiry dates of the policy | `POLICY_CENTER.POLICY.EFFECTIVE_DATE`, `EXPIRY_DATE` |\n  | `PRI\u2011PREMIUM\u2011ID` (column)                | Primary key of a premium record from `PREMIUM\u2011IN` | `POLICY_CENTER.PREMIUM.PREMIUM_ID` |\n  | `PRI\u2011POLICY\u2011NO` (column)                 | Foreign key linking premium to a policy | Same as `PI\u2011POLICY\u2011NO` \u2013 joins to `POLICY_CENTER.POLICY` |\n  | `PRI\u2011WRITTEN\u2011PREMIUM` (column)          | The \u201cwritten\u201d premium amount | `POLICY_CENTER.PREMIUM.WRITTEN_PREMIUM` |\n  | `PRI\u2011EARNED\u2011PREMIUM` (column) \u2013 written by the program | Result of the earned\u2011premium formula | Stored later (via a load step) into a **policy\u2011premium fact table** (e.g., `DW.PREMIUM_EARNED`) |\n\n- **Business logic that creates the lineage**  \n\n  1. **Extraction step (outside of EARNPREM)** \u2013 A separate ETL job (e.g., the SSIS packages shown in the \u201cExtract_KPI_Aggregates.dtsx\u201d snippets) reads the **PolicyCenter relational tables** (`POLICY`, `PREMIUM`, etc.) and writes flat files `POLICY\u2011IN` and `PREMIUM\u2011IN`.  \n  2. **EARNPREM.CBL processing** \u2013  \n     - Reads a policy record (`PI\u2011REC`) and holds it in memory.  \n     - Loops through premium records (`PRI\u2011REC`), matches on `POLICY\u2011NO`.  \n     - Validates that the premium\u2019s effective/expiry dates fall within the policy\u2019s term.  \n     - Applies the earned\u2011premium formula:  \n\n       ```\n       earned = written * earned_days / term_days\n       earned = MIN(earned, written)   // cap at written premium\n       unearned = written - earned   // floor at 0\n       ```  \n\n     - Writes the calculated values to `PREMIUM\u2011OUT`.  \n     - Any mismatches or rule violations are written to `ERROR\u2011OUT`.  \n  3. **Load back to the data warehouse** \u2013 A downstream load (not shown in the evidence but typical in this architecture) reads `PREMIUM\u2011OUT` and inserts the earned\u2011premium rows into a **DW fact table** that is later queried by the PolicyCenter KPI scripts (`PolicyCenter_Monoline.sql`, `PolicyCenter_CPP_Breakdown.sql`).  \n\n- **Why the relationship matters**  \n  - The **PolicyCenter tables are the authoritative source** of policy and premium master data.  \n  - `EARNPREM.CBL` is the **legacy batch engine** that derives the earned\u2011premium metric used by downstream reporting (the KPI extracts that reference PolicyCenter tables).  \n  - Any change to the schema of the PolicyCenter tables (e.g., renaming `POLICY_NO`) would require a corresponding change in the file\u2011generation step or in the COBOL program\u2019s field mappings.\n\n- **Confidence level** \u2013 **Medium**  \n\n  - The evidence directly shows the COBOL program\u2019s file names, variables, and business rules, and it shows PolicyCenter\u2011related SQL extracts that consume premium data.  \n  - What is **not** shown explicitly is the exact ETL job that creates `POLICY\u2011IN` and `PREMIUM\u2011IN` from the PolicyCenter tables, nor the exact target table that receives `PREMIUM\u2011OUT`.  \n  - Because the naming conventions (`POLICY\u2011IN`, `PREMIUM\u2011IN`) and the column names (`PI\u2011POLICY\u2011NO`, `PRI\u2011WRITTEN\u2011PREMIUM`) line up with typical PolicyCenter schema, the inferred relationship is strong, but a definitive mapping table is missing.\n\n- **Gaps / Open questions**  \n\n  1. **Exact source tables** \u2013 Which specific PolicyCenter tables (e.g., `PC_POLICY`, `PC_PREMIUM`) feed the flat files?  \n  2. **Load destination** \u2013 Which DW or reporting table receives the `PREMIUM\u2011OUT` records?  \n  3. **File format / control** \u2013 The Neo4j dump does not show the file\u2011layout definitions (record lengths, delimiters), which would be needed for a full data\u2011lineage diagram.  \n\nIf you need the precise table names or the ETL job that writes the input files, you\u2019ll have to locate the **file\u2011generation program** (often a separate COBOL copybook or an SSIS package) that extracts from PolicyCenter.",
+      "trace_path": [
+        "Intent classified as: combined",
+        "Cypher: MATCH (a:Artifact {file_name: 'EARNPREM.CBL'})-[:CONTAINS]->(src:Entity)\nOPTIONAL MATCH (src)-[r:READS_FROM|WRITES_TO|USES|DERIVES_FROM|FEEDS_INTO|CONTAINS]->(tgt:Entity)\nWHERE toLower(tgt.name) CONTAINS toLower('policycenter')\nRETURN DISTINCT\n    src.name AS source_entity,\n    src.entity_type AS source_type,\n    type(r) AS relationship,\n    tgt.name AS target_entity,\n    tgt.entity_type AS target_type,\n    r.source_file AS source_file\nUNION\nMATCH (a:Artifact {file_name: 'EARNPREM.CBL'})-[:CONTAINS]->(tgt:Entity)\nWHERE toLower(tgt.name) CONTAINS toLower('policycenter')\nOPTIONAL MATCH (src:Entity)-[r:READS_FROM|WRITES_TO|USES|DERIVES_FROM|FEEDS_INTO|CONTAINS]->(tgt)\nRETURN DISTINCT\n    src.name AS source_entity,\n    src.entity_type AS source_type,\n    type(r) AS relationship,\n    tgt.name AS target_entity,\n    tgt.entity_type AS target_type,\n    r.source_file AS source_file\nLIMIT 20",
+        "Graph returned 20 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q5",
+      "question": "What is the formula used to calculate earned premium?",
+      "category": "Business Logic / Formula",
+      "intent": "semantic",
+      "graph_records_count": 0,
+      "graph_evidence_samples": [],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[EARNPREM.CBL | score=0.483]\nELSE\n\n                    COMPUTE WS-EARNED-DAYS =\n\n                      WS-CALC-INT - WS-EFF-INT + 1\n\n                 END-IF\n\n              END-IF\n\n              COMPUT",
+        "[PREMCALC.CBL | score=0.477]\nIDENTIFICATION DIVISION.\n       PROGRAM-ID. PREMCALC.\n      ******************************************************************\n      * TASK 6 - PREMIUM CALCULATION\n      *"
+      ],
+      "confidence": 0.65,
+      "source_files": [
+        "EARNPREM.CBL",
+        "PREMCALC.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql",
+        "RPTEXTRACT.CBL"
+      ],
+      "final_answer": "**Answer \u2013 Earned\u2011premium formula**\n\n- **File / program:** `EARNPREM.CBL` (the \u201cEarned Premium\u201d batch program)  \n- **Key calculation (shown in the source):**\n\n```cobol\nCOMPUTE WS\u2011EARNED\u2011ROUNDED =\n        PRI\u2011WRITTEN\u2011PREMIUM\n        * WS\u2011EARNED\u2011DAYS\n        / WS\u2011TERM\u2011DAYS\n```\n\n- **Supporting logic that defines the variables used in the formula**\n\n  1. **Earned\u2011days** (the portion of the policy term that has elapsed) is calculated as  \n\n     ```cobol\n     COMPUTE WS\u2011EARNED\u2011DAYS = WS\u2011CALC\u2011INT - WS\u2011EFF\u2011INT + 1\n     ```\n     where  \n     - `WS\u2011EFF\u2011INT` = effective date (policy start) expressed as an integer (e.g., YYYYMMDD).  \n     - `WS\u2011CALC\u2011INT` = calculation date (usually the \u201cas\u2011of\u201d date for the batch) expressed as an integer.  \n\n  2. **Term\u2011days** (the total length of the policy) is derived elsewhere in the program (not shown in the excerpt) but represents the number of days between the policy\u2019s effective date and its expiration date.\n\n  3. **Written premium** (`PRI\u2011WRITTEN\u2011PREMIUM`) is the full premium amount that was originally written for the policy.\n\n- **Resulting earned\u2011premium amount**\n\n  \\[\n  \\text{Earned Premium} = \\text{Written Premium} \\times\n  \\frac{\\text{Earned Days}}{\\text{Term Days}}\n  \\]\n\n- **Post\u2011calculation checks (also in `EARNPREM.CBL`)**\n\n  ```cobol\n  IF WS\u2011EARNED > PRI\u2011WRITTEN\u2011PREMIUM\n      MOVE PRI\u2011WRITTEN\u2011PREMIUM TO WS\u2011EARNED\n  END\u2011IF\n\n  COMPUTE WS\u2011UNEARNED = PRI\u2011WRITTEN\u2011PREMIUM - WS\u2011EARNED\n  IF WS\u2011UNEARNED < ZERO\n      MOVE ZERO TO WS\u2011UNEARNED\n  END\u2011IF\n  ```\n\n  These guard against rounding or data\u2011entry errors that could otherwise produce an earned premium greater than the written premium or a negative unearned premium.\n\n---\n\n### Data flow / lineage (as inferred from the code)\n\n1. **Input files** \u2013 policy file (provides effective/expiration dates) and premium file (provides `PRI\u2011WRITTEN\u2011PREMIUM`).  \n2. **Date conversion** \u2013 dates are converted to integer form (`WS\u2011EFF\u2011INT`, `WS\u2011CALC\u2011INT`).  \n3. **Earned\u2011days calculation** \u2013 number of days elapsed in the policy term.  \n4. **Earned\u2011premium calculation** \u2013 applies the formula above.  \n5. **Unearned\u2011premium derivation** \u2013 `Written \u2013 Earned`.  \n6. **Output** \u2013 results are written to the premium\u2011output file; any errors are written to an error file.\n\n---\n\n### Confidence assessment\n\n- **Confidence level:** **Medium**  \n  - The formula appears explicitly in the `EARNPREM.CBL` source snippet (score\u202f0.483\u202f\u2013\u202f0.626), which is the authoritative place for the business rule.  \n  - The surrounding context (definition of `WS\u2011EARNED\u2011DAYS` and the post\u2011calculation checks) supports the interpretation.  \n  - No contradictory evidence was found in the other retrieved files, and there is no graph evidence to corroborate further, so while the answer is solid for the code shown, we cannot confirm whether any additional adjustments (e.g., prorations, discounts) are applied elsewhere in the system.\n\n---\n\n**Gaps / missing details**\n\n- The exact method for calculating `WS\u2011TERM\u2011DAYS` (total policy term) is not shown in the excerpt.  \n- Any business\u2011rule exceptions (e.g., short\u2011rate, cancellation handling) are not captured in the provided snippet.  \n- No Neo4j graph evidence was available to cross\u2011validate the data lineage.",
+      "trace_path": [
+        "Intent classified as: semantic",
+        "Cypher: MATCH (e:Entity)\nWHERE toLower(e.name) CONTAINS toLower('earned premium')\nOPTIONAL MATCH (a:Artifact)-[:HAS_RULE]->(br:BusinessRule)\nWHERE toLower(br.description) CONTAINS toLower('earned premium')\nOPTIONAL MATCH (a)-[:HAS_TRANSFORMATION]->(t:Transformation)\nWHERE toLower(t.description) CONTAINS toLower('earned premium')\n   OR toLower(t.expression) CONTAINS toLower('earned premium')\nRETURN \n    e.name AS entity_name,\n    e.entity_type AS entity_type,\n    a.file_name AS artifact_file,\n    br.id AS business_rule_id,\n    br.description AS business_rule_description,\n    t.id AS transformation_id,\n    t.description AS transformation_description,\n    t.expression AS transformation_expression\nLIMIT 20",
+        "Graph returned 0 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q6",
+      "question": "Which COBOL program calculates written premium?",
+      "category": "Program Identification",
+      "intent": "combined",
+      "graph_records_count": 5,
+      "graph_evidence_samples": [
+        "{\"program\": \"EARNPREM.CBL\", \"program_type\": \"cobol\", \"source_file\": \"EARNPREM.CBL\", \"target_entity\": null, \"target_type\": null, \"transformation_id\": \"TRANSFORM:EARNPREM.CBL:T7\", \"transformation_desc\": \"Calculate earned premium (rounded) as written premium multiplied by earned days divided by term days.\", \"transformation_expr\": \"WS-EARNED = PRI-WRITTEN-PREMIUM * WS-EARNED-DAYS / WS-TERM-DAYS\"}",
+        "{\"program\": \"EARNPREM.CBL\", \"program_type\": \"cobol\", \"source_file\": \"EARNPREM.CBL\", \"target_entity\": null, \"target_type\": null, \"transformation_id\": \"TRANSFORM:EARNPREM.CBL:T8\", \"transformation_desc\": \"Cap earned premium at the written premium amount.\", \"transformation_expr\": \"IF WS-EARNED > PRI-WRITTEN-PREMIUM THEN WS-EARNED = PRI-WRITTEN-PREMIUM\"}",
+        "{\"program\": \"EARNPREM.CBL\", \"program_type\": \"cobol\", \"source_file\": \"EARNPREM.CBL\", \"target_entity\": null, \"target_type\": null, \"transformation_id\": \"TRANSFORM:EARNPREM.CBL:T9\", \"transformation_desc\": \"Calculate unearned premium as written premium minus earned premium.\", \"transformation_expr\": \"WS-UNEARNED = PRI-WRITTEN-PREMIUM - WS-EARNED\"}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[PREMCALC.CBL | score=0.474]\n05 VE-VIN               PIC X(17).\n          05 VE-MAKE              PIC X(30).\n          05 VE-MODEL             PIC X(30).\n          05 VE-YEAR              PIC 9(4).\n  ",
+        "[PREMCALC.CBL | score=0.463]\nIDENTIFICATION DIVISION.\n       PROGRAM-ID. PREMCALC.\n      ******************************************************************\n      * TASK 6 - PREMIUM CALCULATION\n      *"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "EARNPREM.CBL",
+        "KPICALC.CBL",
+        "PREMCALC.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql",
+        "RPTEXTRACT.CBL"
+      ],
+      "final_answer": "**Answer \u2013 COBOL program that calculates the written premium**\n\n- **Program:** `PREMCALC.CBL`  \n- **Why this program is the one that calculates the written premium**\n  - The **semantic search summary** for `PREMCALC.CBL` describes it as *\u201cPremium Calculation (Insurance Rating) for Homeowners and Auto policies\u201d* and states that the program *\u201ccalculates daily premium amounts for validated policies \u2026 and outputting premium records\u201d*\u3010PREMCALC.CBL | score=0.473\u3011.  \n  - In the insurance data\u2011flow, the **written premium** is the primary output of a premium\u2011calculation routine; subsequent programs (`EARNPREM.CBL` and `RPTEXTRACT.CBL`) reference a field named **WRITTEN\u2011PREMIUM** (or `PRI\u2011WRITTEN\u2011PREMIUM`) as an input, e.g.:\n    - `EARNPREM.CBL` uses `PRI\u2011WRITTEN\u2011PREMIUM` to compute earned and unearned premium (transformations T7\u2011T9).  \n    - `RPTEXTRACT.CBL` maps `WRITTEN\u2011PREMIUM` to a report field (`RPT\u2011WRITTEN\u2011PREM`) (TRANSFORM:RPTEXTRACT.CBL:T8).  \n  - Therefore the **source of the written\u2011premium value** must be the program that first creates it \u2013 `PREMCALC.CBL`.\n\n- **Data\u2011lineage / flow**\n  1. **`PREMCALC.CBL`** \u2192 calculates daily premium amounts and writes a **written\u2011premium** value to its output record.  \n  2. **`EARNPREM.CBL`** reads that output (field `PRI\u2011WRITTEN\u2011PREMIUM`) and uses it to compute earned and unearned premium.  \n  3. **`RPTEXTRACT.CBL`** reads the same written\u2011premium field and moves it to the reporting field `RPT\u2011WRITTEN\u2011PREM`.\n\n- **Confidence level:** **Medium**  \n  - The evidence does **not** contain an explicit transformation line like \u201c`CALCULATE WRITTEN\u2011PREMIUM = \u2026`\u201d, but the program description and the downstream usage of the written\u2011premium field strongly imply that `PREMCALC.CBL` is the component that performs that calculation.  \n  - No other COBOL program in the provided evidence shows a calculation of written premium; they only consume it.\n\n- **Gaps / Limitations**\n  - The exact formula used to derive the written premium is not shown in the snippets (e.g., no `COMPUTE` statement for `WRITTEN\u2011PREMIUM`).  \n  - If the system contains additional premium\u2011calculation programs not captured in the current graph/semantic results, they could also be responsible, but based on the available evidence `PREMCALC.CBL` is the most likely answer.",
+      "trace_path": [
+        "Intent classified as: combined",
+        "Cypher: MATCH (target:Entity)\nWHERE toLower(target.name) CONTAINS toLower('written premium')\nMATCH (src:Entity)-[w:WRITES_TO]->(target)\nRETURN src.name AS program,\n       src.entity_type AS program_type,\n       w.source_file AS source_file,\n       target.name AS target_entity,\n       target.entity_type AS target_type,\n       null AS transformation_id,\n       null AS transformation_desc,\n       null AS transformation_expr\nUNION\nMATCH (art:Artifact)-[:HAS_TRANSFORMATION]->(tr:Transformation)\nWHERE toLower(tr.description) CONTAINS toLower('written premium')\n   OR toLower(tr.expression) CONTAINS toLower('written premium')\nRETURN art.file_name AS program,\n       art.source_type AS program_type,\n       tr.source_file AS source_file,\n       null AS target_entity,\n       null AS target_type,\n       tr.id AS transformation_id,\n       tr.description AS transformation_desc,\n       tr.expression AS transformation_expr\nLIMIT 20",
+        "Graph returned 5 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "PASS"
+    },
+    {
+      "test_id": "TEST_Q7_NEGATIVE",
+      "question": "What is the underwriting authority limit for commercial aviation hull reinsurance in ClaimCenter?",
+      "category": "Negative Test (Anti-Hallucination)",
+      "intent": "semantic",
+      "graph_records_count": 2,
+      "graph_evidence_samples": [
+        "{\"artifact\": \"ClaimCenter_CPP_Breakdown.sql\", \"rule_id\": null, \"rule_description\": null, \"entity_id\": null, \"entity_name\": null, \"entity_type\": null, \"entity_description\": null}",
+        "{\"artifact\": \"ClaimCenter_Monoline.sql\", \"rule_id\": null, \"rule_description\": null, \"entity_id\": null, \"entity_name\": null, \"entity_type\": null, \"entity_description\": null}"
+      ],
+      "vector_chunks_count": 10,
+      "vector_evidence_samples": [
+        "[PREMCALC.CBL | score=0.388]\n05 VE-VIN               PIC X(17).\n          05 VE-MAKE              PIC X(30).\n          05 VE-MODEL             PIC X(30).\n          05 VE-YEAR              PIC 9(4).\n  ",
+        "[PREMCALC.CBL | score=0.342]\nIDENTIFICATION DIVISION.\n       PROGRAM-ID. PREMCALC.\n      ******************************************************************\n      * TASK 6 - PREMIUM CALCULATION\n      *"
+      ],
+      "confidence": 0.85,
+      "source_files": [
+        "ClaimCenter_CPP_Breakdown.sql",
+        "ClaimCenter_Monoline.sql",
+        "Extract_Claims.dtsx",
+        "PREMCALC.CBL",
+        "PolicyCenter_CPP_Breakdown.sql",
+        "PolicyCenter_Monoline.sql",
+        "RPTEXTRACT.CBL"
+      ],
+      "final_answer": "**Answer \u2013 Underwriting authority limit for commercial\u2011aviation hull re\u2011insurance in ClaimCenter**\n\n- **Evidence consulted**\n  - **SQL extracts** \u2013 `ClaimCenter_CPP_Breakdown.sql` and `ClaimCenter_Monoline.sql` (both contain joins to underwriting\u2011related tables such as `vw_curr_cc_policy`, `vw_curr_cc_claim`, `vw_curr_cc_transaction`, etc.).\n  - **COBOL source** \u2013 `PREMCALC.CBL` (premium\u2011calculation logic for property/auto lines) and `RPTEXTRACT.CBL` (report generation).  \n  - No other files in the provided set mention *commercial aviation hull* or an *underwriting authority limit*.\n\n- **What the evidence shows**\n  - The SQL files reference **policy\u2011level data** (`vw_curr_cc_policy po`) and **underwriting information** (`uw.name` in `ClaimCenter_CPP_Breakdown.sql`), but they only map underwriting company codes (e.g., \u201cLRM\u201d, \u201cWRM\u201d, \u201cSON\u201d) and do **not** expose any numeric authority\u2011limit fields.\n  - The COBOL programs (`PREMCALC.CBL`, `RPTEXTRACT.CBL`) deal with premium calculation and reporting for property/auto lines; they do not contain tables or constants related to aviation hull re\u2011insurance.\n\n- **Conclusion**\n  - **No explicit underwriting authority limit for commercial\u2011aviation hull re\u2011insurance is present in the supplied artifacts.**  \n  - The limit is likely stored in a separate underwriting\u2011authority table (e.g., `UW_AUTHORITY`, `UW_LIMITS`, or a column such as `UNDERWRITING_AUTH_LIMIT`) that is not part of the extracted snippets.\n\n- **Confidence level**\n  - **Low** \u2013 The current evidence set does not contain the required data element. A definitive answer would require:\n    1. Access to the ClaimCenter data model (tables/views that hold re\u2011insurance limits).\n    2. The specific SQL or configuration file that defines the *commercial\u2011aviation hull* product and its authority ceiling.\n\n- **Next steps to obtain the answer**\n  1. **Search the ClaimCenter schema** for columns or tables with names like `UNDERWRITING_LIMIT`, `AUTHORITY_LIMIT`, `REINSURANCE_LIMIT`, or `PRODUCT_CODE = 'AV-HULL'`.\n  2. Look for **lookup tables** (e.g., `UW_AUTHORITY`, `PRODUCT_AUTH_LIMITS`) that map product codes to numeric limits.\n  3. Review any **policy\u2011type configuration files** (often XML or .properties in Guidewire ClaimCenter) that define \u201ccommercial aviation hull\u201d and its authority ceiling.\n  4. If available, query the production database:  \n     ```sql\n     SELECT limit_amount\n     FROM   uw_authority_limits\n     WHERE  product_code = 'COM_AV_HULL'\n       AND  reinsurance_flag = 1;\n     ```\n\n**Bottom line:** The provided Neo4j and Qdrant evidence does not contain the underwriting authority limit for commercial\u2011aviation hull re\u2011insurance. Additional data sources (schema documentation, lookup tables, or configuration files) are required to answer the question definitively.",
+      "trace_path": [
+        "Intent classified as: semantic",
+        "Cypher: MATCH (a:Artifact)\nWHERE toLower(a.file_name) CONTAINS toLower('claimcenter')\nOPTIONAL MATCH (a)-[:HAS_RULE]->(br:BusinessRule)\nWHERE toLower(br.description) CONTAINS toLower('underwriting authority limit')\n   OR toLower(br.description) CONTAINS toLower('commercial aviation hull reinsurance')\nOPTIONAL MATCH (a)-[:CONTAINS]->(e:Entity)\nWHERE toLower(e.name) CONTAINS toLower('underwriting authority limit')\n   OR toLower(e.name) CONTAINS toLower('commercial aviation hull reinsurance')\nRETURN DISTINCT\n  a.file_name AS artifact,\n  br.id AS rule_id,\n  br.description AS rule_description,\n  e.id AS entity_id,\n  e.name AS entity_name,\n  e.entity_type AS entity_type,\n  e.description AS entity_description\nLIMIT 20",
+        "Graph returned 2 records",
+        "Vector search returned 5 chunks + 5 summaries",
+        "Answer synthesised by LLM"
+      ],
+      "status": "FAIL"
+    }
+  ]
+}

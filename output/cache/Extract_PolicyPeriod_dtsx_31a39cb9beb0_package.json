@@ -1,0 +1,2060 @@
+{
+  "package_id": "PKG-SSIS-Extract_PolicyPeriod.dtsx-271559f3",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_PolicyPeriod.dtsx",
+    "file_name": "Extract_PolicyPeriod.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 189,
+    "size_bytes": 11428
+  },
+  "summary": {
+    "purpose": "Extracts rows from the Guidewire PolicyCenter policy_period table, validates foreign‑key references to policy and job, applies business rule checks, adds ETL metadata, and loads the clean data into the data‑warehouse staging table while quarantining invalid rows and logging execution details.",
+    "high_level_narrative": "When the package runs it first inserts a start record into etl.etl_audit_log. The Data Flow task then reads all columns from public.policy_period via the source connection. Each row is passed through a Lookup against stg.policy to ensure the policy_id exists; non‑matching rows are sent to an error stream. Matching rows continue to a second Lookup against stg.job to validate job_id, with non‑matches also routed to error. Valid rows receive a derived column etl_load_date (current timestamp). A Conditional Split then evaluates four business rules (expiration_date > effective_date, term_number >= 1, written_date <= current date, period_status in the allowed list). Rows that satisfy all rules are directed to the OLE DB Destination that fast‑loads them into stg.policy_period. All error streams (source errors, lookup no‑matches, and conditional‑split failures) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, an Execute SQL task updates the audit log with end time and row counts. Any package‑level error triggers an OnError handler that records details in etl.etl_error_log.",
+    "business_domain": "PolicyCenter – Policy Period",
+    "inputs": [
+      "public.policy_period (source PostgreSQL)",
+      "stg.policy (staging table for policy reference)",
+      "stg.job (staging table for job reference)"
+    ],
+    "outputs": [
+      "stg.policy_period (staging table in the data warehouse)",
+      "stg.error_quarantine (error‑quarantine table)",
+      "etl.etl_audit_log (package execution audit)",
+      "etl.etl_error_log (error handler logging)"
+    ],
+    "key_transformations": [
+      "SELECT policy_period_id, policy_id, job_id, term_number, effective_date, expiration_date, period_status, written_date, transaction_effective_date FROM public.policy_period",
+      "Lookup validation of policy_id against stg.policy (referential integrity)",
+      "Lookup validation of job_id against stg.job (referential integrity)",
+      "Derived column addition: etl_load_date = GETDATE()",
+      "Conditional split enforcing: expiration_date > effective_date; term_number >= 1; written_date <= GETDATE(); period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')",
+      "Union All of all error/no‑match streams",
+      "Fast load (bulk insert) into stg.policy_period with commit size 10,000",
+      "Audit log insert at start and update with row counts at end"
+    ],
+    "key_dependencies": [
+      "Connection Manager CM_Guidewire_PG_Source (Npgsql provider, read‑only replica)",
+      "Connection Manager CM_DW_PG_Target (Npgsql provider, data‑warehouse)",
+      "Execute SQL Tasks for audit logging and error logging",
+      "Lookup components (stg.policy, stg.job)",
+      "Derived Column component",
+      "Conditional Split component",
+      "Union All component",
+      "OLE DB Destination components for stg.policy_period and stg.error_quarantine",
+      "Tables: public.policy_period, stg.policy, stg.job, stg.policy_period, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log"
+    ],
+    "business_rules": [
+      "BR‑01 / BR‑05: policy_id must exist in stg.policy (foreign‑key validation)",
+      "BR‑01 / BR‑05: job_id must exist in stg.job (foreign‑key validation)",
+      "Expiration date must be later than effective date",
+      "Term number must be greater than or equal to 1",
+      "Written date must not be in the future (<= current date)",
+      "Period status must be one of: ACTIVE, EXPIRED, CANCELLED, ENDED"
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_PolicyPeriod.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extract rows from the Guidewire PolicyCenter policy_period table, validate referential integrity to POLICY and JOB, apply business rule checks, add ETL metadata, and load the clean data into the data warehouse while logging audit information and quarantining rejected rows.",
+    "inputs_outputs": {
+      "inputs": [
+        "CM_Guidewire_PG_Source (PostgreSQL source connection)",
+        "public.policy_period (source table)",
+        "stg.policy (lookup table for policy_id)",
+        "stg.job (lookup table for job_id)",
+        "CM_DW_PG_Target (PostgreSQL target connection)",
+        "stg.policy_period (target table)",
+        "stg.error_quarantine (error quarantine table)",
+        "etl.etl_audit_log (audit log table)",
+        "etl.etl_error_log (error log table)"
+      ],
+      "outputs": [
+        "stg.policy_period (loaded rows)",
+        "stg.error_quarantine (rejected/invalid rows)",
+        "etl.etl_audit_log (package start/end timestamps and row counts)",
+        "etl.etl_error_log (error details on failure)"
+      ]
+    },
+    "key_logic": [
+      "Log package start in etl.etl_audit_log (status RUNNING).",
+      "Read all columns from public.policy_period via the source component.",
+      "Lookup policy_id against stg.policy; rows without a match are sent to the error path.",
+      "Lookup job_id against stg.job; rows without a match are sent to the error path.",
+      "Add ETL metadata column etl_load_date (current date).",
+      "Apply business rule validation: expiration_date > effective_date, term_number >= 1, written_date <= current date, period_status in ('ACTIVE','EXPIRED','CANCELLED','ENDED'). Valid rows continue, invalid rows go to error path.",
+      "Union all error streams (lookup no‑match rows, business rule failures, source read errors) into a single error flow.",
+      "Write error flow to stg.error_quarantine.",
+      "Load valid rows into stg.policy_period (fast load, batch size 10,000).",
+      "Log package end in etl.etl_audit_log with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+      "On any package error, insert a record into etl.etl_error_log."
+    ],
+    "entities": [
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Package variable tracking number of rows read from source."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Package variable tracking number of rows successfully inserted into target."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": null,
+        "description": "Package variable tracking number of rows rejected/invalid."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "string",
+        "line_number": null,
+        "description": "Name of the SSIS package."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "datetime",
+        "line_number": null,
+        "description": "Package start timestamp."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "PACKAGE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection manager to the Guidewire PostgreSQL replica (read‑only)."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "PACKAGE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection manager to the data‑warehouse PostgreSQL instance."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Package",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that inserts a RUNNING audit record."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Package",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that updates the audit record with end time, status, and row counts."
+      },
+      {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "parent_entity": "OnError EventHandler",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that writes error details to etl.etl_error_log."
+      },
+      {
+        "name": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "entity_type": "TASK",
+        "parent_entity": "Package",
+        "data_type": null,
+        "line_number": null,
+        "description": "Data Flow Task containing all extraction, validation, and load components."
+      },
+      {
+        "name": "SRC - policy_period (PostgreSQL)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Source component that runs SELECT policy_period_id, policy_id, job_id, term_number, effective_date, expiration_date, period_status, written_date, transaction_effective_date FROM public.policy_period."
+      },
+      {
+        "name": "LKP - Validate Policy (policy_id)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup component that validates policy_id against stg.policy."
+      },
+      {
+        "name": "LKP - Validate Job (job_id)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup component that validates job_id against stg.job."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column component that adds etl_load_date = GETDATE()."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Conditional Split that enforces expiration_date > effective_date, term_number >= 1, written_date <= GETDATE(), period_status in ('ACTIVE','EXPIRED','CANCELLED','ENDED')."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "Union All component that merges all error streams into a single flow."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load policy_period (PostgreSQL DW)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that loads validated rows into stg.policy_period using fast load."
+      },
+      {
+        "name": "public.policy_period",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Source table in Guidewire PolicyCenter."
+      },
+      {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table used for policy_id lookup."
+      },
+      {
+        "name": "stg.job",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table used for job_id lookup."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Table that stores rejected or invalid rows for review."
+      },
+      {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Target staging table for clean policy period data."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log table capturing package execution metadata."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Error log table capturing package runtime errors."
+      },
+      {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "job_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "term_number",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "period_status",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "written_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "transaction_effective_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.policy_period",
+        "data_type": null,
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "Derived / Calculated Columns",
+        "data_type": "datetime",
+        "line_number": null,
+        "description": "ETL metadata column populated with current date."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "JOIN",
+        "description": "Lookup policy_id against stg.policy to enforce referential integrity (BR‑01, BR‑05).",
+        "source_entities": [
+          "policy_id",
+          "stg.policy"
+        ],
+        "target_entities": [
+          "LKP - Validate Policy (policy_id) Match Output"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "JOIN",
+        "description": "Lookup job_id against stg.job to enforce referential integrity (BR‑01, BR‑05).",
+        "source_entities": [
+          "job_id",
+          "stg.job"
+        ],
+        "target_entities": [
+          "LKP - Validate Job (job_id) Match Output"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL metadata column etl_load_date with current date/time.",
+        "source_entities": [
+          "GETDATE()"
+        ],
+        "target_entities": [
+          "etl_load_date"
+        ],
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CONDITIONAL",
+        "description": "Validate business rules: expiration_date > effective_date, term_number >= 1, written_date <= GETDATE(), period_status in allowed list.",
+        "source_entities": [
+          "expiration_date",
+          "effective_date",
+          "term_number",
+          "written_date",
+          "period_status"
+        ],
+        "target_entities": [
+          "CSPL - Business Rule Validation Valid Rows",
+          "CSPL - Business Rule Validation Invalid Rows"
+        ],
+        "expression": "expiration_date > effective_date AND term_number >= 1 AND written_date <= GETDATE() AND period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')",
+        "line_number": null,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "AGGREGATION",
+        "description": "Union all error streams (lookup no‑match rows, business rule failures, source read errors) into a single error flow.",
+        "source_entities": [
+          "Lookup No Match Output (policy)",
+          "Lookup No Match Output (job)",
+          "Invalid Rows",
+          "OLE DB Source Error Output"
+        ],
+        "target_entities": [
+          "Unified Error Output"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "Insert rejected/invalid rows into stg.error_quarantine.",
+        "source_entities": [
+          "Unified Error Output"
+        ],
+        "target_entities": [
+          "stg.error_quarantine"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Load validated rows into stg.policy_period using fast load (batch size 10,000).",
+        "source_entities": [
+          "Valid Rows"
+        ],
+        "target_entities": [
+          "stg.policy_period"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Log package start with status RUNNING in etl.etl_audit_log.",
+        "source_entities": [
+          "PackageName",
+          "TaskName (Data Flow)",
+          "now()"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_PolicyPeriod','Data Flow',now(),'RUNNING')",
+        "line_number": null,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Update audit log with end time, status COMPLETED, and row counts.",
+        "source_entities": [
+          "RowsRead",
+          "RowsInserted",
+          "RowsRejected",
+          "now()"
+        ],
+        "target_entities": [
+          "etl.etl_audit_log"
+        ],
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_PolicyPeriod' AND status = 'RUNNING'",
+        "line_number": null,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "BUSINESS_RULE",
+        "description": "On package error, insert error details into etl.etl_error_log.",
+        "source_entities": [
+          "PackageName",
+          "source_object",
+          "error_code",
+          "error_description",
+          "now()"
+        ],
+        "target_entities": [
+          "etl.etl_error_log"
+        ],
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_PolicyPeriod', ?, ?, ?, now())",
+        "line_number": null,
+        "confidence": 0.98
+      }
+    ],
+    "business_rules": [
+      "policy_id must exist in stg.policy (referential integrity).",
+      "job_id must exist in stg.job (referential integrity).",
+      "expiration_date must be later than effective_date.",
+      "term_number must be greater than or equal to 1.",
+      "written_date must not be in the future (<= current date).",
+      "period_status must be one of ('ACTIVE','EXPIRED','CANCELLED','ENDED')."
+    ],
+    "dependencies": [
+      "CM_Guidewire_PG_Source (PostgreSQL source connection)",
+      "CM_DW_PG_Target (PostgreSQL target connection)",
+      "public.policy_period table",
+      "stg.policy table",
+      "stg.job table",
+      "stg.error_quarantine table",
+      "stg.policy_period table",
+      "etl.etl_audit_log table",
+      "etl.etl_error_log table"
+    ],
+    "relationships": [
+      {
+        "source": "SRC - policy_period (PostgreSQL)",
+        "target": "LKP - Validate Policy (policy_id)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Source output OLE DB Source Output feeds into Policy lookup input."
+      },
+      {
+        "source": "SRC - policy_period (PostgreSQL)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Source error output OLE DB Source Error Output is sent to Union All error stream."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "LKP - Validate Job (job_id)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Policy lookup match output feeds into Job lookup input."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Rows that passed policy lookup are passed to derived column component."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "FILTERS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Policy lookup no‑match rows are redirected to error union."
+      },
+      {
+        "source": "LKP - Validate Job (job_id)",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Rows that passed job lookup are passed to derived column component."
+      },
+      {
+        "source": "LKP - Validate Job (job_id)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "FILTERS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Job lookup no‑match rows are redirected to error union."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Derived rows (with etl_load_date) are evaluated by business rule conditional split."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load policy_period (PostgreSQL DW)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Valid rows are loaded into the target staging table."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Invalid rows are sent to the error union."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Unified error stream is written to the error quarantine table."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Insert audit record at package start."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "Update audit record with end time and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Log runtime errors to error log table."
+      }
+    ],
+    "confidence": 0.92
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 36,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "SQL - Log Package Start",
+      "SQL - Log Package End / Row Counts",
+      "SQL - Log Error to ETL_ERROR_LOG",
+      "DFT - Extract, Cleanse, Validate, Load policy_period",
+      "SRC - policy_period (PostgreSQL)",
+      "LKP - Validate Policy (policy_id)",
+      "LKP - Validate Job (job_id)",
+      "stg.policy_period",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log",
+      "public.policy_period",
+      "stg.policy",
+      "stg.job"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "SRC - policy_period (PostgreSQL)",
+        "target": "public.policy_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Source component selects columns from the Guidewire PolicyCenter policy_period table."
+      },
+      {
+        "source": "LKP - Validate Policy (policy_id)",
+        "target": "stg.policy",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Lookup component validates policy_id against the staging policy lookup table."
+      },
+      {
+        "source": "LKP - Validate Job (job_id)",
+        "target": "stg.job",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Lookup component validates job_id against the staging job lookup table."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "target": "stg.policy_period",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Valid rows from the data flow are fast‑loaded into the target staging table."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Rows that fail lookups or business rule checks are routed to the error quarantine table."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask inserts a RUNNING status record at package start."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask updates the audit record with end time, status COMPLETED and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "OnError event handler logs detailed error information."
+      },
+      {
+        "source": "RowsRead",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows read and is stored in the audit log."
+      },
+      {
+        "source": "RowsInserted",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows successfully inserted."
+      },
+      {
+        "source": "RowsRejected",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows rejected and is logged."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no tables, columns, or file references, while the LLM extracted a full set of entities and relationships.",
+      "Parser output lacked any variable or task definitions; all such entities are inferred solely from the LLM profile."
+    ],
+    "gaps_detected": [
+      "Line numbers for components are missing; precise code locations cannot be verified.",
+      "Exact SQL statements for lookup components and error handling are not provided.",
+      "No explicit definition of the package's control flow precedence constraints (e.g., success/failure paths).",
+      "The profile truncates the description of the \"LKP - Validate Job (job_id)\" component, leaving its full configuration ambiguous."
+    ],
+    "overall_confidence": 0.84
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "public.policy_period",
+        "stg.policy",
+        "stg.job",
+        "stg.error_quarantine",
+        "stg.policy_period",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "columns": [
+        "policy_period_id",
+        "policy_id",
+        "job_id",
+        "term_number",
+        "effective_date",
+        "expiration_date",
+        "period_status",
+        "written_date",
+        "transaction_effective_date",
+        "etl_load_date"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts rows from the Guidewire PolicyCenter policy_period table, validates foreign‑key references to policy and job, applies business rule checks, adds ETL metadata, and loads the clean data into the data‑warehouse staging table while quarantining invalid rows and logging execution details.",
+      "narrative": "When the package runs it first inserts a start record into etl.etl_audit_log. The Data Flow task then reads all columns from public.policy_period via the source connection. Each row is passed through a Lookup against stg.policy to ensure the policy_id exists; non‑matching rows are sent to an error stream. Matching rows continue to a second Lookup against stg.job to validate job_id, with non‑matches also routed to error. Valid rows receive a derived column etl_load_date (current timestamp). A Conditional Split then evaluates four business rules (expiration_date > effective_date, term_number >= 1, written_date <= current date, period_status in the allowed list). Rows that satisfy all rules are directed to the OLE DB Destination that fast‑loads them into stg.policy_period. All error streams (source errors, lookup no‑matches, and conditional‑split failures) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, an Execute SQL task updates the audit log with end time and row counts. Any package‑level error triggers an OnError handler that records details in etl.etl_error_log.",
+      "business_domain": "PolicyCenter – Policy Period",
+      "business_rules": [
+        "BR‑01 / BR‑05: policy_id must exist in stg.policy (foreign‑key validation)",
+        "BR‑01 / BR‑05: job_id must exist in stg.job (foreign‑key validation)",
+        "Expiration date must be later than effective date",
+        "Term number must be greater than or equal to 1",
+        "Written date must not be in the future (<= current date)",
+        "Period status must be one of: ACTIVE, EXPIRED, CANCELLED, ENDED"
+      ],
+      "key_logic": [
+        "Log package start in etl.etl_audit_log (status RUNNING).",
+        "Read all columns from public.policy_period via the source component.",
+        "Lookup policy_id against stg.policy; rows without a match are sent to the error path.",
+        "Lookup job_id against stg.job; rows without a match are sent to the error path.",
+        "Add ETL metadata column etl_load_date (current date).",
+        "Apply business rule validation: expiration_date > effective_date, term_number >= 1, written_date <= current date, period_status in ('ACTIVE','EXPIRED','CANCELLED','ENDED'). Valid rows continue, invalid rows go to error path.",
+        "Union all error streams (lookup no‑match rows, business rule failures, source read errors) into a single error flow.",
+        "Write error flow to stg.error_quarantine.",
+        "Load valid rows into stg.policy_period (fast load, batch size 10,000).",
+        "Log package end in etl.etl_audit_log with end_time, status COMPLETED, and row counts (RowsRead, RowsInserted, RowsRejected).",
+        "On any package error, insert a record into etl.etl_error_log."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "SQL - Log Package Start",
+        "SQL - Log Package End / Row Counts",
+        "SQL - Log Error to ETL_ERROR_LOG",
+        "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "SRC - policy_period (PostgreSQL)",
+        "LKP - Validate Policy (policy_id)",
+        "LKP - Validate Job (job_id)",
+        "stg.policy_period",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log",
+        "public.policy_period",
+        "stg.policy",
+        "stg.job"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "JOIN",
+          "description": "Lookup policy_id against stg.policy to enforce referential integrity (BR‑01, BR‑05).",
+          "source_entities": [
+            "policy_id",
+            "stg.policy"
+          ],
+          "target_entities": [
+            "LKP - Validate Policy (policy_id) Match Output"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "JOIN",
+          "description": "Lookup job_id against stg.job to enforce referential integrity (BR‑01, BR‑05).",
+          "source_entities": [
+            "job_id",
+            "stg.job"
+          ],
+          "target_entities": [
+            "LKP - Validate Job (job_id) Match Output"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL metadata column etl_load_date with current date/time.",
+          "source_entities": [
+            "GETDATE()"
+          ],
+          "target_entities": [
+            "etl_load_date"
+          ],
+          "expression": "GETDATE() -> etl_load_date",
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CONDITIONAL",
+          "description": "Validate business rules: expiration_date > effective_date, term_number >= 1, written_date <= GETDATE(), period_status in allowed list.",
+          "source_entities": [
+            "expiration_date",
+            "effective_date",
+            "term_number",
+            "written_date",
+            "period_status"
+          ],
+          "target_entities": [
+            "CSPL - Business Rule Validation Valid Rows",
+            "CSPL - Business Rule Validation Invalid Rows"
+          ],
+          "expression": "expiration_date > effective_date AND term_number >= 1 AND written_date <= GETDATE() AND period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')",
+          "line_number": null,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "AGGREGATION",
+          "description": "Union all error streams (lookup no‑match rows, business rule failures, source read errors) into a single error flow.",
+          "source_entities": [
+            "Lookup No Match Output (policy)",
+            "Lookup No Match Output (job)",
+            "Invalid Rows",
+            "OLE DB Source Error Output"
+          ],
+          "target_entities": [
+            "Unified Error Output"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "MAPPING",
+          "description": "Insert rejected/invalid rows into stg.error_quarantine.",
+          "source_entities": [
+            "Unified Error Output"
+          ],
+          "target_entities": [
+            "stg.error_quarantine"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "MAPPING",
+          "description": "Load validated rows into stg.policy_period using fast load (batch size 10,000).",
+          "source_entities": [
+            "Valid Rows"
+          ],
+          "target_entities": [
+            "stg.policy_period"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Log package start with status RUNNING in etl.etl_audit_log.",
+          "source_entities": [
+            "PackageName",
+            "TaskName (Data Flow)",
+            "now()"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_PolicyPeriod','Data Flow',now(),'RUNNING')",
+          "line_number": null,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Update audit log with end time, status COMPLETED, and row counts.",
+          "source_entities": [
+            "RowsRead",
+            "RowsInserted",
+            "RowsRejected",
+            "now()"
+          ],
+          "target_entities": [
+            "etl.etl_audit_log"
+          ],
+          "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_PolicyPeriod' AND status = 'RUNNING'",
+          "line_number": null,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "BUSINESS_RULE",
+          "description": "On package error, insert error details into etl.etl_error_log.",
+          "source_entities": [
+            "PackageName",
+            "source_object",
+            "error_code",
+            "error_description",
+            "now()"
+          ],
+          "target_entities": [
+            "etl.etl_error_log"
+          ],
+          "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_PolicyPeriod', ?, ?, ?, now())",
+          "line_number": null,
+          "confidence": 0.98
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "SRC - policy_period (PostgreSQL)",
+          "target": "public.policy_period",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "Source component selects columns from the Guidewire PolicyCenter policy_period table."
+        },
+        {
+          "source": "LKP - Validate Policy (policy_id)",
+          "target": "stg.policy",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Lookup component validates policy_id against the staging policy lookup table."
+        },
+        {
+          "source": "LKP - Validate Job (job_id)",
+          "target": "stg.job",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Lookup component validates job_id against the staging job lookup table."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load policy_period",
+          "target": "stg.policy_period",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Valid rows from the data flow are fast‑loaded into the target staging table."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load policy_period",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Rows that fail lookups or business rule checks are routed to the error quarantine table."
+        },
+        {
+          "source": "SQL - Log Package Start",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask inserts a RUNNING status record at package start."
+        },
+        {
+          "source": "SQL - Log Package End / Row Counts",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask updates the audit record with end time, status COMPLETED and row counts."
+        },
+        {
+          "source": "SQL - Log Error to ETL_ERROR_LOG",
+          "target": "etl.etl_error_log",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "OnError event handler logs detailed error information."
+        },
+        {
+          "source": "RowsRead",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "Variable tracks number of rows read and is stored in the audit log."
+        },
+        {
+          "source": "RowsInserted",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "Variable tracks number of rows successfully inserted."
+        },
+        {
+          "source": "RowsRejected",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "Variable tracks number of rows rejected and is logged."
+        }
+      ],
+      "gaps": [
+        "Line numbers for components are missing; precise code locations cannot be verified.",
+        "Exact SQL statements for lookup components and error handling are not provided.",
+        "No explicit definition of the package's control flow precedence constraints (e.g., success/failure paths).",
+        "The profile truncates the description of the \"LKP - Validate Job (job_id)\" component, leaving its full configuration ambiguous."
+      ]
+    },
+    "overall_confidence": 0.84
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_PolicyPeriod.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_PolicyPeriod.dtsx",
+        "total_lines": 189
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "string",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "datetime",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "PACKAGE:CM_Guidewire_PG_Source",
+      "label": "Package",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "PACKAGE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "PACKAGE:CM_DW_PG_Target",
+      "label": "Package",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "PACKAGE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Package",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Package",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "OnError EventHandler",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DFT - Extract, Cleanse, Validate, Load policy_period",
+      "label": "Task",
+      "properties": {
+        "name": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Package",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - policy_period (PostgreSQL)",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - policy_period (PostgreSQL)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:LKP - Validate Policy (policy_id)",
+      "label": "Program",
+      "properties": {
+        "name": "LKP - Validate Policy (policy_id)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:LKP - Validate Job (job_id)",
+      "label": "Program",
+      "properties": {
+        "name": "LKP - Validate Job (job_id)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DER - Derived / Calculated Columns",
+      "label": "Program",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:CSPL - Business Rule Validation",
+      "label": "Program",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:UN - Union All Error Rows",
+      "label": "Program",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Error Log (stg.error_quarantine)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Load policy_period (PostgreSQL DW)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Load policy_period (PostgreSQL DW)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:public.policy_period",
+      "label": "Table",
+      "properties": {
+        "name": "public.policy_period",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.policy",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.job",
+      "label": "Table",
+      "properties": {
+        "name": "stg.job",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.policy_period",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_period_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:job_id",
+      "label": "Column",
+      "properties": {
+        "name": "job_id",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:term_number",
+      "label": "Column",
+      "properties": {
+        "name": "term_number",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:effective_date",
+      "label": "Column",
+      "properties": {
+        "name": "effective_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:expiration_date",
+      "label": "Column",
+      "properties": {
+        "name": "expiration_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:period_status",
+      "label": "Column",
+      "properties": {
+        "name": "period_status",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:written_date",
+      "label": "Column",
+      "properties": {
+        "name": "written_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:transaction_effective_date",
+      "label": "Column",
+      "properties": {
+        "name": "transaction_effective_date",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "public.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": "datetime",
+        "parent": "Derived / Calculated Columns",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "JOIN",
+        "description": "Lookup policy_id against stg.policy to enforce referential integrity (BR‑01, BR‑05).",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "JOIN",
+        "description": "Lookup job_id against stg.job to enforce referential integrity (BR‑01, BR‑05).",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL metadata column etl_load_date with current date/time.",
+        "expression": "GETDATE() -> etl_load_date",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CONDITIONAL",
+        "description": "Validate business rules: expiration_date > effective_date, term_number >= 1, written_date <= GETDATE(), period_status in allowed list.",
+        "expression": "expiration_date > effective_date AND term_number >= 1 AND written_date <= GETDATE() AND period_status IN ('ACTIVE','EXPIRED','CANCELLED','ENDED')",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "AGGREGATION",
+        "description": "Union all error streams (lookup no‑match rows, business rule failures, source read errors) into a single error flow.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "Insert rejected/invalid rows into stg.error_quarantine.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Load validated rows into stg.policy_period using fast load (batch size 10,000).",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Log package start with status RUNNING in etl.etl_audit_log.",
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_PolicyPeriod','Data Flow',now(),'RUNNING')",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Update audit log with end time, status COMPLETED, and row counts.",
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_PolicyPeriod' AND status = 'RUNNING'",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_PolicyPeriod.dtsx:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "BUSINESS_RULE",
+        "description": "On package error, insert error details into etl.etl_error_log.",
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_PolicyPeriod', ?, ?, ?, now())",
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PACKAGE:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PACKAGE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TASK:DFT - Extract, Cleanse, Validate, Load policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:SRC - policy_period (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:LKP - Validate Policy (policy_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:LKP - Validate Job (job_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "PROGRAM:DST - Load policy_period (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:public.policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:stg.policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:stg.job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:stg.policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:job_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:term_number",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:effective_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:expiration_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:period_status",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:written_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:transaction_effective_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_PolicyPeriod.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - policy_period (PostgreSQL)",
+      "target_id": "TABLE:public.policy_period",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Source component selects columns from the Guidewire PolicyCenter policy_period table."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Policy (policy_id)",
+      "target_id": "TABLE:stg.policy",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Lookup component validates policy_id against the staging policy lookup table."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Job (job_id)",
+      "target_id": "TABLE:stg.job",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Lookup component validates job_id against the staging job lookup table."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load policy_period",
+      "target_id": "TABLE:stg.policy_period",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Valid rows from the data flow are fast‑loaded into the target staging table."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load policy_period",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Rows that fail lookups or business rule checks are routed to the error quarantine table."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package Start",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask inserts a RUNNING status record at package start."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package End / Row Counts",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask updates the audit record with end time, status COMPLETED and row counts."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Error to ETL_ERROR_LOG",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "OnError event handler logs detailed error information."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRead",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows read and is stored in the audit log."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsInserted",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows successfully inserted."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRejected",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows rejected and is logged."
+      }
+    }
+  ]
+}

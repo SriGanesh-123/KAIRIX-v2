@@ -1,0 +1,58 @@
+{
+  "purpose": "Extract a detailed list of policies for the Agribusiness profit center within a specified policy period, exposing transaction types (renewal, submission, cancellation, reinstatement, change) and associated premium amounts for downstream reporting or analysis.",
+  "high_level_narrative": "The script declares four date variables and sets a policy start, end, and change start date. It then runs a UNION ALL of two SELECT statements that pull policy‑period rows from the PolicyCenter database. The first SELECT calculates Written_Premium by summing amounts from line‑specific transaction tables when the product is a CommercialPackage; otherwise it uses the pre‑calculated TransactionCostRPT field. The second SELECT handles cases where the line‑of‑business is not derived from the pattern code (labelled 'C.P.P.') and simply returns TransactionCostRPT as Written_Premium. Both SELECTs join a wide set of reference tables (policy, term, job, account, producer, organization, profit‑center, UW company, bind option, job description, etc.) to enrich the rows with profit center, company code, agent information, territory, and status. After the UNION, an outer SELECT applies a series of CASE expressions to surface the most recent transaction type, premium, and dates for each transaction category (submission, cancellation, reinstatement, policy change). The final result set is filtered to rows where the policy period or job close date falls between the supplied start and end dates, where the product code is not a CommercialPackage unless the line of business is 'C.P.P.', and where the profit center equals 'Agribusiness'. The output is ordered by PolicyNumber.",
+  "business_domain": "PolicyCenter (Policy Management / Underwriting)",
+  "inputs": [
+    "pc_policyperiod (alias pp)",
+    "pc_policy (alias pol)",
+    "pc_policyTerm (alias polt)",
+    "pc_policyline (alias polline)",
+    "pc_job (alias j)",
+    "pc_account (alias act)",
+    "pc_producercode (alias prod)",
+    "pc_organization (alias org)",
+    "pctl_job (alias jt)",
+    "pctl_policyperiodstatus (alias ppst)",
+    "pctl_bindoption (alias bopt)",
+    "pctl_uwcompanycode (alias uwc)",
+    "pctl_jobdescription_ext (alias jdt)",
+    "pctl_policyperiodsourcetype (alias ppstype)",
+    "pctl_profitcentertype (alias profit)",
+    "pctl_orgfarmuwterritory (alias farmterr)",
+    "pcx_cp7transaction",
+    "pcx_gl7transaction_gle",
+    "pcx_ca7transaction",
+    "pcx_cr7transaction",
+    "pc_imtransaction",
+    "pcx_wc7transaction"
+  ],
+  "outputs": [
+    "Result set with columns: ProfitCenter, ProductCode, LineOfBusiness, PolicyNumber, OriginalEffectiveDate, PeriodStart, PeriodEnd, AccountNumber, Company, PrimaryInsuredName, AgentCode, AgentName, FarmUWTerritory, MostRecentTran, SubWritten_Premium, SubWritten_Date, CancelledDate, CancelledEffDate, CancelledPremium, ReinstatedPremium, ReinstatedDate, ReinstatedEffDate, ChangePremium, ChangeDate"
+  ],
+  "key_transformations": [
+    "Union of two SELECT statements to combine detailed transaction‑cost calculations with fallback rows for non‑pattern‑derived lines of business.",
+    "Conditional aggregation: SUM(amount) from line‑specific transaction tables (cp7, gl7, ca7, cr7, im, wc7) when ProductCode = 'CommercialPackage' and PatternCode matches a line.",
+    "CASE expressions to map PatternCode values to human‑readable LineOfBusiness strings.",
+    "CASE expressions to translate UWCompany names to short codes (LRM, WRM, SON).",
+    "CASE logic to expose transaction‑type specific premium and date fields (e.g., Written_Premium for Renewal/Submission, CancellationDate for Cancellation, etc.).",
+    "Filtering on policy period dates, job close dates, profit center = 'Agribusiness', and status codes ('Bound','AuditComplete').",
+    "Ordering final result by PolicyNumber."
+  ],
+  "key_dependencies": [
+    "SQL Server database PolicyCenter (dbo schema).",
+    "Reference tables/views: pc_policyperiod, pc_policy, pc_policyTerm, pc_policyline, pc_job, pc_account, pc_producercode, pc_organization, pctl_job, pctl_policyperiodstatus, pctl_bindoption, pctl_uwcompanycode, pctl_jobdescription_ext, pctl_policyperiodsourcetype, pctl_profitcentertype, pctl_orgfarmuwterritory.",
+    "Transaction tables for each line of business: pcx_cp7transaction, pcx_gl7transaction_gle, pcx_ca7transaction, pcx_cr7transaction, pc_imtransaction, pcx_wc7transaction."
+  ],
+  "business_rules": [
+    "Only include policies where the policy period status is 'Bound' or 'AuditComplete'.",
+    "Exclude rows where the job close date is after the @POLENDDATE parameter.",
+    "Map UWCompany names to standardized three‑letter codes (LRM, WRM, SON) and default to 'UNK' if not matched.",
+    "Derive LineOfBusiness from PatternCode with specific mappings; otherwise retain original PatternCode value.",
+    "For CommercialPackage products, calculate Written_Premium by summing transaction amounts from the appropriate line‑specific transaction table; otherwise use the pre‑calculated TransactionCostRPT field.",
+    "When ProductCode = 'CommercialPackage' and LineOfBusiness = 'C.P.P.', treat the row as a CommercialPackage line of business.",
+    "Show only rows where the profit center equals 'Agribusiness'.",
+    "Expose most recent transaction information only when MostRecentModel = 1.",
+    "Populate premium and date columns only for the relevant transaction types (Renewal/Submission, Cancellation, Reinstatement, PolicyChange).",
+    "Filter rows to those whose PeriodStart or JobCloseDate fall within the @POLSTARTDATE‑@POLENDDATE window."
+  ]
+}

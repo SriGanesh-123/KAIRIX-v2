@@ -1,0 +1,43 @@
+{
+  "purpose": "Merge pre‑aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution.",
+  "high_level_narrative": "When the package starts it inserts a row into etl.etl_audit_log marking the run as RUNNING. The Data Flow Task DFT_KPI then reads four staging tables from the PostgreSQL data warehouse: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period and stg.job. Premium and policy_period rows are sorted by policy_period_id and merged on that key to attach the policy_id to each premium record. The result is re‑sorted by policy_id and left‑outer merged with the sorted claims summary (by policy_id) so that policies without claims still appear. A Derived Column component computes loss_ratio, commission_ratio and underwriting_profit with divide‑by‑zero safeguards and adds an etl_load_date. The KPI rows are fast‑loaded into rpt.fact_kpi_summary. In parallel, the job stream is aggregated by year and month to count renewal jobs and total expiring policies; a second Derived Column calculates retention_rate (renewed/expiring*100) with zero‑division protection. The monthly retention rows are fast‑loaded into rpt.fact_retention_rate. After the data flow completes, a second SQL task updates etl.etl_audit_log with end_time, status COMPLETED and the row‑count metrics.",
+  "business_domain": "Insurance Data Warehouse – KPI reporting for underwriting and policy retention",
+  "inputs": [
+    "stg.premium_summary_by_period",
+    "stg.claims_incurred_summary_by_policy",
+    "stg.policy_period",
+    "stg.job",
+    "etl.etl_audit_log (for logging start)"
+  ],
+  "outputs": [
+    "rpt.fact_kpi_summary",
+    "rpt.fact_retention_rate",
+    "etl.etl_audit_log (updated with end_time, status, rows_read, rows_inserted, rows_rejected)"
+  ],
+  "key_transformations": [
+    "Sort premium summary by policy_period_id",
+    "Sort policy_period by policy_period_id",
+    "Merge Join (inner) premium with policy_period to obtain policy_id",
+    "Sort merged premium+policy_id by policy_id",
+    "Sort claims summary by policy_id",
+    "Merge Join (left outer) premium+policy_id with claims to retain rows with zero claims",
+    "Derived Column calculations: loss_ratio = (incurred / earned_premium) * 100 with zero‑check, commission_ratio = (commission / written_premium) * 100 with zero‑check, underwriting_profit = earned_premium - incurred - commission - operating_expense, etl_load_date = GETDATE()",
+    "Aggregation of job data by year and month to count renewed policies and total expiring policies",
+    "Derived Column calculation: retention_rate = (renewed_count / expiring_count) * 100 with zero‑check"
+  ],
+  "key_dependencies": [
+    "Connection manager CM_DW_PG_Target (Npgsql PostgreSQL provider)",
+    "Staging tables: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period, stg.job",
+    "Destination tables: rpt.fact_kpi_summary, rpt.fact_retention_rate, etl.etl_audit_log",
+    "SSIS components: OLE DB Source, Sort, Merge Join, Aggregation, Derived Column, OLE DB Destination, Execute SQL Task"
+  ],
+  "business_rules": [
+    "BR‑09: Claims incurred summary is pre‑aggregated by policy and must be joined to premium data.",
+    "BR‑10: Loss Ratio = (incurred_amount / earned_premium) * 100; if earned_premium = 0 then loss_ratio = 0.",
+    "BR‑11: Underwriting Profit = earned_premium - incurred_amount - commission_amount - operating_expense.",
+    "Commission Ratio = (commission_amount / written_premium) * 100; if written_premium = 0 then commission_ratio = 0.",
+    "Retention Rate = (renewed policies / expiring policies) * 100; if expiring policies = 0 then retention_rate = 0.",
+    "Left outer join ensures policies with no claims receive an incurred_amount of 0 for KPI calculation.",
+    "All KPI calculations include divide‑by‑zero protection to avoid runtime errors."
+  ]
+}

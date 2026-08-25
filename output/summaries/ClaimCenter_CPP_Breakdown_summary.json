@@ -1,0 +1,62 @@
+{
+  "purpose": "Generate a claim‑level loss breakdown (incurred amount) by policy source and line of business, suitable for profit‑and‑loss or YTD loss reporting, using ClaimCenter transaction data and TFG loss transaction code mappings.",
+  "high_level_narrative": "The script starts by declaring two unused date variables. It then builds a derived table that pulls transaction line items from the ClaimCenter view vw_curr_cc_transactionlineitem and joins a wide set of related ClaimCenter views (transactions, transaction sets, claims, policies, checks, reserve lines, exposures, coverages, contacts, users, risk units, class codes, LOB codes, policy types, transaction types, loss causes, status tables, cost types/categories, line categories, lifecycle states, recovery categories, underwriting company types). Within the inner SELECT it derives many calculated fields: PolSource (Legacy vs Guidewire), row numbers for reserve lines, formatted claim and policy identifiers, company code mapping, date formatting, TFG transaction code (TFGTran) based on transaction type, cost type, and reserve/payment flags, sign‑adjusted transaction amounts (TransAmount), and other auxiliary fields (DedStatAmount, claim close/reopen dates, etc.). The outer SELECT groups the rows by PolSource, a normalized LOBCode (mapping Business Owners Line to BP7Line and Workers* to Workers Comp Line), and PolicyNumber, then sums TransAmount to produce IncurredAmount. The final result set returns distinct rows of PolSource, LOBCode, PolicyNumber and the aggregated IncurredAmount.",
+  "business_domain": "Claims",
+  "inputs": [
+    "vw_curr_cc_transactionlineitem",
+    "vw_curr_cc_transaction",
+    "vw_curr_cc_transactionset",
+    "vw_curr_cc_claim",
+    "vw_curr_cc_policy",
+    "vw_curr_cc_check",
+    "vw_curr_cc_reserveline",
+    "vw_curr_cc_exposure",
+    "vw_curr_cc_coverage",
+    "vw_curr_cc_contact",
+    "vw_curr_cc_user (assigned user)",
+    "vw_curr_cc_user (subro representative)",
+    "vw_curr_cc_riskunit",
+    "vw_curr_cc_classcode",
+    "vw_curr_cctl_lobcode",
+    "vw_curr_cctl_policytype",
+    "vw_curr_cctl_transaction",
+    "vw_curr_cctl_losscause",
+    "vw_curr_cctl_transactionstatus",
+    "vw_curr_cctl_costtype",
+    "vw_curr_cctl_costcategory",
+    "vw_curr_cctl_linecategory",
+    "vw_curr_cctl_transactionlifecyclestate",
+    "vw_curr_cctl_recoverycategory",
+    "vw_curr_cctl_underwritingcompanytype"
+  ],
+  "outputs": [
+    "Result set with columns: PolSource, LOBCode, PolicyNumber, IncurredAmount (sum of TransAmount)"
+  ],
+  "key_transformations": [
+    "CASE expression to map PolSource based on presence of PolicyPrefix_Ext (Legacy vs Guidewire).",
+    "ROW_NUMBER() partitioned by ClaimNumber, exposure id, transaction type and cost type to identify first reserve line.",
+    "CASE logic to derive TFGTran codes from transaction type, cost type, and DoesNotErodeReserves flag, including special handling for first reserve row.",
+    "Sign adjustment of TransactionAmount: payments are negated unless DoesNotErodeReserves = 1; recoveries are always negated; reserves keep original sign.",
+    "Aggregation: SUM(TransAmount) grouped by PolSource, normalized LOBCode, and PolicyNumber.",
+    "LOBCode normalization: Business Owners Line → BP7Line, Workers* → Workers Comp Line, otherwise unchanged.",
+    "Date conversion to CHAR(8) format (YYYYMMDD) for policy effective dates, accounting dates, claim close/reopen dates.",
+    "Formatting of numeric identifiers (ClmtNumber, Class, PolicyDec) with leading zeros.",
+    "Deductible amount handling: conditional formatting based on coverage type and deductible value.",
+    "Distinct selection to eliminate duplicate rows after aggregation."
+  ],
+  "key_dependencies": [
+    "ClaimCenter cloud view layer (vw_curr_cc_*) providing transactional and master data.",
+    "Policy Center data (mentioned in comments) for accurate underwriting company mapping.",
+    "TFG loss transaction code reference list (used in CASE statements).",
+    "SQL Server date and string functions for formatting."
+  ],
+  "business_rules": [
+    "If LOBCode = 'Business Owners Line' then report as 'BP7Line'; if LOBCode starts with 'Workers' then report as 'Workers Comp Line'.",
+    "TFGTran mapping rules: e.g., Reserve + Indemnity → '431' (first row) or '421' (subsequent rows); Reserve + non‑Indemnity → '432'/'422'; Payment + Indemnity with DoesNotErodeReserves = 1 → '321', otherwise '331'; Payment + non‑Indemnity with DoesNotErodeReserves = 1 → '322', otherwise '332'; Recovery categories map to specific TFGTran codes (e.g., Credit_loss + Indemnity → '321', salvage + Indemnity → '341', subro + Indemnity → '351', etc.).",
+    "Transaction amounts are signed: payments are negative unless they do not erode reserves; recoveries are always negative; reserves retain their sign.",
+    "Company code assignment based on underwriting company name: Lightning Rod Mutual → 'LRM', Western Reserve Mutual → 'WRM', Sonnenberg Mutual → 'SON', otherwise 'UNK'.",
+    "Deductible amount is capped at 99999 for specific coverage types (BP7EmploymentPracticesLiabilityInsurance, BP7SupplementalExtendReportingPeriodEPLI).",
+    "Only the first reserve line (rownum = 1) influences certain TFGTran adjustments.",
+    "The query is intended for YTD or P&L loss reporting and expects additional joins to Policy Center for underwriting company accuracy."
+  ]
+}

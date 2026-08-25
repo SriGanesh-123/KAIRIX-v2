@@ -1,0 +1,2175 @@
+{
+  "package_id": "PKG-SSIS-Extract_Coverage.dtsx-5b058dcb",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Coverage.dtsx",
+    "file_name": "Extract_Coverage.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 185,
+    "size_bytes": 11230
+  },
+  "summary": {
+    "purpose": "Extracts rows from the Guidewire PolicyCenter coverage table, validates the foreign key to POLICY_PERIOD, applies data cleansing and business rule checks, and loads the clean rows into the data warehouse staging schema while quarantining invalid rows and logging audit information.",
+    "high_level_narrative": "The package starts by inserting a RUNNING record into etl.etl_audit_log (SQL_LogStart). The main Data Flow (DFT_Main) reads all columns from public.coverage via an ADO.NET PostgreSQL source. Each row is sent to a Lookup component that checks whether the policy_period_id exists in the staging table stg.policy_period; matching rows continue, non‑matching rows are redirected to an error stream. Matching rows flow to a Derived Column component that trims whitespace from coverage_name and converts coverage_code to upper case. A second Derived Column adds the ETL load timestamp (etl_load_date). The enriched rows then pass through a Conditional Split that enforces business rules (non‑negative limit and deductible amounts, end date after start date, and allowed coverage_status values). Valid rows are bulk‑loaded into stg.coverage using fast load. All error streams (lookup no‑match, conditional split invalid rows, and source error output) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, a second Execute SQL task updates the audit log with end time, status COMPLETED, and row counts (SQL_LogEnd). An OnError event handler logs any package‑level errors to etl.etl_error_log.",
+    "business_domain": "PolicyCenter – Coverage data extraction and loading",
+    "inputs": [
+      "public.coverage (Guidewire PolicyCenter PostgreSQL source)",
+      "stg.policy_period (Data Warehouse staging table for policy periods)",
+      "OLE DB Source Error Output (source component error stream)"
+    ],
+    "outputs": [
+      "stg.coverage (Data Warehouse staging table for coverage)",
+      "stg.error_quarantine (table for rejected/invalid rows)",
+      "etl.etl_audit_log (audit log for package start/end and row counts)",
+      "etl.etl_error_log (error log for package‑level failures)"
+    ],
+    "key_transformations": [
+      "SELECT coverage_id, policy_period_id, coverage_code, coverage_name, limit_amount, deductible_amount, coverage_start_date, coverage_end_date, coverage_status FROM public.coverage",
+      "Lookup validation of policy_period_id against stg.policy_period",
+      "Derived Column: TRIM(coverage_name) and UPPER(coverage_code)",
+      "Derived Column: GETDATE() -> etl_load_date",
+      "Conditional Split enforcing: limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status IN ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')",
+      "Union All to consolidate all error/no‑match streams",
+      "Fast bulk load into stg.coverage with commit size 10,000"
+    ],
+    "key_dependencies": [
+      "Connection Manager CM_Guidewire_PG_Source (PostgreSQL source)",
+      "Connection Manager CM_DW_PG_Target (PostgreSQL target)",
+      "SQL Execute Task for audit start (INSERT into etl.etl_audit_log)",
+      "SQL Execute Task for audit end (UPDATE etl.etl_audit_log)",
+      "SQL Execute Task for error logging (INSERT into etl.etl_error_log)",
+      "ADO.NET PostgreSQL Source component",
+      "Lookup component (policy_period_id validation)",
+      "Derived Column components (cleansing and metadata)",
+      "Conditional Split component (business rule validation)",
+      "Union All component (error stream consolidation)",
+      "OLE DB Destination components for stg.coverage and stg.error_quarantine"
+    ],
+    "business_rules": [
+      "BR‑01/BR‑05: policy_period_id must exist in stg.policy_period (referential integrity).",
+      "Coverage limit_amount must be greater than or equal to 0.00.",
+      "Coverage deductible_amount must be greater than or equal to 0.00.",
+      "coverage_end_date must be later than coverage_start_date.",
+      "coverage_status must be one of: ACTIVE, EXPIRED, CANCELLED, SUSPENDED.",
+      "coverage_name is trimmed of leading/trailing whitespace.",
+      "coverage_code is converted to upper case."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_Coverage.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extracts rows from the source COVERAGE table, validates foreign key to POLICY_PERIOD, applies data cleansing and business rule validation, and loads the clean data into the data warehouse while logging audit information and quarantining error rows.",
+    "inputs_outputs": {
+      "inputs": [
+        "public.coverage (source table)",
+        "stg.policy_period (lookup table)",
+        "etl.etl_audit_log (audit log table for start/end updates)",
+        "etl.etl_error_log (error log table for OnError handler)"
+      ],
+      "outputs": [
+        "stg.coverage (target staging table)",
+        "stg.error_quarantine (error quarantine table)",
+        "etl.etl_audit_log (audit log updated with row counts)",
+        "etl.etl_error_log (error details inserted on failure)"
+      ]
+    },
+    "key_logic": [
+      "1. Log package start by inserting a row into etl.etl_audit_log (status RUNNING).",
+      "2. Read all columns from public.coverage via the source component.",
+      "3. Perform a lookup on stg.policy_period to ensure policy_period_id exists.",
+      "4. Rows that match the lookup proceed to data cleansing; non‑matches are sent to the error path.",
+      "5. Data cleansing trims coverage_name and upper‑cases coverage_code.",
+      "6. Add ETL metadata column etl_load_date with the current timestamp.",
+      "7. Apply business rule validation (limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status in allowed list).",
+      "8. Valid rows are loaded into stg.coverage using fast load; invalid rows are combined with other error streams.",
+      "9. All error rows are written to stg.error_quarantine.",
+      "10. Log package end by updating etl.etl_audit_log with end_time, status COMPLETED, and row counts.",
+      "11. On any error, insert details into etl.etl_error_log via the OnError event handler."
+    ],
+    "entities": [
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Int32",
+        "line_number": null,
+        "description": "Package variable tracking rows read."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Int32",
+        "line_number": null,
+        "description": "Package variable tracking rows successfully inserted."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Int32",
+        "line_number": null,
+        "description": "Package variable tracking rows rejected/errored."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "String",
+        "line_number": null,
+        "description": "Name of the SSIS package."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "DateTime",
+        "line_number": null,
+        "description": "Package start timestamp."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "DATABASE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection manager to the Guidewire PostgreSQL source."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection manager to the Data Warehouse PostgreSQL target."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Data Flow Task containing source, lookup, derived columns, conditional split, union, and destinations."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask that updates etl.etl_audit_log with end time and row counts."
+      },
+      {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "ExecuteSQLTask executed on OnError event to log error details."
+      },
+      {
+        "name": "SRC - coverage (PostgreSQL)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Source component that runs a SELECT against public.coverage."
+      },
+      {
+        "name": "LKP - Validate Policy_Period (policy_period_id)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup component that validates policy_period_id against stg.policy_period."
+      },
+      {
+        "name": "DER - Data Cleansing",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column component that trims coverage_name and upper‑cases coverage_code."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column component that adds etl_load_date."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Conditional Split component that enforces business rules."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "Union All component that merges all error streams."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load coverage (PostgreSQL DW)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that loads valid rows into stg.coverage."
+      },
+      {
+        "name": "public.coverage",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Source table containing coverage records."
+      },
+      {
+        "name": "coverage_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "coverage_code",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "VARCHAR",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "coverage_name",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "VARCHAR",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "limit_amount",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "deductible_amount",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "coverage_start_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "DATE",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "coverage_end_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "DATE",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "coverage_status",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.coverage",
+        "data_type": "VARCHAR",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Lookup table for policy periods."
+      },
+      {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.policy_period",
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": null
+      },
+      {
+        "name": "stg.coverage",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Target staging table for cleaned coverage rows."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Table that stores rows rejected by validation."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log table for package execution metadata."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "Central error log for ETL package failures."
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.coverage",
+        "data_type": "TIMESTAMP",
+        "line_number": null,
+        "description": "ETL load timestamp added by derived column component."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Source component SELECTs required columns from public.coverage.",
+        "source_entities": [
+          "public.coverage"
+        ],
+        "target_entities": [
+          "SRC - coverage (PostgreSQL)"
+        ],
+        "expression": "SELECT coverage_id, policy_period_id, coverage_code, coverage_name, limit_amount, deductible_amount, coverage_start_date, coverage_end_date, coverage_status FROM public.coverage",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "LOOKUP",
+        "description": "Lookup validates that policy_period_id exists in stg.policy_period.",
+        "source_entities": [
+          "LKP - Validate Policy_Period (policy_period_id)",
+          "stg.policy_period"
+        ],
+        "target_entities": [
+          "DER - Data Cleansing"
+        ],
+        "expression": "SELECT policy_period_id FROM stg.policy_period",
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from coverage_name.",
+        "source_entities": [
+          "coverage_name"
+        ],
+        "target_entities": [
+          "coverage_name"
+        ],
+        "expression": "TRIM(coverage_name)",
+        "line_number": null,
+        "confidence": 0.93
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Standardize coverage_code to upper case.",
+        "source_entities": [
+          "coverage_code"
+        ],
+        "target_entities": [
+          "coverage_code"
+        ],
+        "expression": "UPPER(coverage_code)",
+        "line_number": null,
+        "confidence": 0.93
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "source_entities": [],
+        "target_entities": [
+          "etl_load_date"
+        ],
+        "expression": "GETDATE()",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status in allowed list.",
+        "source_entities": [
+          "limit_amount",
+          "deductible_amount",
+          "coverage_end_date",
+          "coverage_start_date",
+          "coverage_status"
+        ],
+        "target_entities": [
+          "CSPL - Business Rule Validation"
+        ],
+        "expression": "limit_amount >= 0.00 && deductible_amount >= 0.00 && coverage_end_date > coverage_start_date && coverage_status IN ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')",
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Insert start record into etl.etl_audit_log.",
+        "source_entities": [
+          "etl.etl_audit_log"
+        ],
+        "target_entities": [
+          "SQL - Log Package Start"
+        ],
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Coverage','Data Flow', now(), 'RUNNING')",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Update audit log with end time, status, and row counts.",
+        "source_entities": [
+          "etl.etl_audit_log",
+          "RowsRead",
+          "RowsInserted",
+          "RowsRejected"
+        ],
+        "target_entities": [
+          "SQL - Log Package End / Row Counts"
+        ],
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Coverage' AND status = 'RUNNING'",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "AGGREGATION",
+        "description": "Log error details to etl.etl_error_log on package error.",
+        "source_entities": [
+          "etl.etl_error_log"
+        ],
+        "target_entities": [
+          "SQL - Log Error to ETL_ERROR_LOG"
+        ],
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Coverage', ?, ?, ?, now())",
+        "line_number": null,
+        "confidence": 0.94
+      }
+    ],
+    "business_rules": [
+      "BR-01: policy_period_id must exist in stg.policy_period (referential integrity).",
+      "BR-05: Same as BR-01 – enforced via lookup component.",
+      "Limit amount must be greater than or equal to 0.00.",
+      "Deductible amount must be greater than or equal to 0.00.",
+      "Coverage end date must be later than coverage start date.",
+      "Coverage status must be one of ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')."
+    ],
+    "dependencies": [
+      "CM_Guidewire_PG_Source (source PostgreSQL connection)",
+      "CM_DW_PG_Target (target PostgreSQL connection)",
+      "public.coverage table",
+      "stg.policy_period table",
+      "stg.coverage table",
+      "stg.error_quarantine table",
+      "etl.etl_audit_log table",
+      "etl.etl_error_log table"
+    ],
+    "relationships": [
+      {
+        "source": "SRC - coverage (PostgreSQL)",
+        "target": "public.coverage",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Source component executes SELECT against public.coverage."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "stg.policy_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Lookup component queries stg.policy_period for matching policy_period_id."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "policy_period_id",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup matches on policy_period_id column."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "coverage_name",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Trims whitespace from coverage_name."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "coverage_code",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Converts coverage_code to upper case."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "etl_load_date",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Adds current timestamp as etl_load_date."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "limit_amount",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Ensures limit_amount >= 0."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "deductible_amount",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Ensures deductible_amount >= 0."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "coverage_end_date",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Ensures coverage_end_date > coverage_start_date."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "coverage_status",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Ensures coverage_status is in allowed list."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "Unified Error Output",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Combines multiple error streams into a single output."
+      },
+      {
+        "source": "DST - Error Log (stg.error_quarantine)",
+        "target": "stg.error_quarantine",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Writes rejected rows to error quarantine table."
+      },
+      {
+        "source": "DST - Load coverage (PostgreSQL DW)",
+        "target": "stg.coverage",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Loads validated rows into staging coverage table."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Inserts a start record into audit log."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Updates audit log with end time and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Logs error details on package failure."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "CM_Guidewire_PG_Source",
+        "relationship_type": "DEPENDS_ON",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Data flow uses source connection manager."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "DEPENDS_ON",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "Data flow uses target connection manager."
+      },
+      {
+        "source": "SRC - coverage (PostgreSQL)",
+        "target": "LKP - Validate Policy_Period (policy_period_id)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 1,
+        "description": "Source output feeds into lookup input."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 2,
+        "description": "Lookup match output feeds into data cleansing."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 3,
+        "description": "Cleansed output feeds into derived column component."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 4,
+        "description": "Derived columns feed into business rule validation."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load coverage (PostgreSQL DW)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 5,
+        "description": "Valid rows are sent to the load destination."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 6,
+        "description": "Invalid rows are sent to the error union."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.94,
+        "evidence_line": 7,
+        "description": "Unified error output is written to error quarantine."
+      }
+    ],
+    "confidence": 0.85
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 36,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "SQL - Log Package Start",
+      "DFT - Extract, Cleanse, Validate, Load coverage",
+      "SQL - Log Package End / Row Counts",
+      "SQL - Log Error to ETL_ERROR_LOG",
+      "SRC - coverage (PostgreSQL)",
+      "LKP - Validate Policy_Period (policy_period_id)",
+      "DER - Data Cleansing",
+      "DER - Derived / Calculated Columns",
+      "CSPL - Business Rule Validation",
+      "public.coverage",
+      "stg.policy_period",
+      "stg.coverage",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask inserts a start record with status RUNNING."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask updates end_time, status COMPLETED and row counts."
+      },
+      {
+        "source": "SQL - Log Error to ETL_ERROR_LOG",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "OnError handler logs error details."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "SRC - coverage (PostgreSQL)",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Source component inside the Data Flow Task."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "LKP - Validate Policy_Period (policy_period_id)",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup component inside the Data Flow Task."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Derived Column component for trimming and upper‑casing."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Derived Column component that adds etl_load_date."
+      },
+      {
+        "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Conditional Split / validation logic."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "stg.coverage",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Valid rows are fast‑loaded into the staging table."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Invalid rows are routed to error quarantine."
+      },
+      {
+        "source": "SRC - coverage (PostgreSQL)",
+        "target": "public.coverage",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Source component selects all columns from the source table."
+      },
+      {
+        "source": "LKP - Validate Policy_Period (policy_period_id)",
+        "target": "stg.policy_period",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Ensures policy_period_id exists in the lookup table."
+      },
+      {
+        "source": "RowsRead",
+        "target": "SRC - coverage (PostgreSQL)",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows read from source."
+      },
+      {
+        "source": "RowsInserted",
+        "target": "stg.coverage",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks successful inserts."
+      },
+      {
+        "source": "RowsRejected",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks rows sent to quarantine."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser did not extract any tables, columns, or file references, whereas the LLM profile identifies multiple source and target tables.",
+      "Parser provided no line numbers or explicit component IDs; LLM inferred entity hierarchy based on naming conventions."
+    ],
+    "gaps_detected": [
+      "Missing explicit column list for public.coverage and stg.coverage; column-level lineage cannot be established.",
+      "No line numbers or XML element IDs from the .dtsx package to tie entities to exact locations.",
+      "Absence of detailed error handling flow (e.g., precedence constraints) beyond the OnError task.",
+      "No information on package configurations (e.g., connection string parameters) from the parser."
+    ],
+    "overall_confidence": 0.81
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "public.coverage",
+        "stg.policy_period",
+        "stg.coverage",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "columns": [
+        "coverage_id",
+        "policy_period_id",
+        "coverage_code",
+        "coverage_name",
+        "limit_amount",
+        "deductible_amount",
+        "coverage_start_date",
+        "coverage_end_date",
+        "coverage_status",
+        "policy_period_id",
+        "etl_load_date"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts rows from the Guidewire PolicyCenter coverage table, validates the foreign key to POLICY_PERIOD, applies data cleansing and business rule checks, and loads the clean rows into the data warehouse staging schema while quarantining invalid rows and logging audit information.",
+      "narrative": "The package starts by inserting a RUNNING record into etl.etl_audit_log (SQL_LogStart). The main Data Flow (DFT_Main) reads all columns from public.coverage via an ADO.NET PostgreSQL source. Each row is sent to a Lookup component that checks whether the policy_period_id exists in the staging table stg.policy_period; matching rows continue, non‑matching rows are redirected to an error stream. Matching rows flow to a Derived Column component that trims whitespace from coverage_name and converts coverage_code to upper case. A second Derived Column adds the ETL load timestamp (etl_load_date). The enriched rows then pass through a Conditional Split that enforces business rules (non‑negative limit and deductible amounts, end date after start date, and allowed coverage_status values). Valid rows are bulk‑loaded into stg.coverage using fast load. All error streams (lookup no‑match, conditional split invalid rows, and source error output) are combined with a Union All component and written to stg.error_quarantine for review. After the data flow completes, a second Execute SQL task updates the audit log with end time, status COMPLETED, and row counts (SQL_LogEnd). An OnError event handler logs any package‑level errors to etl.etl_error_log.",
+      "business_domain": "PolicyCenter – Coverage data extraction and loading",
+      "business_rules": [
+        "BR‑01/BR‑05: policy_period_id must exist in stg.policy_period (referential integrity).",
+        "Coverage limit_amount must be greater than or equal to 0.00.",
+        "Coverage deductible_amount must be greater than or equal to 0.00.",
+        "coverage_end_date must be later than coverage_start_date.",
+        "coverage_status must be one of: ACTIVE, EXPIRED, CANCELLED, SUSPENDED.",
+        "coverage_name is trimmed of leading/trailing whitespace.",
+        "coverage_code is converted to upper case."
+      ],
+      "key_logic": [
+        "1. Log package start by inserting a row into etl.etl_audit_log (status RUNNING).",
+        "2. Read all columns from public.coverage via the source component.",
+        "3. Perform a lookup on stg.policy_period to ensure policy_period_id exists.",
+        "4. Rows that match the lookup proceed to data cleansing; non‑matches are sent to the error path.",
+        "5. Data cleansing trims coverage_name and upper‑cases coverage_code.",
+        "6. Add ETL metadata column etl_load_date with the current timestamp.",
+        "7. Apply business rule validation (limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status in allowed list).",
+        "8. Valid rows are loaded into stg.coverage using fast load; invalid rows are combined with other error streams.",
+        "9. All error rows are written to stg.error_quarantine.",
+        "10. Log package end by updating etl.etl_audit_log with end_time, status COMPLETED, and row counts.",
+        "11. On any error, insert details into etl.etl_error_log via the OnError event handler."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "SQL - Log Package Start",
+        "DFT - Extract, Cleanse, Validate, Load coverage",
+        "SQL - Log Package End / Row Counts",
+        "SQL - Log Error to ETL_ERROR_LOG",
+        "SRC - coverage (PostgreSQL)",
+        "LKP - Validate Policy_Period (policy_period_id)",
+        "DER - Data Cleansing",
+        "DER - Derived / Calculated Columns",
+        "CSPL - Business Rule Validation",
+        "public.coverage",
+        "stg.policy_period",
+        "stg.coverage",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "MAPPING",
+          "description": "Source component SELECTs required columns from public.coverage.",
+          "source_entities": [
+            "public.coverage"
+          ],
+          "target_entities": [
+            "SRC - coverage (PostgreSQL)"
+          ],
+          "expression": "SELECT coverage_id, policy_period_id, coverage_code, coverage_name, limit_amount, deductible_amount, coverage_start_date, coverage_end_date, coverage_status FROM public.coverage",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "LOOKUP",
+          "description": "Lookup validates that policy_period_id exists in stg.policy_period.",
+          "source_entities": [
+            "LKP - Validate Policy_Period (policy_period_id)",
+            "stg.policy_period"
+          ],
+          "target_entities": [
+            "DER - Data Cleansing"
+          ],
+          "expression": "SELECT policy_period_id FROM stg.policy_period",
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "CALCULATION",
+          "description": "Trim whitespace from coverage_name.",
+          "source_entities": [
+            "coverage_name"
+          ],
+          "target_entities": [
+            "coverage_name"
+          ],
+          "expression": "TRIM(coverage_name)",
+          "line_number": null,
+          "confidence": 0.93
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CALCULATION",
+          "description": "Standardize coverage_code to upper case.",
+          "source_entities": [
+            "coverage_code"
+          ],
+          "target_entities": [
+            "coverage_code"
+          ],
+          "expression": "UPPER(coverage_code)",
+          "line_number": null,
+          "confidence": 0.93
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL load timestamp column.",
+          "source_entities": [],
+          "target_entities": [
+            "etl_load_date"
+          ],
+          "expression": "GETDATE()",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "CONDITIONAL",
+          "description": "Business rule validation: limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status in allowed list.",
+          "source_entities": [
+            "limit_amount",
+            "deductible_amount",
+            "coverage_end_date",
+            "coverage_start_date",
+            "coverage_status"
+          ],
+          "target_entities": [
+            "CSPL - Business Rule Validation"
+          ],
+          "expression": "limit_amount >= 0.00 && deductible_amount >= 0.00 && coverage_end_date > coverage_start_date && coverage_status IN ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')",
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "AGGREGATION",
+          "description": "Insert start record into etl.etl_audit_log.",
+          "source_entities": [
+            "etl.etl_audit_log"
+          ],
+          "target_entities": [
+            "SQL - Log Package Start"
+          ],
+          "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Coverage','Data Flow', now(), 'RUNNING')",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "AGGREGATION",
+          "description": "Update audit log with end time, status, and row counts.",
+          "source_entities": [
+            "etl.etl_audit_log",
+            "RowsRead",
+            "RowsInserted",
+            "RowsRejected"
+          ],
+          "target_entities": [
+            "SQL - Log Package End / Row Counts"
+          ],
+          "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Coverage' AND status = 'RUNNING'",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "AGGREGATION",
+          "description": "Log error details to etl.etl_error_log on package error.",
+          "source_entities": [
+            "etl.etl_error_log"
+          ],
+          "target_entities": [
+            "SQL - Log Error to ETL_ERROR_LOG"
+          ],
+          "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Coverage', ?, ?, ?, now())",
+          "line_number": null,
+          "confidence": 0.94
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "SQL - Log Package Start",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask inserts a start record with status RUNNING."
+        },
+        {
+          "source": "SQL - Log Package End / Row Counts",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.91,
+          "evidence_line": null,
+          "description": "ExecuteSQLTask updates end_time, status COMPLETED and row counts."
+        },
+        {
+          "source": "SQL - Log Error to ETL_ERROR_LOG",
+          "target": "etl.etl_error_log",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "OnError handler logs error details."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+          "target": "SRC - coverage (PostgreSQL)",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Source component inside the Data Flow Task."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+          "target": "LKP - Validate Policy_Period (policy_period_id)",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Lookup component inside the Data Flow Task."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+          "target": "DER - Data Cleansing",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Derived Column component for trimming and upper‑casing."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+          "target": "DER - Derived / Calculated Columns",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Derived Column component that adds etl_load_date."
+        },
+        {
+          "source": "DFT - Extract, Cleanse, Validate, Load coverage",
+          "target": "CSPL - Business Rule Validation",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Conditional Split / validation logic."
+        },
+        {
+          "source": "CSPL - Business Rule Validation",
+          "target": "stg.coverage",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Valid rows are fast‑loaded into the staging table."
+        },
+        {
+          "source": "CSPL - Business Rule Validation",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Invalid rows are routed to error quarantine."
+        },
+        {
+          "source": "SRC - coverage (PostgreSQL)",
+          "target": "public.coverage",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Source component selects all columns from the source table."
+        },
+        {
+          "source": "LKP - Validate Policy_Period (policy_period_id)",
+          "target": "stg.policy_period",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Ensures policy_period_id exists in the lookup table."
+        },
+        {
+          "source": "RowsRead",
+          "target": "SRC - coverage (PostgreSQL)",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": null,
+          "description": "Variable tracks number of rows read from source."
+        },
+        {
+          "source": "RowsInserted",
+          "target": "stg.coverage",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": null,
+          "description": "Variable tracks successful inserts."
+        },
+        {
+          "source": "RowsRejected",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.85,
+          "evidence_line": null,
+          "description": "Variable tracks rows sent to quarantine."
+        }
+      ],
+      "gaps": [
+        "Missing explicit column list for public.coverage and stg.coverage; column-level lineage cannot be established.",
+        "No line numbers or XML element IDs from the .dtsx package to tie entities to exact locations.",
+        "Absence of detailed error handling flow (e.g., precedence constraints) beyond the OnError task.",
+        "No information on package configurations (e.g., connection string parameters) from the parser."
+      ]
+    },
+    "overall_confidence": 0.81
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_Coverage.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_Coverage.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Coverage.dtsx",
+        "total_lines": 185
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "Int32",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "String",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "DateTime",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "DATABASE:CM_Guidewire_PG_Source",
+      "label": "Database",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "DATABASE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "DATABASE:CM_DW_PG_Target",
+      "label": "Database",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DFT - Extract, Cleanse, Validate, Load coverage",
+      "label": "Task",
+      "properties": {
+        "name": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Error to ETL_ERROR_LOG",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - coverage (PostgreSQL)",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - coverage (PostgreSQL)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:LKP - Validate Policy_Period (policy_period_id)",
+      "label": "Program",
+      "properties": {
+        "name": "LKP - Validate Policy_Period (policy_period_id)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DER - Data Cleansing",
+      "label": "Program",
+      "properties": {
+        "name": "DER - Data Cleansing",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DER - Derived / Calculated Columns",
+      "label": "Program",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:CSPL - Business Rule Validation",
+      "label": "Program",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:UN - Union All Error Rows",
+      "label": "Program",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Error Log (stg.error_quarantine)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Load coverage (PostgreSQL DW)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Load coverage (PostgreSQL DW)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Extract, Cleanse, Validate, Load coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:public.coverage",
+      "label": "Table",
+      "properties": {
+        "name": "public.coverage",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_id",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_id",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_period_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_code",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_code",
+        "entity_type": "COLUMN",
+        "data_type": "VARCHAR",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_name",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_name",
+        "entity_type": "COLUMN",
+        "data_type": "VARCHAR",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:limit_amount",
+      "label": "Column",
+      "properties": {
+        "name": "limit_amount",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:deductible_amount",
+      "label": "Column",
+      "properties": {
+        "name": "deductible_amount",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_start_date",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_start_date",
+        "entity_type": "COLUMN",
+        "data_type": "DATE",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_end_date",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_end_date",
+        "entity_type": "COLUMN",
+        "data_type": "DATE",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:coverage_status",
+      "label": "Column",
+      "properties": {
+        "name": "coverage_status",
+        "entity_type": "COLUMN",
+        "data_type": "VARCHAR",
+        "parent": "public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.policy_period",
+      "label": "Table",
+      "properties": {
+        "name": "stg.policy_period",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.coverage",
+      "label": "Table",
+      "properties": {
+        "name": "stg.coverage",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": "TIMESTAMP",
+        "parent": "stg.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Source component SELECTs required columns from public.coverage.",
+        "expression": "SELECT coverage_id, policy_period_id, coverage_code, coverage_name, limit_amount, deductible_amount, coverage_start_date, coverage_end_date, coverage_status FROM public.coverage",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "LOOKUP",
+        "description": "Lookup validates that policy_period_id exists in stg.policy_period.",
+        "expression": "SELECT policy_period_id FROM stg.policy_period",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from coverage_name.",
+        "expression": "TRIM(coverage_name)",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Standardize coverage_code to upper case.",
+        "expression": "UPPER(coverage_code)",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "expression": "GETDATE()",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "CONDITIONAL",
+        "description": "Business rule validation: limit_amount >= 0, deductible_amount >= 0, coverage_end_date > coverage_start_date, coverage_status in allowed list.",
+        "expression": "limit_amount >= 0.00 && deductible_amount >= 0.00 && coverage_end_date > coverage_start_date && coverage_status IN ('ACTIVE','EXPIRED','CANCELLED','SUSPENDED')",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "AGGREGATION",
+        "description": "Insert start record into etl.etl_audit_log.",
+        "expression": "INSERT INTO etl.etl_audit_log (package_name, task_name, start_time, status) VALUES ('Extract_Coverage','Data Flow', now(), 'RUNNING')",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Update audit log with end time, status, and row counts.",
+        "expression": "UPDATE etl.etl_audit_log SET end_time = now(), status = 'COMPLETED', rows_read = ?, rows_inserted = ?, rows_rejected = ? WHERE package_name = 'Extract_Coverage' AND status = 'RUNNING'",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Coverage.dtsx:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "AGGREGATION",
+        "description": "Log error details to etl.etl_error_log on package error.",
+        "expression": "INSERT INTO etl.etl_error_log (package_name, source_object, error_code, error_description, error_time) VALUES ('Extract_Coverage', ?, ?, ?, now())",
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "DATABASE:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "DATABASE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TASK:DFT - Extract, Cleanse, Validate, Load coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TASK:SQL - Log Error to ETL_ERROR_LOG",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:SRC - coverage (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:LKP - Validate Policy_Period (policy_period_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "PROGRAM:DST - Load coverage (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:public.coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_code",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_name",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:limit_amount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:deductible_amount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_start_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_end_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:coverage_status",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:stg.policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:stg.coverage",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Coverage.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package Start",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask inserts a start record with status RUNNING."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package End / Row Counts",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "ExecuteSQLTask updates end_time, status COMPLETED and row counts."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Error to ETL_ERROR_LOG",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "OnError handler logs error details."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load coverage",
+      "target_id": "TABLE:SRC - coverage (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Source component inside the Data Flow Task."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load coverage",
+      "target_id": "TABLE:LKP - Validate Policy_Period (policy_period_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Lookup component inside the Data Flow Task."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load coverage",
+      "target_id": "TABLE:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Derived Column component for trimming and upper‑casing."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load coverage",
+      "target_id": "TABLE:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Derived Column component that adds etl_load_date."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Extract, Cleanse, Validate, Load coverage",
+      "target_id": "TABLE:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Conditional Split / validation logic."
+      }
+    },
+    {
+      "source_id": "TABLE:CSPL - Business Rule Validation",
+      "target_id": "TABLE:stg.coverage",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Valid rows are fast‑loaded into the staging table."
+      }
+    },
+    {
+      "source_id": "TABLE:CSPL - Business Rule Validation",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Invalid rows are routed to error quarantine."
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - coverage (PostgreSQL)",
+      "target_id": "TABLE:public.coverage",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Source component selects all columns from the source table."
+      }
+    },
+    {
+      "source_id": "TABLE:LKP - Validate Policy_Period (policy_period_id)",
+      "target_id": "TABLE:stg.policy_period",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Ensures policy_period_id exists in the lookup table."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRead",
+      "target_id": "TABLE:SRC - coverage (PostgreSQL)",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks number of rows read from source."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsInserted",
+      "target_id": "TABLE:stg.coverage",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks successful inserts."
+      }
+    },
+    {
+      "source_id": "TABLE:RowsRejected",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Variable tracks rows sent to quarantine."
+      }
+    }
+  ]
+}

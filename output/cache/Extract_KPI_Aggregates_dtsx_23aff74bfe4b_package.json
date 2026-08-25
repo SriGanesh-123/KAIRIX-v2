@@ -1,0 +1,2322 @@
+{
+  "package_id": "PKG-SSIS-Extract_KPI_Aggregates.dtsx-280014d1",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_KPI_Aggregates.dtsx",
+    "file_name": "Extract_KPI_Aggregates.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 222,
+    "size_bytes": 13056
+  },
+  "summary": {
+    "purpose": "Merge pre‑aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution.",
+    "high_level_narrative": "When the package starts it inserts a row into etl.etl_audit_log marking the run as RUNNING. The Data Flow Task DFT_KPI then reads four staging tables from the PostgreSQL data warehouse: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period and stg.job. Premium and policy_period rows are sorted by policy_period_id and merged on that key to attach the policy_id to each premium record. The result is re‑sorted by policy_id and left‑outer merged with the sorted claims summary (by policy_id) so that policies without claims still appear. A Derived Column component computes loss_ratio, commission_ratio and underwriting_profit with divide‑by‑zero safeguards and adds an etl_load_date. The KPI rows are fast‑loaded into rpt.fact_kpi_summary. In parallel, the job stream is aggregated by year and month to count renewal jobs and total expiring policies; a second Derived Column calculates retention_rate (renewed/expiring*100) with zero‑division protection. The monthly retention rows are fast‑loaded into rpt.fact_retention_rate. After the data flow completes, a second SQL task updates etl.etl_audit_log with end_time, status COMPLETED and the row‑count metrics.",
+    "business_domain": "Insurance Data Warehouse – KPI reporting for underwriting and policy retention",
+    "inputs": [
+      "stg.premium_summary_by_period",
+      "stg.claims_incurred_summary_by_policy",
+      "stg.policy_period",
+      "stg.job",
+      "etl.etl_audit_log (for logging start)"
+    ],
+    "outputs": [
+      "rpt.fact_kpi_summary",
+      "rpt.fact_retention_rate",
+      "etl.etl_audit_log (updated with end_time, status, rows_read, rows_inserted, rows_rejected)"
+    ],
+    "key_transformations": [
+      "Sort premium summary by policy_period_id",
+      "Sort policy_period by policy_period_id",
+      "Merge Join (inner) premium with policy_period to obtain policy_id",
+      "Sort merged premium+policy_id by policy_id",
+      "Sort claims summary by policy_id",
+      "Merge Join (left outer) premium+policy_id with claims to retain rows with zero claims",
+      "Derived Column calculations: loss_ratio = (incurred / earned_premium) * 100 with zero‑check, commission_ratio = (commission / written_premium) * 100 with zero‑check, underwriting_profit = earned_premium - incurred - commission - operating_expense, etl_load_date = GETDATE()",
+      "Aggregation of job data by year and month to count renewed policies and total expiring policies",
+      "Derived Column calculation: retention_rate = (renewed_count / expiring_count) * 100 with zero‑check"
+    ],
+    "key_dependencies": [
+      "Connection manager CM_DW_PG_Target (Npgsql PostgreSQL provider)",
+      "Staging tables: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period, stg.job",
+      "Destination tables: rpt.fact_kpi_summary, rpt.fact_retention_rate, etl.etl_audit_log",
+      "SSIS components: OLE DB Source, Sort, Merge Join, Aggregation, Derived Column, OLE DB Destination, Execute SQL Task"
+    ],
+    "business_rules": [
+      "BR‑09: Claims incurred summary is pre‑aggregated by policy and must be joined to premium data.",
+      "BR‑10: Loss Ratio = (incurred_amount / earned_premium) * 100; if earned_premium = 0 then loss_ratio = 0.",
+      "BR‑11: Underwriting Profit = earned_premium - incurred_amount - commission_amount - operating_expense.",
+      "Commission Ratio = (commission_amount / written_premium) * 100; if written_premium = 0 then commission_ratio = 0.",
+      "Retention Rate = (renewed policies / expiring policies) * 100; if expiring policies = 0 then retention_rate = 0.",
+      "Left outer join ensures policies with no claims receive an incurred_amount of 0 for KPI calculation.",
+      "All KPI calculations include divide‑by‑zero protection to avoid runtime errors."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_KPI_Aggregates.dtsx",
+    "source_type": "ssis",
+    "purpose": "Merge pre‑aggregated premium and claims data with policy period and job information, compute KPI metrics (Loss Ratio, Commission Ratio, Underwriting Profit, Retention Rate) according to business rules BR‑09, BR‑10 and BR‑11, and load the results into reporting fact tables.",
+    "inputs_outputs": {
+      "inputs": [
+        "stg.premium_summary_by_period",
+        "stg.claims_incurred_summary_by_policy",
+        "stg.policy_period",
+        "stg.job",
+        "etl.etl_audit_log"
+      ],
+      "outputs": [
+        "rpt.fact_kpi_summary",
+        "rpt.fact_retention_rate",
+        "etl.etl_audit_log"
+      ]
+    },
+    "key_logic": [
+      "Log package start in etl.etl_audit_log.",
+      "Read premium summary (pre‑aggregated by policy_period) from stg.premium_summary_by_period.",
+      "Read claims incurred summary (pre‑aggregated by policy) from stg.claims_incurred_summary_by_policy.",
+      "Read policy period mapping from stg.policy_period.",
+      "Read job data (job_type, job_date) from stg.job.",
+      "Sort premium and policy period streams by policy_period_id.",
+      "Inner merge‑join premium to policy period on policy_period_id to obtain policy_id.",
+      "Resort the joined stream by policy_id.",
+      "Sort claims stream by policy_id.",
+      "Left‑outer merge‑join premium+policy_id to claims on policy_id (zero‑claim policies are retained).",
+      "Derived column component calculates loss_ratio, commission_ratio, underwriting_profit and adds etl_load_date with divide‑by‑zero protection.",
+      "Aggregate job stream by year/month to count renewed policies and total expiring policies.",
+      "Derived column component calculates retention_rate = renewed / expiring * 100 with divide‑by‑zero protection.",
+      "Load KPI rows into rpt.fact_kpi_summary.",
+      "Load monthly retention rate rows into rpt.fact_retention_rate.",
+      "Log package end, row counts and status in etl.etl_audit_log."
+    ],
+    "entities": [
+      {
+        "name": "Extract_KPI_Aggregates",
+        "entity_type": "PACKAGE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "SSIS package that extracts and aggregates KPI data."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "parent_entity": "Extract_KPI_Aggregates",
+        "data_type": null,
+        "line_number": 9,
+        "description": "ADO.NET Npgsql connection manager to the PostgreSQL data warehouse."
+      },
+      {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_KPI_Aggregates",
+        "data_type": null,
+        "line_number": 20,
+        "description": "ExecuteSQLTask that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_KPI_Aggregates",
+        "data_type": null,
+        "line_number": 115,
+        "description": "ExecuteSQLTask that updates etl.etl_audit_log with end time, status and row counts."
+      },
+      {
+        "name": "DFT - Merge, Aggregate, Calculate KPIs",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_KPI_Aggregates",
+        "data_type": null,
+        "line_number": 27,
+        "description": "Data Flow Task that performs all extracts, joins, calculations and loads."
+      },
+      {
+        "name": "SRC - stg.premium (pre-aggregated by policy_period)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 36,
+        "description": "OLE DB Source reading stg.premium_summary_by_period."
+      },
+      {
+        "name": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 48,
+        "description": "OLE DB Source reading stg.claims_incurred_summary_by_policy."
+      },
+      {
+        "name": "SRC - stg.policy_period",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 60,
+        "description": "OLE DB Source reading stg.policy_period."
+      },
+      {
+        "name": "SRC - stg.job (for retention rate)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 72,
+        "description": "OLE DB Source reading stg.job."
+      },
+      {
+        "name": "SORT - Premium by policy_period_id",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 84,
+        "description": "Sort component ordering premium rows by policy_period_id."
+      },
+      {
+        "name": "SORT - PolicyPeriod by policy_period_id",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 96,
+        "description": "Sort component ordering policy period rows by policy_period_id."
+      },
+      {
+        "name": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 108,
+        "description": "Inner Merge Join on policy_period_id to attach policy_id to premium rows."
+      },
+      {
+        "name": "SORT - Premium+PolicyID by policy_id",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 120,
+        "description": "Sort component ordering the premium+policy_id stream by policy_id."
+      },
+      {
+        "name": "SORT - Claims by policy_id",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 132,
+        "description": "Sort component ordering claims rows by policy_id."
+      },
+      {
+        "name": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 144,
+        "description": "Left outer merge join to combine premium and claim data, preserving rows with zero claims."
+      },
+      {
+        "name": "DER - KPI Calculations (BR-10 / BR-11)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 156,
+        "description": "Derived Column component that computes loss_ratio, commission_ratio, underwriting_profit and adds etl_load_date."
+      },
+      {
+        "name": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 168,
+        "description": "Aggregation component that groups job records by year/month and counts renewed and expiring policies."
+      },
+      {
+        "name": "DER - Retention Rate (%)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 180,
+        "description": "Derived Column component that calculates retention_rate with divide‑by‑zero protection."
+      },
+      {
+        "name": "DST - Load fact_kpi_summary (per policy)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 192,
+        "description": "OLE DB Destination that loads KPI rows into rpt.fact_kpi_summary."
+      },
+      {
+        "name": "DST - Load fact_retention_rate (monthly)",
+        "entity_type": "PROGRAM",
+        "parent_entity": "DFT - Merge, Aggregate, Calculate KPIs",
+        "data_type": null,
+        "line_number": 204,
+        "description": "OLE DB Destination that loads monthly retention rate rows into rpt.fact_retention_rate."
+      },
+      {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": "Identifier linking premium and policy period tables."
+      },
+      {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": "Primary key of a policy."
+      },
+      {
+        "name": "incurred_amount",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Total incurred claim amount."
+      },
+      {
+        "name": "earned_premium",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Earned premium amount."
+      },
+      {
+        "name": "written_premium",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Written premium amount."
+      },
+      {
+        "name": "commission_amount",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Commission amount."
+      },
+      {
+        "name": "operating_expense",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Operating expense amount."
+      },
+      {
+        "name": "loss_ratio",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Loss Ratio KPI (percentage)."
+      },
+      {
+        "name": "commission_ratio",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Commission Ratio KPI (percentage)."
+      },
+      {
+        "name": "underwriting_profit",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Underwriting Profit KPI."
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "TIMESTAMP",
+        "line_number": null,
+        "description": "Timestamp of ETL load."
+      },
+      {
+        "name": "job_type",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "VARCHAR",
+        "line_number": null,
+        "description": "Type of job (e.g., Renewal, New Business)."
+      },
+      {
+        "name": "job_date",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "DATE",
+        "line_number": null,
+        "description": "Date of the job."
+      },
+      {
+        "name": "renewed_count",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": "Count of renewal jobs per month."
+      },
+      {
+        "name": "expiring_count",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "INTEGER",
+        "line_number": null,
+        "description": "Count of policies reaching expiration per month."
+      },
+      {
+        "name": "retention_rate",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": "NUMERIC",
+        "line_number": null,
+        "description": "Retention Rate KPI (percentage)."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Sort premium rows by policy_period_id to satisfy Merge Join ordering requirements.",
+        "source_entities": [
+          "SRC - stg.premium (pre-aggregated by policy_period)"
+        ],
+        "target_entities": [
+          "SORT - Premium by policy_period_id"
+        ],
+        "expression": "ORDER BY policy_period_id ASC",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Sort policy period rows by policy_period_id for Merge Join.",
+        "source_entities": [
+          "SRC - stg.policy_period"
+        ],
+        "target_entities": [
+          "SORT - PolicyPeriod by policy_period_id"
+        ],
+        "expression": "ORDER BY policy_period_id ASC",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "JOIN",
+        "description": "Inner join premium to policy period on policy_period_id to retrieve policy_id for each premium row.",
+        "source_entities": [
+          "SORT - Premium by policy_period_id",
+          "SORT - PolicyPeriod by policy_period_id"
+        ],
+        "target_entities": [
+          "MRG - Join Premium to PolicyPeriod (get policy_id)"
+        ],
+        "expression": "INNER JOIN ON policy_period_id",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Sort the premium+policy_id stream by policy_id for the next Merge Join.",
+        "source_entities": [
+          "MRG - Join Premium to PolicyPeriod (get policy_id)"
+        ],
+        "target_entities": [
+          "SORT - Premium+PolicyID by policy_id"
+        ],
+        "expression": "ORDER BY policy_id ASC",
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Sort claims rows by policy_id to align with premium stream for Merge Join.",
+        "source_entities": [
+          "SRC - stg.claims (pre-aggregated by policy, BR-09)"
+        ],
+        "target_entities": [
+          "SORT - Claims by policy_id"
+        ],
+        "expression": "ORDER BY policy_id ASC",
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "JOIN",
+        "description": "Left outer join premium+policy_id to claims on policy_id, preserving policies with zero claims (incurred defaults to 0).",
+        "source_entities": [
+          "SORT - Premium+PolicyID by policy_id",
+          "SORT - Claims by policy_id"
+        ],
+        "target_entities": [
+          "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)"
+        ],
+        "expression": "LEFT OUTER JOIN ON policy_id",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Derived column calculations for KPI metrics with divide‑by‑zero protection and addition of load timestamp.",
+        "source_entities": [
+          "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)"
+        ],
+        "target_entities": [
+          "DER - KPI Calculations (BR-10 / BR-11)"
+        ],
+        "expression": "incurred_amount_safe = ISNULL(incurred_amount,0); loss_ratio = (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0); commission_ratio = (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0); underwriting_profit = earned_premium - incurred_amount_safe - commission_amount - operating_expense; etl_load_date = GETDATE()",
+        "line_number": null,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Group job records by year and month, counting renewal jobs and total expiring policies.",
+        "source_entities": [
+          "SRC - stg.job (for retention rate)"
+        ],
+        "target_entities": [
+          "AGG - Retention Rate Inputs (renewed vs expiring policy counts)"
+        ],
+        "expression": "GROUP BY DATEPART(yyyy,job_date), DATEPART(mm,job_date); COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count; COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "CALCULATION",
+        "description": "Calculate retention_rate = renewed_count / expiring_count * 100 with divide‑by‑zero protection.",
+        "source_entities": [
+          "AGG - Retention Rate Inputs (renewed vs expiring policy counts)"
+        ],
+        "target_entities": [
+          "DER - Retention Rate (%)"
+        ],
+        "expression": "retention_rate = (expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0)",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "Load KPI rows into reporting fact table rpt.fact_kpi_summary using fast load.",
+        "source_entities": [
+          "DER - KPI Calculations (BR-10 / BR-11)"
+        ],
+        "target_entities": [
+          "DST - Load fact_kpi_summary (per policy)"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "Load monthly retention rate rows into reporting fact table rpt.fact_retention_rate using fast load.",
+        "source_entities": [
+          "DER - Retention Rate (%)"
+        ],
+        "target_entities": [
+          "DST - Load fact_retention_rate (monthly)"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.94
+      }
+    ],
+    "business_rules": [
+      "BR-09: Claims are pre‑aggregated by policy before joining to premium data.",
+      "BR-10: Loss Ratio = (incurred_amount / earned_premium) * 100, with zero earned premium resulting in 0.",
+      "BR-11: Underwriting Profit = earned_premium - incurred_amount - commission_amount - operating_expense.",
+      "Commission Ratio = (commission_amount / written_premium) * 100, with zero written premium resulting in 0.",
+      "Retention Rate = (renewed policies / expiring policies) * 100, with zero expiring policies resulting in 0.",
+      "Left outer join between premium and claims ensures policies with no claims still produce KPI rows.",
+      "All KPI rows are timestamped with the ETL load date.",
+      "Fast load is used for destination tables to improve bulk insert performance."
+    ],
+    "dependencies": [
+      "CM_DW_PG_Target (PostgreSQL data warehouse)",
+      "stg.premium_summary_by_period",
+      "stg.claims_incurred_summary_by_policy",
+      "stg.policy_period",
+      "stg.job",
+      "rpt.fact_kpi_summary",
+      "rpt.fact_retention_rate",
+      "etl.etl_audit_log"
+    ],
+    "relationships": [
+      {
+        "source": "SQL - Log Package Start",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 20,
+        "description": "ExecuteSQLTask uses the connection manager to insert a start record."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 115,
+        "description": "ExecuteSQLTask updates audit log via the connection manager."
+      },
+      {
+        "source": "SRC - stg.premium (pre-aggregated by policy_period)",
+        "target": "stg.premium_summary_by_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 36,
+        "description": "OLE DB Source reads premium summary table."
+      },
+      {
+        "source": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "target": "stg.claims_incurred_summary_by_policy",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 48,
+        "description": "OLE DB Source reads claims summary table."
+      },
+      {
+        "source": "SRC - stg.policy_period",
+        "target": "stg.policy_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 60,
+        "description": "OLE DB Source reads policy period mapping table."
+      },
+      {
+        "source": "SRC - stg.job (for retention rate)",
+        "target": "stg.job",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": 72,
+        "description": "OLE DB Source reads job table."
+      },
+      {
+        "source": "SORT - Premium by policy_period_id",
+        "target": "SRC - stg.premium (pre-aggregated by policy_period)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 84,
+        "description": "Premium output is fed into sort component."
+      },
+      {
+        "source": "SORT - PolicyPeriod by policy_period_id",
+        "target": "SRC - stg.policy_period",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 96,
+        "description": "Policy period output is fed into sort component."
+      },
+      {
+        "source": "SORT - Premium by policy_period_id",
+        "target": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 108,
+        "description": "Sorted premium stream is input to merge join."
+      },
+      {
+        "source": "SORT - PolicyPeriod by policy_period_id",
+        "target": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 108,
+        "description": "Sorted policy period stream is input to merge join."
+      },
+      {
+        "source": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "target": "SORT - Premium+PolicyID by policy_id",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 120,
+        "description": "Joined output is sorted by policy_id for next join."
+      },
+      {
+        "source": "SORT - Claims by policy_id",
+        "target": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 132,
+        "description": "Claims output is fed into sort component."
+      },
+      {
+        "source": "SORT - Premium+PolicyID by policy_id",
+        "target": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 144,
+        "description": "Sorted premium+policy_id stream is input to left outer merge join."
+      },
+      {
+        "source": "SORT - Claims by policy_id",
+        "target": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 144,
+        "description": "Sorted claims stream is input to left outer merge join."
+      },
+      {
+        "source": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+        "target": "DER - KPI Calculations (BR-10 / BR-11)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.96,
+        "evidence_line": 156,
+        "description": "Merged financial data is fed into derived column component."
+      },
+      {
+        "source": "DER - KPI Calculations (BR-10 / BR-11)",
+        "target": "rpt.fact_kpi_summary",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.94,
+        "evidence_line": 192,
+        "description": "KPI rows are loaded into fact_kpi_summary."
+      },
+      {
+        "source": "SRC - stg.job (for retention rate)",
+        "target": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 168,
+        "description": "Job data is input to aggregation component."
+      },
+      {
+        "source": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+        "target": "DER - Retention Rate (%)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.95,
+        "evidence_line": 180,
+        "description": "Aggregated counts are input to derived column for retention rate."
+      },
+      {
+        "source": "DER - Retention Rate (%)",
+        "target": "rpt.fact_retention_rate",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.94,
+        "evidence_line": 204,
+        "description": "Retention rate rows are loaded into fact_retention_rate."
+      },
+      {
+        "source": "DER - KPI Calculations (BR-10 / BR-11)",
+        "target": "loss_ratio",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.97,
+        "evidence_line": 156,
+        "description": "Loss ratio column derived from incurred_amount and earned_premium."
+      },
+      {
+        "source": "DER - KPI Calculations (BR-10 / BR-11)",
+        "target": "commission_ratio",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.97,
+        "evidence_line": 156,
+        "description": "Commission ratio column derived from commission_amount and written_premium."
+      },
+      {
+        "source": "DER - KPI Calculations (BR-10 / BR-11)",
+        "target": "underwriting_profit",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.97,
+        "evidence_line": 156,
+        "description": "Underwriting profit column derived from earned_premium, incurred_amount, commission_amount and operating_expense."
+      },
+      {
+        "source": "DER - Retention Rate (%)",
+        "target": "retention_rate",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.96,
+        "evidence_line": 180,
+        "description": "Retention rate column derived from renewed_count and expiring_count."
+      }
+    ],
+    "confidence": 0.85
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 36,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "Extract_KPI_Aggregates",
+      "CM_DW_PG_Target",
+      "SQL - Log Package Start",
+      "SQL - Log Package End / Row Counts",
+      "DFT - Merge, Aggregate, Calculate KPIs",
+      "SRC - stg.premium (pre-aggregated by policy_period)",
+      "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "SRC - stg.policy_period",
+      "SRC - stg.job (for retention rate)",
+      "SORT - Premium by policy_period_id",
+      "SORT - PolicyPeriod by policy_period_id",
+      "MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "SORT - Premium+PolicyID by policy_id",
+      "SORT - Claims by policy_id",
+      "MRG - Left Outer Join Premium+PolicyID to Claims",
+      "DERIVED - Calculate KPI metrics",
+      "AGG - Aggregate job stream",
+      "DERIVED - Calculate retention_rate",
+      "OLE DB Destination - rpt.fact_kpi_summary",
+      "OLE DB Destination - rpt.fact_retention_rate"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "Extract_KPI_Aggregates",
+        "target": "CM_DW_PG_Target",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Package uses the PostgreSQL connection manager."
+      },
+      {
+        "source": "Extract_KPI_Aggregates",
+        "target": "SQL - Log Package Start",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQL task logs start of package."
+      },
+      {
+        "source": "Extract_KPI_Aggregates",
+        "target": "SQL - Log Package End / Row Counts",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQL task logs end of package."
+      },
+      {
+        "source": "Extract_KPI_Aggregates",
+        "target": "DFT - Merge, Aggregate, Calculate KPIs",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Main Data Flow Task."
+      },
+      {
+        "source": "DFT - Merge, Aggregate, Calculate KPIs",
+        "target": "SRC - stg.premium (pre-aggregated by policy_period)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads premium summary."
+      },
+      {
+        "source": "DFT - Merge, Aggregate, Calculate KPIs",
+        "target": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads claims summary."
+      },
+      {
+        "source": "DFT - Merge, Aggregate, Calculate KPIs",
+        "target": "SRC - stg.policy_period",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads policy period mapping."
+      },
+      {
+        "source": "DFT - Merge, Aggregate, Calculate KPIs",
+        "target": "SRC - stg.job (for retention rate)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads job data."
+      },
+      {
+        "source": "DFT - Merge, Aggregate, Calculate KPIs",
+        "target": "SORT - Premium by policy_period_id",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Sort component for premium stream."
+      },
+      {
+        "source": "SORT - Premium by policy_period_id",
+        "target": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Sorted premium rows are fed to merge join."
+      },
+      {
+        "source": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "target": "SORT - Premium+PolicyID by policy_id",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Resulting stream is sorted by policy_id."
+      },
+      {
+        "source": "SORT - Claims by policy_id",
+        "target": "MRG - Left Outer Join Premium+PolicyID to Claims",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Claims stream prepared for left outer join."
+      },
+      {
+        "source": "MRG - Left Outer Join Premium+PolicyID to Claims",
+        "target": "DERIVED - Calculate KPI metrics",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Joined rows are passed to derived column for KPI calculations."
+      },
+      {
+        "source": "DERIVED - Calculate KPI metrics",
+        "target": "OLE DB Destination - rpt.fact_kpi_summary",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "KPI rows loaded into reporting fact table."
+      },
+      {
+        "source": "AGG - Aggregate job stream",
+        "target": "DERIVED - Calculate retention_rate",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Aggregated job counts used to compute retention rate."
+      },
+      {
+        "source": "DERIVED - Calculate retention_rate",
+        "target": "OLE DB Destination - rpt.fact_retention_rate",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Retention rate rows loaded into reporting fact table."
+      },
+      {
+        "source": "SQL - Log Package Start",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Start record inserted into audit log."
+      },
+      {
+        "source": "SQL - Log Package End / Row Counts",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "End record with row counts updated in audit log."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no tables, columns, or file references, while the LLM extracted a full set of SSIS entities, tasks, and data flow components.",
+      "Parser output lacked any lineage information; all relationships were inferred from the LLM description."
+    ],
+    "gaps_detected": [
+      "Formal definitions of business rules BR‑09, BR‑10, and BR‑11 are not present in the extracted knowledge.",
+      "Schema details (column names, data types) for etl.etl_audit_log, rpt.fact_kpi_summary, and rpt.fact_retention_rate are missing.",
+      "Error‑handling logic (e.g., divide‑by‑zero protection) is described but not linked to specific component settings.",
+      "External lookup tables for job_type or policy status that may influence retention rate calculations are not referenced.",
+      "No information on package parameters, variables, or configuration files that could affect execution."
+    ],
+    "overall_confidence": 0.94
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [],
+      "columns": [
+        "policy_period_id",
+        "policy_id",
+        "incurred_amount",
+        "earned_premium",
+        "written_premium",
+        "commission_amount",
+        "operating_expense",
+        "loss_ratio",
+        "commission_ratio",
+        "underwriting_profit",
+        "etl_load_date",
+        "job_type",
+        "job_date",
+        "renewed_count",
+        "expiring_count",
+        "retention_rate"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Merge pre‑aggregated premium and claims data with policy period and job information to calculate underwriting KPIs (Loss Ratio, Commission Ratio, Underwriting Profit) and the Retention Rate KPI, then load the results into reporting fact tables while logging package execution.",
+      "narrative": "When the package starts it inserts a row into etl.etl_audit_log marking the run as RUNNING. The Data Flow Task DFT_KPI then reads four staging tables from the PostgreSQL data warehouse: stg.premium_summary_by_period, stg.claims_incurred_summary_by_policy, stg.policy_period and stg.job. Premium and policy_period rows are sorted by policy_period_id and merged on that key to attach the policy_id to each premium record. The result is re‑sorted by policy_id and left‑outer merged with the sorted claims summary (by policy_id) so that policies without claims still appear. A Derived Column component computes loss_ratio, commission_ratio and underwriting_profit with divide‑by‑zero safeguards and adds an etl_load_date. The KPI rows are fast‑loaded into rpt.fact_kpi_summary. In parallel, the job stream is aggregated by year and month to count renewal jobs and total expiring policies; a second Derived Column calculates retention_rate (renewed/expiring*100) with zero‑division protection. The monthly retention rows are fast‑loaded into rpt.fact_retention_rate. After the data flow completes, a second SQL task updates etl.etl_audit_log with end_time, status COMPLETED and the row‑count metrics.",
+      "business_domain": "Insurance Data Warehouse – KPI reporting for underwriting and policy retention",
+      "business_rules": [
+        "BR‑09: Claims incurred summary is pre‑aggregated by policy and must be joined to premium data.",
+        "BR‑10: Loss Ratio = (incurred_amount / earned_premium) * 100; if earned_premium = 0 then loss_ratio = 0.",
+        "BR‑11: Underwriting Profit = earned_premium - incurred_amount - commission_amount - operating_expense.",
+        "Commission Ratio = (commission_amount / written_premium) * 100; if written_premium = 0 then commission_ratio = 0.",
+        "Retention Rate = (renewed policies / expiring policies) * 100; if expiring policies = 0 then retention_rate = 0.",
+        "Left outer join ensures policies with no claims receive an incurred_amount of 0 for KPI calculation.",
+        "All KPI calculations include divide‑by‑zero protection to avoid runtime errors."
+      ],
+      "key_logic": [
+        "Log package start in etl.etl_audit_log.",
+        "Read premium summary (pre‑aggregated by policy_period) from stg.premium_summary_by_period.",
+        "Read claims incurred summary (pre‑aggregated by policy) from stg.claims_incurred_summary_by_policy.",
+        "Read policy period mapping from stg.policy_period.",
+        "Read job data (job_type, job_date) from stg.job.",
+        "Sort premium and policy period streams by policy_period_id.",
+        "Inner merge‑join premium to policy period on policy_period_id to obtain policy_id.",
+        "Resort the joined stream by policy_id.",
+        "Sort claims stream by policy_id.",
+        "Left‑outer merge‑join premium+policy_id to claims on policy_id (zero‑claim policies are retained).",
+        "Derived column component calculates loss_ratio, commission_ratio, underwriting_profit and adds etl_load_date with divide‑by‑zero protection.",
+        "Aggregate job stream by year/month to count renewed policies and total expiring policies.",
+        "Derived column component calculates retention_rate = renewed / expiring * 100 with divide‑by‑zero protection.",
+        "Load KPI rows into rpt.fact_kpi_summary.",
+        "Load monthly retention rate rows into rpt.fact_retention_rate.",
+        "Log package end, row counts and status in etl.etl_audit_log."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "Extract_KPI_Aggregates",
+        "CM_DW_PG_Target",
+        "SQL - Log Package Start",
+        "SQL - Log Package End / Row Counts",
+        "DFT - Merge, Aggregate, Calculate KPIs",
+        "SRC - stg.premium (pre-aggregated by policy_period)",
+        "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "SRC - stg.policy_period",
+        "SRC - stg.job (for retention rate)",
+        "SORT - Premium by policy_period_id",
+        "SORT - PolicyPeriod by policy_period_id",
+        "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "SORT - Premium+PolicyID by policy_id",
+        "SORT - Claims by policy_id",
+        "MRG - Left Outer Join Premium+PolicyID to Claims",
+        "DERIVED - Calculate KPI metrics",
+        "AGG - Aggregate job stream",
+        "DERIVED - Calculate retention_rate",
+        "OLE DB Destination - rpt.fact_kpi_summary",
+        "OLE DB Destination - rpt.fact_retention_rate"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "CALCULATION",
+          "description": "Sort premium rows by policy_period_id to satisfy Merge Join ordering requirements.",
+          "source_entities": [
+            "SRC - stg.premium (pre-aggregated by policy_period)"
+          ],
+          "target_entities": [
+            "SORT - Premium by policy_period_id"
+          ],
+          "expression": "ORDER BY policy_period_id ASC",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "CALCULATION",
+          "description": "Sort policy period rows by policy_period_id for Merge Join.",
+          "source_entities": [
+            "SRC - stg.policy_period"
+          ],
+          "target_entities": [
+            "SORT - PolicyPeriod by policy_period_id"
+          ],
+          "expression": "ORDER BY policy_period_id ASC",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "JOIN",
+          "description": "Inner join premium to policy period on policy_period_id to retrieve policy_id for each premium row.",
+          "source_entities": [
+            "SORT - Premium by policy_period_id",
+            "SORT - PolicyPeriod by policy_period_id"
+          ],
+          "target_entities": [
+            "MRG - Join Premium to PolicyPeriod (get policy_id)"
+          ],
+          "expression": "INNER JOIN ON policy_period_id",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CALCULATION",
+          "description": "Sort the premium+policy_id stream by policy_id for the next Merge Join.",
+          "source_entities": [
+            "MRG - Join Premium to PolicyPeriod (get policy_id)"
+          ],
+          "target_entities": [
+            "SORT - Premium+PolicyID by policy_id"
+          ],
+          "expression": "ORDER BY policy_id ASC",
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CALCULATION",
+          "description": "Sort claims rows by policy_id to align with premium stream for Merge Join.",
+          "source_entities": [
+            "SRC - stg.claims (pre-aggregated by policy, BR-09)"
+          ],
+          "target_entities": [
+            "SORT - Claims by policy_id"
+          ],
+          "expression": "ORDER BY policy_id ASC",
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "JOIN",
+          "description": "Left outer join premium+policy_id to claims on policy_id, preserving policies with zero claims (incurred defaults to 0).",
+          "source_entities": [
+            "SORT - Premium+PolicyID by policy_id",
+            "SORT - Claims by policy_id"
+          ],
+          "target_entities": [
+            "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)"
+          ],
+          "expression": "LEFT OUTER JOIN ON policy_id",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "CALCULATION",
+          "description": "Derived column calculations for KPI metrics with divide‑by‑zero protection and addition of load timestamp.",
+          "source_entities": [
+            "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)"
+          ],
+          "target_entities": [
+            "DER - KPI Calculations (BR-10 / BR-11)"
+          ],
+          "expression": "incurred_amount_safe = ISNULL(incurred_amount,0); loss_ratio = (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0); commission_ratio = (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0); underwriting_profit = earned_premium - incurred_amount_safe - commission_amount - operating_expense; etl_load_date = GETDATE()",
+          "line_number": null,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "AGGREGATION",
+          "description": "Group job records by year and month, counting renewal jobs and total expiring policies.",
+          "source_entities": [
+            "SRC - stg.job (for retention rate)"
+          ],
+          "target_entities": [
+            "AGG - Retention Rate Inputs (renewed vs expiring policy counts)"
+          ],
+          "expression": "GROUP BY DATEPART(yyyy,job_date), DATEPART(mm,job_date); COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count; COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "CALCULATION",
+          "description": "Calculate retention_rate = renewed_count / expiring_count * 100 with divide‑by‑zero protection.",
+          "source_entities": [
+            "AGG - Retention Rate Inputs (renewed vs expiring policy counts)"
+          ],
+          "target_entities": [
+            "DER - Retention Rate (%)"
+          ],
+          "expression": "retention_rate = (expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0)",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "MAPPING",
+          "description": "Load KPI rows into reporting fact table rpt.fact_kpi_summary using fast load.",
+          "source_entities": [
+            "DER - KPI Calculations (BR-10 / BR-11)"
+          ],
+          "target_entities": [
+            "DST - Load fact_kpi_summary (per policy)"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T11",
+          "rule_type": "MAPPING",
+          "description": "Load monthly retention rate rows into reporting fact table rpt.fact_retention_rate using fast load.",
+          "source_entities": [
+            "DER - Retention Rate (%)"
+          ],
+          "target_entities": [
+            "DST - Load fact_retention_rate (monthly)"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.94
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "Extract_KPI_Aggregates",
+          "target": "CM_DW_PG_Target",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Package uses the PostgreSQL connection manager."
+        },
+        {
+          "source": "Extract_KPI_Aggregates",
+          "target": "SQL - Log Package Start",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "ExecuteSQL task logs start of package."
+        },
+        {
+          "source": "Extract_KPI_Aggregates",
+          "target": "SQL - Log Package End / Row Counts",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "ExecuteSQL task logs end of package."
+        },
+        {
+          "source": "Extract_KPI_Aggregates",
+          "target": "DFT - Merge, Aggregate, Calculate KPIs",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": null,
+          "description": "Main Data Flow Task."
+        },
+        {
+          "source": "DFT - Merge, Aggregate, Calculate KPIs",
+          "target": "SRC - stg.premium (pre-aggregated by policy_period)",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "OLE DB Source reads premium summary."
+        },
+        {
+          "source": "DFT - Merge, Aggregate, Calculate KPIs",
+          "target": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "OLE DB Source reads claims summary."
+        },
+        {
+          "source": "DFT - Merge, Aggregate, Calculate KPIs",
+          "target": "SRC - stg.policy_period",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "OLE DB Source reads policy period mapping."
+        },
+        {
+          "source": "DFT - Merge, Aggregate, Calculate KPIs",
+          "target": "SRC - stg.job (for retention rate)",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "OLE DB Source reads job data."
+        },
+        {
+          "source": "DFT - Merge, Aggregate, Calculate KPIs",
+          "target": "SORT - Premium by policy_period_id",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Sort component for premium stream."
+        },
+        {
+          "source": "SORT - Premium by policy_period_id",
+          "target": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Sorted premium rows are fed to merge join."
+        },
+        {
+          "source": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+          "target": "SORT - Premium+PolicyID by policy_id",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Resulting stream is sorted by policy_id."
+        },
+        {
+          "source": "SORT - Claims by policy_id",
+          "target": "MRG - Left Outer Join Premium+PolicyID to Claims",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Claims stream prepared for left outer join."
+        },
+        {
+          "source": "MRG - Left Outer Join Premium+PolicyID to Claims",
+          "target": "DERIVED - Calculate KPI metrics",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Joined rows are passed to derived column for KPI calculations."
+        },
+        {
+          "source": "DERIVED - Calculate KPI metrics",
+          "target": "OLE DB Destination - rpt.fact_kpi_summary",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "KPI rows loaded into reporting fact table."
+        },
+        {
+          "source": "AGG - Aggregate job stream",
+          "target": "DERIVED - Calculate retention_rate",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Aggregated job counts used to compute retention rate."
+        },
+        {
+          "source": "DERIVED - Calculate retention_rate",
+          "target": "OLE DB Destination - rpt.fact_retention_rate",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Retention rate rows loaded into reporting fact table."
+        },
+        {
+          "source": "SQL - Log Package Start",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.98,
+          "evidence_line": null,
+          "description": "Start record inserted into audit log."
+        },
+        {
+          "source": "SQL - Log Package End / Row Counts",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.98,
+          "evidence_line": null,
+          "description": "End record with row counts updated in audit log."
+        }
+      ],
+      "gaps": [
+        "Formal definitions of business rules BR‑09, BR‑10, and BR‑11 are not present in the extracted knowledge.",
+        "Schema details (column names, data types) for etl.etl_audit_log, rpt.fact_kpi_summary, and rpt.fact_retention_rate are missing.",
+        "Error‑handling logic (e.g., divide‑by‑zero protection) is described but not linked to specific component settings.",
+        "External lookup tables for job_type or policy status that may influence retention rate calculations are not referenced.",
+        "No information on package parameters, variables, or configuration files that could affect execution."
+      ]
+    },
+    "overall_confidence": 0.94
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_KPI_Aggregates.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_KPI_Aggregates.dtsx",
+        "total_lines": 222
+      }
+    },
+    {
+      "id": "PACKAGE:Extract_KPI_Aggregates",
+      "label": "Package",
+      "properties": {
+        "name": "Extract_KPI_Aggregates",
+        "entity_type": "PACKAGE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "DATABASE:CM_DW_PG_Target",
+      "label": "Database",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "DATABASE",
+        "data_type": null,
+        "parent": "Extract_KPI_Aggregates",
+        "line_number": 9
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package Start",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package Start",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_KPI_Aggregates",
+        "line_number": 20
+      }
+    },
+    {
+      "id": "TASK:SQL - Log Package End / Row Counts",
+      "label": "Task",
+      "properties": {
+        "name": "SQL - Log Package End / Row Counts",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_KPI_Aggregates",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "TASK:DFT - Merge, Aggregate, Calculate KPIs",
+      "label": "Task",
+      "properties": {
+        "name": "DFT - Merge, Aggregate, Calculate KPIs",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_KPI_Aggregates",
+        "line_number": 27
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - stg.premium (pre-aggregated by policy_period)",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - stg.premium (pre-aggregated by policy_period)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 36
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - stg.claims (pre-aggregated by policy, BR-09)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 48
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - stg.policy_period",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - stg.policy_period",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "PROGRAM:SRC - stg.job (for retention rate)",
+      "label": "Program",
+      "properties": {
+        "name": "SRC - stg.job (for retention rate)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 72
+      }
+    },
+    {
+      "id": "PROGRAM:SORT - Premium by policy_period_id",
+      "label": "Program",
+      "properties": {
+        "name": "SORT - Premium by policy_period_id",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "PROGRAM:SORT - PolicyPeriod by policy_period_id",
+      "label": "Program",
+      "properties": {
+        "name": "SORT - PolicyPeriod by policy_period_id",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 96
+      }
+    },
+    {
+      "id": "PROGRAM:MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "label": "Program",
+      "properties": {
+        "name": "MRG - Join Premium to PolicyPeriod (get policy_id)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 108
+      }
+    },
+    {
+      "id": "PROGRAM:SORT - Premium+PolicyID by policy_id",
+      "label": "Program",
+      "properties": {
+        "name": "SORT - Premium+PolicyID by policy_id",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 120
+      }
+    },
+    {
+      "id": "PROGRAM:SORT - Claims by policy_id",
+      "label": "Program",
+      "properties": {
+        "name": "SORT - Claims by policy_id",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 132
+      }
+    },
+    {
+      "id": "PROGRAM:MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "label": "Program",
+      "properties": {
+        "name": "MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 144
+      }
+    },
+    {
+      "id": "PROGRAM:DER - KPI Calculations (BR-10 / BR-11)",
+      "label": "Program",
+      "properties": {
+        "name": "DER - KPI Calculations (BR-10 / BR-11)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 156
+      }
+    },
+    {
+      "id": "PROGRAM:AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "label": "Program",
+      "properties": {
+        "name": "AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 168
+      }
+    },
+    {
+      "id": "PROGRAM:DER - Retention Rate (%)",
+      "label": "Program",
+      "properties": {
+        "name": "DER - Retention Rate (%)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 180
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Load fact_kpi_summary (per policy)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Load fact_kpi_summary (per policy)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 192
+      }
+    },
+    {
+      "id": "PROGRAM:DST - Load fact_retention_rate (monthly)",
+      "label": "Program",
+      "properties": {
+        "name": "DST - Load fact_retention_rate (monthly)",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": "DFT - Merge, Aggregate, Calculate KPIs",
+        "line_number": 204
+      }
+    },
+    {
+      "id": "COLUMN:policy_period_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_period_id",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:policy_id",
+      "label": "Column",
+      "properties": {
+        "name": "policy_id",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:incurred_amount",
+      "label": "Column",
+      "properties": {
+        "name": "incurred_amount",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:earned_premium",
+      "label": "Column",
+      "properties": {
+        "name": "earned_premium",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:written_premium",
+      "label": "Column",
+      "properties": {
+        "name": "written_premium",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:commission_amount",
+      "label": "Column",
+      "properties": {
+        "name": "commission_amount",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:operating_expense",
+      "label": "Column",
+      "properties": {
+        "name": "operating_expense",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:loss_ratio",
+      "label": "Column",
+      "properties": {
+        "name": "loss_ratio",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:commission_ratio",
+      "label": "Column",
+      "properties": {
+        "name": "commission_ratio",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:underwriting_profit",
+      "label": "Column",
+      "properties": {
+        "name": "underwriting_profit",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": "TIMESTAMP",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:job_type",
+      "label": "Column",
+      "properties": {
+        "name": "job_type",
+        "entity_type": "COLUMN",
+        "data_type": "VARCHAR",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:job_date",
+      "label": "Column",
+      "properties": {
+        "name": "job_date",
+        "entity_type": "COLUMN",
+        "data_type": "DATE",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:renewed_count",
+      "label": "Column",
+      "properties": {
+        "name": "renewed_count",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:expiring_count",
+      "label": "Column",
+      "properties": {
+        "name": "expiring_count",
+        "entity_type": "COLUMN",
+        "data_type": "INTEGER",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:retention_rate",
+      "label": "Column",
+      "properties": {
+        "name": "retention_rate",
+        "entity_type": "COLUMN",
+        "data_type": "NUMERIC",
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Sort premium rows by policy_period_id to satisfy Merge Join ordering requirements.",
+        "expression": "ORDER BY policy_period_id ASC",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Sort policy period rows by policy_period_id for Merge Join.",
+        "expression": "ORDER BY policy_period_id ASC",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "JOIN",
+        "description": "Inner join premium to policy period on policy_period_id to retrieve policy_id for each premium row.",
+        "expression": "INNER JOIN ON policy_period_id",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Sort the premium+policy_id stream by policy_id for the next Merge Join.",
+        "expression": "ORDER BY policy_id ASC",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Sort claims rows by policy_id to align with premium stream for Merge Join.",
+        "expression": "ORDER BY policy_id ASC",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "JOIN",
+        "description": "Left outer join premium+policy_id to claims on policy_id, preserving policies with zero claims (incurred defaults to 0).",
+        "expression": "LEFT OUTER JOIN ON policy_id",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Derived column calculations for KPI metrics with divide‑by‑zero protection and addition of load timestamp.",
+        "expression": "incurred_amount_safe = ISNULL(incurred_amount,0); loss_ratio = (earned_premium == 0) ? 0.0 : (incurred_amount_safe / earned_premium * 100.0); commission_ratio = (written_premium == 0) ? 0.0 : (commission_amount / written_premium * 100.0); underwriting_profit = earned_premium - incurred_amount_safe - commission_amount - operating_expense; etl_load_date = GETDATE()",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "AGGREGATION",
+        "description": "Group job records by year and month, counting renewal jobs and total expiring policies.",
+        "expression": "GROUP BY DATEPART(yyyy,job_date), DATEPART(mm,job_date); COUNT(CASE WHEN job_type='Renewal' THEN 1 END) AS renewed_count; COUNT(CASE WHEN job_type IN ('New Business','Renewal') THEN 1 END) AS expiring_count",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "CALCULATION",
+        "description": "Calculate retention_rate = renewed_count / expiring_count * 100 with divide‑by‑zero protection.",
+        "expression": "retention_rate = (expiring_count == 0) ? 0.0 : (renewed_count * 1.0 / expiring_count * 100.0)",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "Load KPI rows into reporting fact table rpt.fact_kpi_summary using fast load.",
+        "expression": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_KPI_Aggregates.dtsx:T11",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "Load monthly retention rate rows into reporting fact table rpt.fact_retention_rate using fast load.",
+        "expression": null,
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PACKAGE:Extract_KPI_Aggregates",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "DATABASE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "TASK:SQL - Log Package Start",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "TASK:SQL - Log Package End / Row Counts",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "TASK:DFT - Merge, Aggregate, Calculate KPIs",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SRC - stg.premium (pre-aggregated by policy_period)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SRC - stg.policy_period",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SRC - stg.job (for retention rate)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SORT - Premium by policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SORT - PolicyPeriod by policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SORT - Premium+PolicyID by policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:SORT - Claims by policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:MRG - Merge Join Premium to Claims (LEFT OUTER, by policy_id)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:DER - KPI Calculations (BR-10 / BR-11)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:AGG - Retention Rate Inputs (renewed vs expiring policy counts)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:DER - Retention Rate (%)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:DST - Load fact_kpi_summary (per policy)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "PROGRAM:DST - Load fact_retention_rate (monthly)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:policy_period_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:policy_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:incurred_amount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:earned_premium",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:written_premium",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:commission_amount",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:operating_expense",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:loss_ratio",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:commission_ratio",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:underwriting_profit",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:job_type",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:job_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:renewed_count",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:expiring_count",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_KPI_Aggregates.dtsx",
+      "target_id": "COLUMN:retention_rate",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_KPI_Aggregates",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Package uses the PostgreSQL connection manager."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_KPI_Aggregates",
+      "target_id": "TABLE:SQL - Log Package Start",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQL task logs start of package."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_KPI_Aggregates",
+      "target_id": "TABLE:SQL - Log Package End / Row Counts",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "ExecuteSQL task logs end of package."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_KPI_Aggregates",
+      "target_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Main Data Flow Task."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "target_id": "TABLE:SRC - stg.premium (pre-aggregated by policy_period)",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads premium summary."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "target_id": "TABLE:SRC - stg.claims (pre-aggregated by policy, BR-09)",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads claims summary."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "target_id": "TABLE:SRC - stg.policy_period",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads policy period mapping."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "target_id": "TABLE:SRC - stg.job (for retention rate)",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "OLE DB Source reads job data."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT - Merge, Aggregate, Calculate KPIs",
+      "target_id": "TABLE:SORT - Premium by policy_period_id",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Sort component for premium stream."
+      }
+    },
+    {
+      "source_id": "TABLE:SORT - Premium by policy_period_id",
+      "target_id": "TABLE:MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Sorted premium rows are fed to merge join."
+      }
+    },
+    {
+      "source_id": "TABLE:MRG - Join Premium to PolicyPeriod (get policy_id)",
+      "target_id": "TABLE:SORT - Premium+PolicyID by policy_id",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Resulting stream is sorted by policy_id."
+      }
+    },
+    {
+      "source_id": "TABLE:SORT - Claims by policy_id",
+      "target_id": "TABLE:MRG - Left Outer Join Premium+PolicyID to Claims",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Claims stream prepared for left outer join."
+      }
+    },
+    {
+      "source_id": "TABLE:MRG - Left Outer Join Premium+PolicyID to Claims",
+      "target_id": "TABLE:DERIVED - Calculate KPI metrics",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Joined rows are passed to derived column for KPI calculations."
+      }
+    },
+    {
+      "source_id": "TABLE:DERIVED - Calculate KPI metrics",
+      "target_id": "TABLE:OLE DB Destination - rpt.fact_kpi_summary",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "KPI rows loaded into reporting fact table."
+      }
+    },
+    {
+      "source_id": "TABLE:AGG - Aggregate job stream",
+      "target_id": "TABLE:DERIVED - Calculate retention_rate",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Aggregated job counts used to compute retention rate."
+      }
+    },
+    {
+      "source_id": "TABLE:DERIVED - Calculate retention_rate",
+      "target_id": "TABLE:OLE DB Destination - rpt.fact_retention_rate",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Retention rate rows loaded into reporting fact table."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package Start",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Start record inserted into audit log."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL - Log Package End / Row Counts",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "End record with row counts updated in audit log."
+      }
+    }
+  ]
+}

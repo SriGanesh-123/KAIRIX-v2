@@ -1,0 +1,3664 @@
+{
+  "package_id": "PKG-COBOL-KPICALC.CBL-8b8da24c",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\KPICALC.CBL",
+    "file_name": "KPICALC.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 861,
+    "size_bytes": 18434
+  },
+  "summary": {
+    "purpose": "Generate Key Performance Indicator (KPI) statistics for insurance policies by merging a status‑updated policy extract with an earned‑premium extract, validating data quality, reconciling written premiums against earned and unearned components, and producing a KPI summary report and an error file.",
+    "high_level_narrative": "The program opens four sequential files (policy input, premium input, KPI output, error output). It reads the first record from each input file. It then enters a loop that continues until both input files reach end‑of‑file or a fatal error occurs. Inside the loop the program compares the current policy numbers: if they match, it processes the matched pair (increments total policy count, classifies policy status, aggregates premium amounts, aggregates product‑specific totals, checks the reconciliation rule, and writes any data‑quality errors). If the policy number from the policy file is less than the premium file, the policy has no matching premium (missing premium) and an error record is written. If the premium number is less than the policy number, the premium is orphaned (no matching policy) and an error record is written. After handling a case the appropriate next record is read. Out‑of‑order records in either input cause a fatal error. When the loop ends, the program writes a formatted KPI report to KPI‑OUT, closes all files, displays summary counters (total policies, reconciliation errors, data‑quality errors, I/O errors), sets an appropriate RETURN‑CODE based on error severity, and terminates.",
+    "business_domain": "Insurance Policy & Premium KPI Reporting",
+    "inputs": [
+      "POLICY-IN – status‑updated policy extract (sorted by POLICY‑NO)",
+      "PREMIUM-IN – earned premium extract (sorted by POLICY‑NO)"
+    ],
+    "outputs": [
+      "KPI-OUT – KPI summary report file",
+      "ERROR-OUT – data‑quality and processing error file"
+    ],
+    "key_transformations": [
+      "Count total policies and categorize by status codes (AC, PN, EX, CN) and unknown status.",
+      "Count policies by product type (HO, AU) and track unknown product types.",
+      "Aggregate written, earned, and unearned premium amounts across all policies.",
+      "Aggregate written, earned, and unearned premium amounts separately for HO and AU products.",
+      "Compute reconciliation difference: WRITTEN – (EARNED + UNEARNED) and flag when absolute difference exceeds tolerance of 0.01.",
+      "Detect and count out‑of‑order records in both input streams.",
+      "Identify missing premium records (policy without premium) and orphan premium records (premium without policy).",
+      "Generate formatted KPI lines for the KPI‑OUT file (counts and monetary totals).",
+      "Create error records with specific error codes and messages for data‑quality violations."
+    ],
+    "key_dependencies": [
+      "File definitions for POLICY-IN, PREMIUM-IN, KPI-OUT, and ERROR-OUT (SELECT statements).",
+      "Working‑storage variables for status flags, counters, totals, and formatting edits.",
+      "COBOL intrinsic FUNCTION ABS for absolute difference calculation.",
+      "Standard COBOL I/O operations (OPEN, READ, WRITE, CLOSE, DISPLAY)."
+    ],
+    "business_rules": [
+      "Policy status must be one of: AC (active), PN (pending), EX (expired), CN (cancelled). Unknown status triggers error K003.",
+      "Product type must be HO (home) or AU (auto). Unknown product triggers error K004.",
+      "Every policy record must have a matching premium record; otherwise error K001 (missing premium).",
+      "Every premium record must have a matching policy record; otherwise error K002 (orphan premium).",
+      "Reconciliation rule: WRITTEN premium must equal EARNED + UNEARNED within a tolerance of 0.01; violations trigger error K005.",
+      "Input files must be sorted by POLICY‑NO; detection of a decreasing POLICY‑NO sets a fatal error.",
+      "Data‑quality errors increment WS-DQ-ERRORS; I/O errors increment WS-IO-ERRORS; reconciliation errors increment WS-RECON-ERRORS.",
+      "Return‑code 12 for fatal I/O or ordering errors, return‑code 4 when any data‑quality errors are present, otherwise normal return."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "KPICALC.CBL",
+    "source_type": "cobol",
+    "purpose": "Process sorted policy and premium extracts to calculate key performance indicators (KPIs) such as policy counts by status and product, premium totals, and reconciliation of written versus earned plus unearned premiums. Produce a KPI summary report and an error file for data‑quality and reconciliation issues.",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN",
+        "PREMIUM-IN"
+      ],
+      "outputs": [
+        "KPI-OUT",
+        "ERROR-OUT"
+      ]
+    },
+    "key_logic": [
+      "Open all four files (policy, premium, KPI output, error output) and set open‑flags; abort on any open error.",
+      "Read the first record from each input file.",
+      "Loop until both files reach end‑of‑file or a fatal error occurs:",
+      "  - If the policy file is exhausted, treat remaining premium records as orphan premiums.",
+      "  - If the premium file is exhausted, treat remaining policy records as missing premiums.",
+      "  - Otherwise compare policy‑number fields:",
+      "    * When equal, process the matched pair (increment counters, aggregate premiums, perform reconciliation, and read next records from both files).",
+      "    * When policy‑number < premium‑number, handle missing premium for the current policy and read next policy record.",
+      "    * When policy‑number > premium‑number, handle orphan premium and read next premium record.",
+      "After the loop, if no fatal error, write the KPI summary report.",
+      "Close all files, display final totals, set appropriate RETURN‑CODE based on error counts, and exit.",
+      "Error handling includes detection of out‑of‑order input, unknown policy status, unknown product type, missing or orphan premium records, and reconciliation tolerance breaches."
+    ],
+    "entities": [
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 43,
+        "description": "Sequential input file containing policy extract (Task 8)."
+      },
+      {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 47,
+        "description": "Sequential input file containing earned premium extract (Task 7)."
+      },
+      {
+        "name": "KPI-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 51,
+        "description": "Sequential output file for KPI summary report."
+      },
+      {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 55,
+        "description": "Sequential output file for error records."
+      },
+      {
+        "name": "PI-REC",
+        "entity_type": "VARIABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 61,
+        "description": "Record layout for POLICY-IN."
+      },
+      {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 63,
+        "description": "Policy number (key)."
+      },
+      {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 64,
+        "description": "Customer identifier."
+      },
+      {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 65,
+        "description": "Agent identifier."
+      },
+      {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 66,
+        "description": "Product type code (e.g., 'HO', 'AU')."
+      },
+      {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 67,
+        "description": "Policy status code (e.g., 'AC', 'PN', 'EX', 'CN')."
+      },
+      {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 68,
+        "description": "Policy effective date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 69,
+        "description": "Policy expiry date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 70,
+        "description": "Written premium amount on the policy record."
+      },
+      {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 71,
+        "description": "Record creation date."
+      },
+      {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 72,
+        "description": "Record last update date."
+      },
+      {
+        "name": "PRI-REC",
+        "entity_type": "VARIABLE",
+        "parent_entity": "PREMIUM-IN",
+        "data_type": null,
+        "line_number": 74,
+        "description": "Record layout for PREMIUM-IN."
+      },
+      {
+        "name": "PRI-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 76,
+        "description": "Premium record identifier."
+      },
+      {
+        "name": "PRI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 77,
+        "description": "Policy number (key) linking to policy file."
+      },
+      {
+        "name": "PRI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 78,
+        "description": "Written premium amount from premium extract."
+      },
+      {
+        "name": "PRI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 79,
+        "description": "Earned premium amount."
+      },
+      {
+        "name": "PRI-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 80,
+        "description": "Unearned premium amount."
+      },
+      {
+        "name": "PRI-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 81,
+        "description": "Date of premium calculation."
+      },
+      {
+        "name": "KPI-REC",
+        "entity_type": "VARIABLE",
+        "parent_entity": "KPI-OUT",
+        "data_type": "PIC X(80)",
+        "line_number": 84,
+        "description": "Flat record used to write KPI summary lines."
+      },
+      {
+        "name": "ER-REC",
+        "entity_type": "VARIABLE",
+        "parent_entity": "ERROR-OUT",
+        "data_type": null,
+        "line_number": 88,
+        "description": "Record layout for error output."
+      },
+      {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 90,
+        "description": "Policy number associated with an error."
+      },
+      {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(4)",
+        "line_number": 91,
+        "description": "Error code identifier."
+      },
+      {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(64)",
+        "line_number": 92,
+        "description": "Human‑readable error description."
+      },
+      {
+        "name": "WS-STATUS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 96,
+        "description": "File‑status fields for each file."
+      },
+      {
+        "name": "WS-PI-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 98,
+        "description": "File status for POLICY-IN."
+      },
+      {
+        "name": "WS-PR-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 99,
+        "description": "File status for PREMIUM-IN."
+      },
+      {
+        "name": "WS-KO-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 100,
+        "description": "File status for KPI-OUT."
+      },
+      {
+        "name": "WS-ER-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 101,
+        "description": "File status for ERROR-OUT."
+      },
+      {
+        "name": "WS-SWITCHES",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 104,
+        "description": "Control flags for EOF, fatal error, and file‑open indicators."
+      },
+      {
+        "name": "WS-PI-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 106,
+        "description": "End‑of‑file flag for POLICY-IN."
+      },
+      {
+        "name": "WS-PR-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 110,
+        "description": "End‑of‑file flag for PREMIUM-IN."
+      },
+      {
+        "name": "WS-FATAL",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 114,
+        "description": "Fatal error flag."
+      },
+      {
+        "name": "WS-PI-OPEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 117,
+        "description": "Flag indicating POLICY-IN successfully opened."
+      },
+      {
+        "name": "WS-PR-OPEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 118,
+        "description": "Flag indicating PREMIUM-IN successfully opened."
+      },
+      {
+        "name": "WS-KO-OPEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 119,
+        "description": "Flag indicating KPI-OUT successfully opened."
+      },
+      {
+        "name": "WS-ER-OPEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 120,
+        "description": "Flag indicating ERROR-OUT successfully opened."
+      },
+      {
+        "name": "WS-SEQUENCE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 123,
+        "description": "Holds previous key values to detect out‑of‑order input."
+      },
+      {
+        "name": "WS-PREV-PI-POLICY",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SEQUENCE",
+        "data_type": "PIC X(12)",
+        "line_number": 125,
+        "description": "Previous policy number read from POLICY-IN."
+      },
+      {
+        "name": "WS-PREV-PR-POLICY",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SEQUENCE",
+        "data_type": "PIC X(12)",
+        "line_number": 126,
+        "description": "Previous policy number read from PREMIUM-IN."
+      },
+      {
+        "name": "WS-COUNTS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 129,
+        "description": "Aggregated counters for policy statuses, product types and data‑quality issues."
+      },
+      {
+        "name": "WS-TOTAL-POLICIES",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 131,
+        "description": "Total number of policies processed."
+      },
+      {
+        "name": "WS-ACTIVE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 132,
+        "description": "Count of active ('AC') policies."
+      },
+      {
+        "name": "WS-PENDING",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 133,
+        "description": "Count of pending ('PN') policies."
+      },
+      {
+        "name": "WS-EXPIRED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 134,
+        "description": "Count of expired ('EX') policies."
+      },
+      {
+        "name": "WS-CANCELLED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 135,
+        "description": "Count of cancelled ('CN') policies."
+      },
+      {
+        "name": "WS-HO-COUNT",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 136,
+        "description": "Count of Home (HO) product policies."
+      },
+      {
+        "name": "WS-AU-COUNT",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 137,
+        "description": "Count of Auto (AU) product policies."
+      },
+      {
+        "name": "WS-UNKNOWN-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 138,
+        "description": "Count of policies with an unrecognised status code."
+      },
+      {
+        "name": "WS-UNKNOWN-PROD",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 139,
+        "description": "Count of policies with an unrecognised product type."
+      },
+      {
+        "name": "WS-MISSING-PREM",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 140,
+        "description": "Count of policies lacking a matching premium record."
+      },
+      {
+        "name": "WS-ORPHAN-PREM",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 141,
+        "description": "Count of premium records without a matching policy."
+      },
+      {
+        "name": "WS-RECON-ERRORS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 142,
+        "description": "Count of reconciliation mismatches (written ≠ earned + unearned)."
+      },
+      {
+        "name": "WS-DQ-ERRORS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 143,
+        "description": "Count of data‑quality errors."
+      },
+      {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTS",
+        "data_type": "PIC 9(9)",
+        "line_number": 144,
+        "description": "Count of I/O errors while reading files."
+      },
+      {
+        "name": "WS-TOTALS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 147,
+        "description": "Aggregated premium totals for all policies and by product."
+      },
+      {
+        "name": "WS-WRITTEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 149,
+        "description": "Sum of written premiums across all policies."
+      },
+      {
+        "name": "WS-EARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 150,
+        "description": "Sum of earned premiums across all policies."
+      },
+      {
+        "name": "WS-UNEARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 151,
+        "description": "Sum of unearned premiums across all policies."
+      },
+      {
+        "name": "WS-HO-WRITTEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 152,
+        "description": "Written premium total for Home (HO) policies."
+      },
+      {
+        "name": "WS-HO-EARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 153,
+        "description": "Earned premium total for Home (HO) policies."
+      },
+      {
+        "name": "WS-HO-UNEARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 154,
+        "description": "Unearned premium total for Home (HO) policies."
+      },
+      {
+        "name": "WS-AU-WRITTEN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 155,
+        "description": "Written premium total for Auto (AU) policies."
+      },
+      {
+        "name": "WS-AU-EARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 156,
+        "description": "Earned premium total for Auto (AU) policies."
+      },
+      {
+        "name": "WS-AU-UNEARNED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 157,
+        "description": "Unearned premium total for Auto (AU) policies."
+      },
+      {
+        "name": "WS-RECON-DIFF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC S9(15)V99",
+        "line_number": 158,
+        "description": "Difference between written premium and (earned + unearned) for a single policy."
+      },
+      {
+        "name": "WS-ABS-DIFF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9(15)V99",
+        "line_number": 159,
+        "description": "Absolute value of WS-RECON-DIFF."
+      },
+      {
+        "name": "WS-TOLERANCE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-TOTALS",
+        "data_type": "PIC 9V99",
+        "line_number": 160,
+        "description": "Tolerance threshold for reconciliation differences (0.01)."
+      },
+      {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 225,
+        "description": "Entry point; orchestrates file handling, processing loop, and final reporting."
+      },
+      {
+        "name": "OPEN-FILES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 319,
+        "description": "Opens all four files and sets open flags; sets fatal error on failure."
+      },
+      {
+        "name": "READ-POLICY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 377,
+        "description": "Reads next record from POLICY-IN, checks file status, detects out‑of‑order keys."
+      },
+      {
+        "name": "READ-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 419,
+        "description": "Reads next record from PREMIUM-IN, checks file status, detects out‑of‑order keys."
+      },
+      {
+        "name": "PROCESS-MATCHED",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 461,
+        "description": "Updates counters, aggregates premiums, performs reconciliation check, and records data‑quality errors."
+      },
+      {
+        "name": "HANDLE-MISSING-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 561,
+        "description": "Records a missing‑premium error for the current policy."
+      },
+      {
+        "name": "HANDLE-ORPHAN-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": 575,
+        "description": "Records an orphan‑premium error for a premium record without a matching policy."
+      },
+      {
+        "name": "WRITE-ERROR",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": null,
+        "description": "Writes the current ER-REC to ERROR-OUT."
+      },
+      {
+        "name": "WRITE-KPI-REPORT",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": null,
+        "description": "Formats and writes KPI summary lines to KPI-OUT."
+      },
+      {
+        "name": "CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "KPIREPORT",
+        "data_type": null,
+        "line_number": null,
+        "description": "Closes all opened files."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "FILTER",
+        "description": "Detect out‑of‑order policy records: if current PI-POLICY-NO is less than WS-PREV-PI-POLICY, raise I/O error and set fatal flag.",
+        "source_entities": [
+          "PI-POLICY-NO",
+          "WS-PREV-PI-POLICY"
+        ],
+        "target_entities": [
+          "WS-IO-ERRORS",
+          "WS-FATAL"
+        ],
+        "expression": "PI-POLICY-NO < WS-PREV-PI-POLICY",
+        "line_number": 393,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "FILTER",
+        "description": "Detect out‑of‑order premium records: if current PRI-POLICY-NO is less than WS-PREV-PR-POLICY, raise I/O error and set fatal flag.",
+        "source_entities": [
+          "PRI-POLICY-NO",
+          "WS-PREV-PR-POLICY"
+        ],
+        "target_entities": [
+          "WS-IO-ERRORS",
+          "WS-FATAL"
+        ],
+        "expression": "PRI-POLICY-NO < WS-PREV-PR-POLICY",
+        "line_number": 447,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Increment total policy counter for each matched record.",
+        "source_entities": [
+          "WS-TOTAL-POLICIES"
+        ],
+        "target_entities": [
+          "WS-TOTAL-POLICIES"
+        ],
+        "expression": "WS-TOTAL-POLICIES = WS-TOTAL-POLICIES + 1",
+        "line_number": 466,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Update status‑specific counters based on PI-POLICY-STATUS.",
+        "source_entities": [
+          "PI-POLICY-STATUS"
+        ],
+        "target_entities": [
+          "WS-ACTIVE",
+          "WS-PENDING",
+          "WS-EXPIRED",
+          "WS-CANCELLED",
+          "WS-UNKNOWN-STATUS",
+          "WS-DQ-ERRORS"
+        ],
+        "expression": "CASE PI-POLICY-STATUS OF 'AC' ADD 1 TO WS-ACTIVE; 'PN' ADD 1 TO WS-PENDING; 'EX' ADD 1 TO WS-EXPIRED; 'CN' ADD 1 TO WS-CANCELLED; OTHER ADD 1 TO WS-UNKNOWN-STATUS AND WS-DQ-ERRORS",
+        "line_number": 470,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Aggregate written, earned and unearned premiums into overall totals.",
+        "source_entities": [
+          "PRI-WRITTEN-PREMIUM",
+          "PRI-EARNED-PREMIUM",
+          "PRI-UNEARNED-PREMIUM"
+        ],
+        "target_entities": [
+          "WS-WRITTEN",
+          "WS-EARNED",
+          "WS-UNEARNED"
+        ],
+        "expression": "WS-WRITTEN = WS-WRITTEN + PRI-WRITTEN-PREMIUM; WS-EARNED = WS-EARNED + PRI-EARNED-PREMIUM; WS-UNEARNED = WS-UNEARNED + PRI-UNEARNED-PREMIUM",
+        "line_number": 485,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "CALCULATION",
+        "description": "Update product‑type counters and product‑specific premium totals based on PI-PRODUCT-TYPE.",
+        "source_entities": [
+          "PI-PRODUCT-TYPE",
+          "PRI-WRITTEN-PREMIUM",
+          "PRI-EARNED-PREMIUM",
+          "PRI-UNEARNED-PREMIUM"
+        ],
+        "target_entities": [
+          "WS-HO-COUNT",
+          "WS-AU-COUNT",
+          "WS-HO-WRITTEN",
+          "WS-HO-EARNED",
+          "WS-HO-UNEARNED",
+          "WS-AU-WRITTEN",
+          "WS-AU-EARNED",
+          "WS-AU-UNEARNED",
+          "WS-UNKNOWN-PROD",
+          "WS-DQ-ERRORS"
+        ],
+        "expression": "IF PI-PRODUCT-TYPE='HO' THEN ADD 1 TO WS-HO-COUNT AND ADD premiums to HO totals; IF PI-PRODUCT-TYPE='AU' THEN ADD 1 TO WS-AU-COUNT AND ADD premiums to AU totals; ELSE ADD 1 TO WS-UNKNOWN-PROD AND WS-DQ-ERRORS",
+        "line_number": 506,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Compute reconciliation difference for a matched policy: written minus (earned + unearned).",
+        "source_entities": [
+          "PRI-WRITTEN-PREMIUM",
+          "PRI-EARNED-PREMIUM",
+          "PRI-UNEARNED-PREMIUM"
+        ],
+        "target_entities": [
+          "WS-RECON-DIFF"
+        ],
+        "expression": "WS-RECON-DIFF = PRI-WRITTEN-PREMIUM - (PRI-EARNED-PREMIUM + PRI-UNEARNED-PREMIUM)",
+        "line_number": 527,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Calculate absolute reconciliation difference.",
+        "source_entities": [
+          "WS-RECON-DIFF"
+        ],
+        "target_entities": [
+          "WS-ABS-DIFF"
+        ],
+        "expression": "WS-ABS-DIFF = FUNCTION ABS(WS-RECON-DIFF)",
+        "line_number": 531,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "CONDITIONAL",
+        "description": "If absolute reconciliation difference exceeds tolerance, record a reconciliation error.",
+        "source_entities": [
+          "WS-ABS-DIFF",
+          "WS-TOLERANCE"
+        ],
+        "target_entities": [
+          "WS-RECON-ERRORS",
+          "WS-DQ-ERRORS",
+          "ER-REC"
+        ],
+        "expression": "WS-ABS-DIFF > WS-TOLERANCE",
+        "line_number": 535,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "CALCULATION",
+        "description": "Increment missing‑premium counter and data‑quality error count when a policy has no matching premium.",
+        "source_entities": [
+          "WS-MISSING-PREM",
+          "WS-DQ-ERRORS"
+        ],
+        "target_entities": [
+          "WS-MISSING-PREM",
+          "WS-DQ-ERRORS",
+          "ER-REC"
+        ],
+        "expression": "ADD 1 TO WS-MISSING-PREM; ADD 1 TO WS-DQ-ERRORS",
+        "line_number": 562,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T11",
+        "rule_type": "CALCULATION",
+        "description": "Increment orphan‑premium counter and data‑quality error count when a premium has no matching policy.",
+        "source_entities": [
+          "WS-ORPHAN-PREM",
+          "WS-DQ-ERRORS"
+        ],
+        "target_entities": [
+          "WS-ORPHAN-PREM",
+          "WS-DQ-ERRORS",
+          "ER-REC"
+        ],
+        "expression": "ADD 1 TO WS-ORPHAN-PREM; ADD 1 TO WS-DQ-ERRORS",
+        "line_number": 576,
+        "confidence": 0.96
+      }
+    ],
+    "business_rules": [
+      "Both input files must be sorted by POLICY-NO; out‑of‑order records cause a fatal error.",
+      "Policy status codes are limited to AC (active), PN (pending), EX (expired), CN (cancelled). Any other code is treated as unknown and logged as a data‑quality error (K003).",
+      "Product type codes are limited to HO (home) and AU (auto). Unknown product types are logged as a data‑quality error (K004).",
+      "Reconciliation rule: WRITTEN premium must equal EARNED plus UNEARNED within a tolerance of 0.01. Violations are logged as error K005.",
+      "Missing premium (policy without matching premium) is error K001.",
+      "Orphan premium (premium without matching policy) is error K002.",
+      "If any file fails to open, the program aborts with RETURN‑CODE 12.",
+      "If data‑quality errors exist but no fatal error, RETURN‑CODE is set to 4.",
+      "All counters and totals are initialised to zero before processing."
+    ],
+    "dependencies": [
+      "POLICY-IN file (external sequential file)",
+      "PREMIUM-IN file (external sequential file)",
+      "KPI-OUT file (external sequential file)",
+      "ERROR-OUT file (external sequential file)"
+    ],
+    "relationships": [
+      {
+        "source": "KPIREPORT",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 43,
+        "description": "SELECT statement defines POLICY-IN as input."
+      },
+      {
+        "source": "KPIREPORT",
+        "target": "PREMIUM-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 47,
+        "description": "SELECT statement defines PREMIUM-IN as input."
+      },
+      {
+        "source": "KPIREPORT",
+        "target": "KPI-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 51,
+        "description": "SELECT statement defines KPI-OUT as output."
+      },
+      {
+        "source": "KPIREPORT",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 55,
+        "description": "SELECT statement defines ERROR-OUT as output."
+      },
+      {
+        "source": "MAIN",
+        "target": "OPEN-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 227,
+        "description": "PERFORM OPEN-FILES from MAIN."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 239,
+        "description": "PERFORM READ-POLICY from MAIN."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-PREMIUM",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 241,
+        "description": "PERFORM READ-PREMIUM from MAIN."
+      },
+      {
+        "source": "MAIN",
+        "target": "WRITE-KPI-REPORT",
+        "relationship_type": "CALLS",
+        "confidence": 0.95,
+        "evidence_line": 289,
+        "description": "PERFORM WRITE-KPI-REPORT after processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "CLOSE-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 0.95,
+        "evidence_line": 293,
+        "description": "PERFORM CLOSE-FILES before program exit."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "POLICY-IN",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 321,
+        "description": "OPEN INPUT POLICY-IN."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "PREMIUM-IN",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 327,
+        "description": "OPEN INPUT PREMIUM-IN."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "KPI-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 333,
+        "description": "OPEN OUTPUT KPI-OUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "ERROR-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": 339,
+        "description": "OPEN OUTPUT ERROR-OUT."
+      },
+      {
+        "source": "READ-POLICY",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 383,
+        "description": "READ statement reads from POLICY-IN."
+      },
+      {
+        "source": "READ-POLICY",
+        "target": "WS-IO-ERRORS",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.94,
+        "evidence_line": 399,
+        "description": "Adds to WS-IO-ERRORS on read error or out‑of‑order detection."
+      },
+      {
+        "source": "READ-PREMIUM",
+        "target": "PREMIUM-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 423,
+        "description": "READ statement reads from PREMIUM-IN."
+      },
+      {
+        "source": "READ-PREMIUM",
+        "target": "WS-IO-ERRORS",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.94,
+        "evidence_line": 439,
+        "description": "Adds to WS-IO-ERRORS on read error or out‑of‑order detection."
+      },
+      {
+        "source": "PROCESS-MATCHED",
+        "target": "WS-COUNTS",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.98,
+        "evidence_line": 466,
+        "description": "Updates various counters based on policy status and product type."
+      },
+      {
+        "source": "PROCESS-MATCHED",
+        "target": "WS-TOTALS",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.98,
+        "evidence_line": 485,
+        "description": "Aggregates premium amounts into total fields."
+      },
+      {
+        "source": "PROCESS-MATCHED",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 492,
+        "description": "Writes error record for unknown status or product type."
+      },
+      {
+        "source": "HANDLE-MISSING-PREMIUM",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 564,
+        "description": "Populates ER-REC with K001 error and writes it."
+      },
+      {
+        "source": "HANDLE-ORPHAN-PREMIUM",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": 578,
+        "description": "Populates ER-REC with K002 error and writes it."
+      },
+      {
+        "source": "WRITE-ERROR",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "WRITE statement (not shown) writes ER-REC to ERROR-OUT."
+      },
+      {
+        "source": "WRITE-KPI-REPORT",
+        "target": "KPI-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "WRITE statements (not shown) output KPI summary lines."
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "POLICY-IN",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "CLOSE statement for POLICY-IN (implied)."
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "PREMIUM-IN",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "CLOSE statement for PREMIUM-IN (implied)."
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "KPI-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "CLOSE statement for KPI-OUT (implied)."
+      },
+      {
+        "source": "CLOSE-FILES",
+        "target": "ERROR-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "CLOSE statement for ERROR-OUT (implied)."
+      }
+    ],
+    "confidence": 0.93
+  },
+  "reconciliation": {
+    "parser_facts_count": 4,
+    "llm_findings_count": 81,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "PREMIUM-IN",
+      "KPI-OUT",
+      "ERROR-OUT"
+    ],
+    "inferred_entities": [
+      "PI-REC",
+      "PI-POLICY-NO",
+      "PI-CUSTOMER-ID",
+      "PI-AGENT-ID",
+      "PI-PRODUCT-TYPE",
+      "PI-POLICY-STATUS",
+      "PI-EFFECTIVE-DATE",
+      "PI-EXPIRY-DATE",
+      "PI-WRITTEN-PREMIUM",
+      "PI-CREATE-DT",
+      "PI-UPDATE-DT",
+      "PRI-REC",
+      "PRI-PREMIUM-ID",
+      "PRI-POLICY-NO",
+      "PRI-WRITTEN-PREMIUM"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "POLICY-IN",
+        "target": "PI-REC",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 43,
+        "description": "Sequential input file POLICY-IN holds records defined by PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-NO",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 63,
+        "description": "Policy number field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-CUSTOMER-ID",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 64,
+        "description": "Customer identifier field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-AGENT-ID",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 65,
+        "description": "Agent identifier field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-PRODUCT-TYPE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 66,
+        "description": "Product type code field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-STATUS",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 67,
+        "description": "Policy status code field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-EFFECTIVE-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 68,
+        "description": "Effective date field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-EXPIRY-DATE",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 69,
+        "description": "Expiry date field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-WRITTEN-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 70,
+        "description": "Written premium amount field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-CREATE-DT",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 71,
+        "description": "Record creation date field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-UPDATE-DT",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 72,
+        "description": "Record last‑update date field within PI-REC."
+      },
+      {
+        "source": "PREMIUM-IN",
+        "target": "PRI-REC",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 47,
+        "description": "Sequential input file PREMIUM-IN holds records defined by PRI-REC."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-PREMIUM-ID",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 76,
+        "description": "Premium record identifier field within PRI-REC."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-POLICY-NO",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 77,
+        "description": "Policy number key linking premium to policy record."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-WRITTEN-PREMIUM",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 78,
+        "description": "Written premium amount from premium extract."
+      },
+      {
+        "source": "PI-POLICY-NO",
+        "target": "PRI-POLICY-NO",
+        "relationship_type": "USES",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Policy number used to match records from POLICY-IN and PREMIUM-IN."
+      },
+      {
+        "source": "KPI-OUT",
+        "target": "KPI summary data",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": 51,
+        "description": "Aggregated KPI totals are written to KPI-OUT after processing."
+      },
+      {
+        "source": "ERROR-OUT",
+        "target": "error records",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": 55,
+        "description": "Data‑quality and reconciliation errors are written to ERROR-OUT."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser reported no column or variable information; LLM supplied detailed record layouts. No naming conflicts were found; the parser's file list matches the LLM's file entities."
+    ],
+    "gaps_detected": [
+      "Exact record length specifications and COBOL picture clause details beyond those listed are not captured by the parser.",
+      "Procedures for opening, closing, and error handling of the four files are described only at a high level; concrete CALL/OPEN statements are missing.",
+      "Business rules for KPI calculations (e.g., thresholds, tolerance values for earned vs. written premium reconciliation) are not fully enumerated.",
+      "External subprograms or modules that may be invoked for logging or return‑code handling are not identified.",
+      "No explicit definition of the format of KPI‑OUT or ERROR‑OUT records."
+    ],
+    "overall_confidence": 0.92
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [],
+      "columns": [
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PRI-PREMIUM-ID",
+        "PRI-POLICY-NO",
+        "PRI-WRITTEN-PREMIUM",
+        "PRI-EARNED-PREMIUM",
+        "PRI-UNEARNED-PREMIUM",
+        "PRI-CALCULATION-DATE",
+        "ER-POLICY-NO",
+        "ER-CODE",
+        "ER-MESSAGE",
+        "WS-PI-ST",
+        "WS-PR-ST",
+        "WS-KO-ST",
+        "WS-ER-ST",
+        "WS-PI-EOF",
+        "WS-PR-EOF",
+        "WS-FATAL",
+        "WS-PI-OPEN",
+        "WS-PR-OPEN",
+        "WS-KO-OPEN",
+        "WS-ER-OPEN",
+        "WS-PREV-PI-POLICY",
+        "WS-PREV-PR-POLICY",
+        "WS-TOTAL-POLICIES",
+        "WS-ACTIVE",
+        "WS-PENDING",
+        "WS-EXPIRED",
+        "WS-CANCELLED",
+        "WS-HO-COUNT",
+        "WS-AU-COUNT",
+        "WS-UNKNOWN-STATUS",
+        "WS-UNKNOWN-PROD",
+        "WS-MISSING-PREM",
+        "WS-ORPHAN-PREM",
+        "WS-RECON-ERRORS",
+        "WS-DQ-ERRORS",
+        "WS-IO-ERRORS",
+        "WS-WRITTEN",
+        "WS-EARNED",
+        "WS-UNEARNED",
+        "WS-HO-WRITTEN",
+        "WS-HO-EARNED",
+        "WS-HO-UNEARNED",
+        "WS-AU-WRITTEN",
+        "WS-AU-EARNED",
+        "WS-AU-UNEARNED",
+        "WS-RECON-DIFF",
+        "WS-ABS-DIFF",
+        "WS-TOLERANCE"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Generate Key Performance Indicator (KPI) statistics for insurance policies by merging a status‑updated policy extract with an earned‑premium extract, validating data quality, reconciling written premiums against earned and unearned components, and producing a KPI summary report and an error file.",
+      "narrative": "The program opens four sequential files (policy input, premium input, KPI output, error output). It reads the first record from each input file. It then enters a loop that continues until both input files reach end‑of‑file or a fatal error occurs. Inside the loop the program compares the current policy numbers: if they match, it processes the matched pair (increments total policy count, classifies policy status, aggregates premium amounts, aggregates product‑specific totals, checks the reconciliation rule, and writes any data‑quality errors). If the policy number from the policy file is less than the premium file, the policy has no matching premium (missing premium) and an error record is written. If the premium number is less than the policy number, the premium is orphaned (no matching policy) and an error record is written. After handling a case the appropriate next record is read. Out‑of‑order records in either input cause a fatal error. When the loop ends, the program writes a formatted KPI report to KPI‑OUT, closes all files, displays summary counters (total policies, reconciliation errors, data‑quality errors, I/O errors), sets an appropriate RETURN‑CODE based on error severity, and terminates.",
+      "business_domain": "Insurance Policy & Premium KPI Reporting",
+      "business_rules": [
+        "Policy status must be one of: AC (active), PN (pending), EX (expired), CN (cancelled). Unknown status triggers error K003.",
+        "Product type must be HO (home) or AU (auto). Unknown product triggers error K004.",
+        "Every policy record must have a matching premium record; otherwise error K001 (missing premium).",
+        "Every premium record must have a matching policy record; otherwise error K002 (orphan premium).",
+        "Reconciliation rule: WRITTEN premium must equal EARNED + UNEARNED within a tolerance of 0.01; violations trigger error K005.",
+        "Input files must be sorted by POLICY‑NO; detection of a decreasing POLICY‑NO sets a fatal error.",
+        "Data‑quality errors increment WS-DQ-ERRORS; I/O errors increment WS-IO-ERRORS; reconciliation errors increment WS-RECON-ERRORS.",
+        "Return‑code 12 for fatal I/O or ordering errors, return‑code 4 when any data‑quality errors are present, otherwise normal return."
+      ],
+      "key_logic": [
+        "Open all four files (policy, premium, KPI output, error output) and set open‑flags; abort on any open error.",
+        "Read the first record from each input file.",
+        "Loop until both files reach end‑of‑file or a fatal error occurs:",
+        "  - If the policy file is exhausted, treat remaining premium records as orphan premiums.",
+        "  - If the premium file is exhausted, treat remaining policy records as missing premiums.",
+        "  - Otherwise compare policy‑number fields:",
+        "    * When equal, process the matched pair (increment counters, aggregate premiums, perform reconciliation, and read next records from both files).",
+        "    * When policy‑number < premium‑number, handle missing premium for the current policy and read next policy record.",
+        "    * When policy‑number > premium‑number, handle orphan premium and read next premium record.",
+        "After the loop, if no fatal error, write the KPI summary report.",
+        "Close all files, display final totals, set appropriate RETURN‑CODE based on error counts, and exit.",
+        "Error handling includes detection of out‑of‑order input, unknown policy status, unknown product type, missing or orphan premium records, and reconciliation tolerance breaches."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "PI-REC",
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PRI-REC",
+        "PRI-PREMIUM-ID",
+        "PRI-POLICY-NO",
+        "PRI-WRITTEN-PREMIUM"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "FILTER",
+          "description": "Detect out‑of‑order policy records: if current PI-POLICY-NO is less than WS-PREV-PI-POLICY, raise I/O error and set fatal flag.",
+          "source_entities": [
+            "PI-POLICY-NO",
+            "WS-PREV-PI-POLICY"
+          ],
+          "target_entities": [
+            "WS-IO-ERRORS",
+            "WS-FATAL"
+          ],
+          "expression": "PI-POLICY-NO < WS-PREV-PI-POLICY",
+          "line_number": 393,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "FILTER",
+          "description": "Detect out‑of‑order premium records: if current PRI-POLICY-NO is less than WS-PREV-PR-POLICY, raise I/O error and set fatal flag.",
+          "source_entities": [
+            "PRI-POLICY-NO",
+            "WS-PREV-PR-POLICY"
+          ],
+          "target_entities": [
+            "WS-IO-ERRORS",
+            "WS-FATAL"
+          ],
+          "expression": "PRI-POLICY-NO < WS-PREV-PR-POLICY",
+          "line_number": 447,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "CALCULATION",
+          "description": "Increment total policy counter for each matched record.",
+          "source_entities": [
+            "WS-TOTAL-POLICIES"
+          ],
+          "target_entities": [
+            "WS-TOTAL-POLICIES"
+          ],
+          "expression": "WS-TOTAL-POLICIES = WS-TOTAL-POLICIES + 1",
+          "line_number": 466,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CALCULATION",
+          "description": "Update status‑specific counters based on PI-POLICY-STATUS.",
+          "source_entities": [
+            "PI-POLICY-STATUS"
+          ],
+          "target_entities": [
+            "WS-ACTIVE",
+            "WS-PENDING",
+            "WS-EXPIRED",
+            "WS-CANCELLED",
+            "WS-UNKNOWN-STATUS",
+            "WS-DQ-ERRORS"
+          ],
+          "expression": "CASE PI-POLICY-STATUS OF 'AC' ADD 1 TO WS-ACTIVE; 'PN' ADD 1 TO WS-PENDING; 'EX' ADD 1 TO WS-EXPIRED; 'CN' ADD 1 TO WS-CANCELLED; OTHER ADD 1 TO WS-UNKNOWN-STATUS AND WS-DQ-ERRORS",
+          "line_number": 470,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CALCULATION",
+          "description": "Aggregate written, earned and unearned premiums into overall totals.",
+          "source_entities": [
+            "PRI-WRITTEN-PREMIUM",
+            "PRI-EARNED-PREMIUM",
+            "PRI-UNEARNED-PREMIUM"
+          ],
+          "target_entities": [
+            "WS-WRITTEN",
+            "WS-EARNED",
+            "WS-UNEARNED"
+          ],
+          "expression": "WS-WRITTEN = WS-WRITTEN + PRI-WRITTEN-PREMIUM; WS-EARNED = WS-EARNED + PRI-EARNED-PREMIUM; WS-UNEARNED = WS-UNEARNED + PRI-UNEARNED-PREMIUM",
+          "line_number": 485,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "CALCULATION",
+          "description": "Update product‑type counters and product‑specific premium totals based on PI-PRODUCT-TYPE.",
+          "source_entities": [
+            "PI-PRODUCT-TYPE",
+            "PRI-WRITTEN-PREMIUM",
+            "PRI-EARNED-PREMIUM",
+            "PRI-UNEARNED-PREMIUM"
+          ],
+          "target_entities": [
+            "WS-HO-COUNT",
+            "WS-AU-COUNT",
+            "WS-HO-WRITTEN",
+            "WS-HO-EARNED",
+            "WS-HO-UNEARNED",
+            "WS-AU-WRITTEN",
+            "WS-AU-EARNED",
+            "WS-AU-UNEARNED",
+            "WS-UNKNOWN-PROD",
+            "WS-DQ-ERRORS"
+          ],
+          "expression": "IF PI-PRODUCT-TYPE='HO' THEN ADD 1 TO WS-HO-COUNT AND ADD premiums to HO totals; IF PI-PRODUCT-TYPE='AU' THEN ADD 1 TO WS-AU-COUNT AND ADD premiums to AU totals; ELSE ADD 1 TO WS-UNKNOWN-PROD AND WS-DQ-ERRORS",
+          "line_number": 506,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "CALCULATION",
+          "description": "Compute reconciliation difference for a matched policy: written minus (earned + unearned).",
+          "source_entities": [
+            "PRI-WRITTEN-PREMIUM",
+            "PRI-EARNED-PREMIUM",
+            "PRI-UNEARNED-PREMIUM"
+          ],
+          "target_entities": [
+            "WS-RECON-DIFF"
+          ],
+          "expression": "WS-RECON-DIFF = PRI-WRITTEN-PREMIUM - (PRI-EARNED-PREMIUM + PRI-UNEARNED-PREMIUM)",
+          "line_number": 527,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "CALCULATION",
+          "description": "Calculate absolute reconciliation difference.",
+          "source_entities": [
+            "WS-RECON-DIFF"
+          ],
+          "target_entities": [
+            "WS-ABS-DIFF"
+          ],
+          "expression": "WS-ABS-DIFF = FUNCTION ABS(WS-RECON-DIFF)",
+          "line_number": 531,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "CONDITIONAL",
+          "description": "If absolute reconciliation difference exceeds tolerance, record a reconciliation error.",
+          "source_entities": [
+            "WS-ABS-DIFF",
+            "WS-TOLERANCE"
+          ],
+          "target_entities": [
+            "WS-RECON-ERRORS",
+            "WS-DQ-ERRORS",
+            "ER-REC"
+          ],
+          "expression": "WS-ABS-DIFF > WS-TOLERANCE",
+          "line_number": 535,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "CALCULATION",
+          "description": "Increment missing‑premium counter and data‑quality error count when a policy has no matching premium.",
+          "source_entities": [
+            "WS-MISSING-PREM",
+            "WS-DQ-ERRORS"
+          ],
+          "target_entities": [
+            "WS-MISSING-PREM",
+            "WS-DQ-ERRORS",
+            "ER-REC"
+          ],
+          "expression": "ADD 1 TO WS-MISSING-PREM; ADD 1 TO WS-DQ-ERRORS",
+          "line_number": 562,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T11",
+          "rule_type": "CALCULATION",
+          "description": "Increment orphan‑premium counter and data‑quality error count when a premium has no matching policy.",
+          "source_entities": [
+            "WS-ORPHAN-PREM",
+            "WS-DQ-ERRORS"
+          ],
+          "target_entities": [
+            "WS-ORPHAN-PREM",
+            "WS-DQ-ERRORS",
+            "ER-REC"
+          ],
+          "expression": "ADD 1 TO WS-ORPHAN-PREM; ADD 1 TO WS-DQ-ERRORS",
+          "line_number": 576,
+          "confidence": 0.96
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "POLICY-IN",
+          "target": "PI-REC",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 43,
+          "description": "Sequential input file POLICY-IN holds records defined by PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-POLICY-NO",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 63,
+          "description": "Policy number field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-CUSTOMER-ID",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 64,
+          "description": "Customer identifier field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-AGENT-ID",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 65,
+          "description": "Agent identifier field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-PRODUCT-TYPE",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 66,
+          "description": "Product type code field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-POLICY-STATUS",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 67,
+          "description": "Policy status code field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-EFFECTIVE-DATE",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 68,
+          "description": "Effective date field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-EXPIRY-DATE",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 69,
+          "description": "Expiry date field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-WRITTEN-PREMIUM",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 70,
+          "description": "Written premium amount field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-CREATE-DT",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 71,
+          "description": "Record creation date field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-UPDATE-DT",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 72,
+          "description": "Record last‑update date field within PI-REC."
+        },
+        {
+          "source": "PREMIUM-IN",
+          "target": "PRI-REC",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 47,
+          "description": "Sequential input file PREMIUM-IN holds records defined by PRI-REC."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-PREMIUM-ID",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 76,
+          "description": "Premium record identifier field within PRI-REC."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-POLICY-NO",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 77,
+          "description": "Policy number key linking premium to policy record."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-WRITTEN-PREMIUM",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 78,
+          "description": "Written premium amount from premium extract."
+        },
+        {
+          "source": "PI-POLICY-NO",
+          "target": "PRI-POLICY-NO",
+          "relationship_type": "USES",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "Policy number used to match records from POLICY-IN and PREMIUM-IN."
+        },
+        {
+          "source": "KPI-OUT",
+          "target": "KPI summary data",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": 51,
+          "description": "Aggregated KPI totals are written to KPI-OUT after processing."
+        },
+        {
+          "source": "ERROR-OUT",
+          "target": "error records",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": 55,
+          "description": "Data‑quality and reconciliation errors are written to ERROR-OUT."
+        }
+      ],
+      "gaps": [
+        "Exact record length specifications and COBOL picture clause details beyond those listed are not captured by the parser.",
+        "Procedures for opening, closing, and error handling of the four files are described only at a high level; concrete CALL/OPEN statements are missing.",
+        "Business rules for KPI calculations (e.g., thresholds, tolerance values for earned vs. written premium reconciliation) are not fully enumerated.",
+        "External subprograms or modules that may be invoked for logging or return‑code handling are not identified.",
+        "No explicit definition of the format of KPI‑OUT or ERROR‑OUT records."
+      ]
+    },
+    "overall_confidence": 0.92
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:KPICALC.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "KPICALC.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\KPICALC.CBL",
+        "total_lines": 861
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 43
+      }
+    },
+    {
+      "id": "FILE:PREMIUM-IN",
+      "label": "File",
+      "properties": {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 47
+      }
+    },
+    {
+      "id": "FILE:KPI-OUT",
+      "label": "File",
+      "properties": {
+        "name": "KPI-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 51
+      }
+    },
+    {
+      "id": "FILE:ERROR-OUT",
+      "label": "File",
+      "properties": {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 55
+      }
+    },
+    {
+      "id": "VARIABLE:PI-REC",
+      "label": "Variable",
+      "properties": {
+        "name": "PI-REC",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 61
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PI-REC",
+        "line_number": 63
+      }
+    },
+    {
+      "id": "COLUMN:PI-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 64
+      }
+    },
+    {
+      "id": "COLUMN:PI-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 65
+      }
+    },
+    {
+      "id": "COLUMN:PI-PRODUCT-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 66
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 67
+      }
+    },
+    {
+      "id": "COLUMN:PI-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 68
+      }
+    },
+    {
+      "id": "COLUMN:PI-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 69
+      }
+    },
+    {
+      "id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PI-REC",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "COLUMN:PI-CREATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 71
+      }
+    },
+    {
+      "id": "COLUMN:PI-UPDATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 72
+      }
+    },
+    {
+      "id": "VARIABLE:PRI-REC",
+      "label": "Variable",
+      "properties": {
+        "name": "PRI-REC",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": "PREMIUM-IN",
+        "line_number": 74
+      }
+    },
+    {
+      "id": "COLUMN:PRI-PREMIUM-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRI-REC",
+        "line_number": 76
+      }
+    },
+    {
+      "id": "COLUMN:PRI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRI-REC",
+        "line_number": 77
+      }
+    },
+    {
+      "id": "COLUMN:PRI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 78
+      }
+    },
+    {
+      "id": "COLUMN:PRI-EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 79
+      }
+    },
+    {
+      "id": "COLUMN:PRI-UNEARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 80
+      }
+    },
+    {
+      "id": "COLUMN:PRI-CALCULATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PRI-REC",
+        "line_number": 81
+      }
+    },
+    {
+      "id": "VARIABLE:KPI-REC",
+      "label": "Variable",
+      "properties": {
+        "name": "KPI-REC",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X(80)",
+        "parent": "KPI-OUT",
+        "line_number": 84
+      }
+    },
+    {
+      "id": "VARIABLE:ER-REC",
+      "label": "Variable",
+      "properties": {
+        "name": "ER-REC",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": "ERROR-OUT",
+        "line_number": 88
+      }
+    },
+    {
+      "id": "COLUMN:ER-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "ER-REC",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "COLUMN:ER-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(4)",
+        "parent": "ER-REC",
+        "line_number": 91
+      }
+    },
+    {
+      "id": "COLUMN:ER-MESSAGE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(64)",
+        "parent": "ER-REC",
+        "line_number": 92
+      }
+    },
+    {
+      "id": "VARIABLE:WS-STATUS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-STATUS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 96
+      }
+    },
+    {
+      "id": "COLUMN:WS-PI-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PI-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 98
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 99
+      }
+    },
+    {
+      "id": "COLUMN:WS-KO-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-KO-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 100
+      }
+    },
+    {
+      "id": "COLUMN:WS-ER-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ER-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 101
+      }
+    },
+    {
+      "id": "VARIABLE:WS-SWITCHES",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-SWITCHES",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 104
+      }
+    },
+    {
+      "id": "COLUMN:WS-PI-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PI-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 106
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 110
+      }
+    },
+    {
+      "id": "COLUMN:WS-FATAL",
+      "label": "Column",
+      "properties": {
+        "name": "WS-FATAL",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 114
+      }
+    },
+    {
+      "id": "COLUMN:WS-PI-OPEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PI-OPEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 117
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-OPEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-OPEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 118
+      }
+    },
+    {
+      "id": "COLUMN:WS-KO-OPEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-KO-OPEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 119
+      }
+    },
+    {
+      "id": "COLUMN:WS-ER-OPEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ER-OPEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 120
+      }
+    },
+    {
+      "id": "VARIABLE:WS-SEQUENCE",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-SEQUENCE",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 123
+      }
+    },
+    {
+      "id": "COLUMN:WS-PREV-PI-POLICY",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PREV-PI-POLICY",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "WS-SEQUENCE",
+        "line_number": 125
+      }
+    },
+    {
+      "id": "COLUMN:WS-PREV-PR-POLICY",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PREV-PR-POLICY",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "WS-SEQUENCE",
+        "line_number": 126
+      }
+    },
+    {
+      "id": "VARIABLE:WS-COUNTS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-COUNTS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 129
+      }
+    },
+    {
+      "id": "COLUMN:WS-TOTAL-POLICIES",
+      "label": "Column",
+      "properties": {
+        "name": "WS-TOTAL-POLICIES",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 131
+      }
+    },
+    {
+      "id": "COLUMN:WS-ACTIVE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ACTIVE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 132
+      }
+    },
+    {
+      "id": "COLUMN:WS-PENDING",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PENDING",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 133
+      }
+    },
+    {
+      "id": "COLUMN:WS-EXPIRED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-EXPIRED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 134
+      }
+    },
+    {
+      "id": "COLUMN:WS-CANCELLED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CANCELLED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 135
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-COUNT",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-COUNT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 136
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-COUNT",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-COUNT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 137
+      }
+    },
+    {
+      "id": "COLUMN:WS-UNKNOWN-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-UNKNOWN-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 138
+      }
+    },
+    {
+      "id": "COLUMN:WS-UNKNOWN-PROD",
+      "label": "Column",
+      "properties": {
+        "name": "WS-UNKNOWN-PROD",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 139
+      }
+    },
+    {
+      "id": "COLUMN:WS-MISSING-PREM",
+      "label": "Column",
+      "properties": {
+        "name": "WS-MISSING-PREM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 140
+      }
+    },
+    {
+      "id": "COLUMN:WS-ORPHAN-PREM",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ORPHAN-PREM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 141
+      }
+    },
+    {
+      "id": "COLUMN:WS-RECON-ERRORS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-RECON-ERRORS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 142
+      }
+    },
+    {
+      "id": "COLUMN:WS-DQ-ERRORS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-DQ-ERRORS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 143
+      }
+    },
+    {
+      "id": "COLUMN:WS-IO-ERRORS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTS",
+        "line_number": 144
+      }
+    },
+    {
+      "id": "VARIABLE:WS-TOTALS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-TOTALS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 147
+      }
+    },
+    {
+      "id": "COLUMN:WS-WRITTEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-WRITTEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 149
+      }
+    },
+    {
+      "id": "COLUMN:WS-EARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-EARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 150
+      }
+    },
+    {
+      "id": "COLUMN:WS-UNEARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-UNEARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 151
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-WRITTEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-WRITTEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 152
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-EARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-EARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 153
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-UNEARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-UNEARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 154
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-WRITTEN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-WRITTEN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 155
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-EARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-EARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 156
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-UNEARNED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-UNEARNED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 157
+      }
+    },
+    {
+      "id": "COLUMN:WS-RECON-DIFF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-RECON-DIFF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC S9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 158
+      }
+    },
+    {
+      "id": "COLUMN:WS-ABS-DIFF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ABS-DIFF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(15)V99",
+        "parent": "WS-TOTALS",
+        "line_number": 159
+      }
+    },
+    {
+      "id": "COLUMN:WS-TOLERANCE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-TOLERANCE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V99",
+        "parent": "WS-TOTALS",
+        "line_number": 160
+      }
+    },
+    {
+      "id": "PROCEDURE:MAIN",
+      "label": "Procedure",
+      "properties": {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 225
+      }
+    },
+    {
+      "id": "PROCEDURE:OPEN-FILES",
+      "label": "Procedure",
+      "properties": {
+        "name": "OPEN-FILES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 319
+      }
+    },
+    {
+      "id": "PROCEDURE:READ-POLICY",
+      "label": "Procedure",
+      "properties": {
+        "name": "READ-POLICY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 377
+      }
+    },
+    {
+      "id": "PROCEDURE:READ-PREMIUM",
+      "label": "Procedure",
+      "properties": {
+        "name": "READ-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 419
+      }
+    },
+    {
+      "id": "PROCEDURE:PROCESS-MATCHED",
+      "label": "Procedure",
+      "properties": {
+        "name": "PROCESS-MATCHED",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 461
+      }
+    },
+    {
+      "id": "PROCEDURE:HANDLE-MISSING-PREMIUM",
+      "label": "Procedure",
+      "properties": {
+        "name": "HANDLE-MISSING-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 561
+      }
+    },
+    {
+      "id": "PROCEDURE:HANDLE-ORPHAN-PREMIUM",
+      "label": "Procedure",
+      "properties": {
+        "name": "HANDLE-ORPHAN-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": 575
+      }
+    },
+    {
+      "id": "PROCEDURE:WRITE-ERROR",
+      "label": "Procedure",
+      "properties": {
+        "name": "WRITE-ERROR",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROCEDURE:WRITE-KPI-REPORT",
+      "label": "Procedure",
+      "properties": {
+        "name": "WRITE-KPI-REPORT",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": null
+      }
+    },
+    {
+      "id": "PROCEDURE:CLOSE-FILES",
+      "label": "Procedure",
+      "properties": {
+        "name": "CLOSE-FILES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "KPIREPORT",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "FILTER",
+        "description": "Detect out‑of‑order policy records: if current PI-POLICY-NO is less than WS-PREV-PI-POLICY, raise I/O error and set fatal flag.",
+        "expression": "PI-POLICY-NO < WS-PREV-PI-POLICY",
+        "line_number": 393
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "FILTER",
+        "description": "Detect out‑of‑order premium records: if current PRI-POLICY-NO is less than WS-PREV-PR-POLICY, raise I/O error and set fatal flag.",
+        "expression": "PRI-POLICY-NO < WS-PREV-PR-POLICY",
+        "line_number": 447
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Increment total policy counter for each matched record.",
+        "expression": "WS-TOTAL-POLICIES = WS-TOTAL-POLICIES + 1",
+        "line_number": 466
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Update status‑specific counters based on PI-POLICY-STATUS.",
+        "expression": "CASE PI-POLICY-STATUS OF 'AC' ADD 1 TO WS-ACTIVE; 'PN' ADD 1 TO WS-PENDING; 'EX' ADD 1 TO WS-EXPIRED; 'CN' ADD 1 TO WS-CANCELLED; OTHER ADD 1 TO WS-UNKNOWN-STATUS AND WS-DQ-ERRORS",
+        "line_number": 470
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Aggregate written, earned and unearned premiums into overall totals.",
+        "expression": "WS-WRITTEN = WS-WRITTEN + PRI-WRITTEN-PREMIUM; WS-EARNED = WS-EARNED + PRI-EARNED-PREMIUM; WS-UNEARNED = WS-UNEARNED + PRI-UNEARNED-PREMIUM",
+        "line_number": 485
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "CALCULATION",
+        "description": "Update product‑type counters and product‑specific premium totals based on PI-PRODUCT-TYPE.",
+        "expression": "IF PI-PRODUCT-TYPE='HO' THEN ADD 1 TO WS-HO-COUNT AND ADD premiums to HO totals; IF PI-PRODUCT-TYPE='AU' THEN ADD 1 TO WS-AU-COUNT AND ADD premiums to AU totals; ELSE ADD 1 TO WS-UNKNOWN-PROD AND WS-DQ-ERRORS",
+        "line_number": 506
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Compute reconciliation difference for a matched policy: written minus (earned + unearned).",
+        "expression": "WS-RECON-DIFF = PRI-WRITTEN-PREMIUM - (PRI-EARNED-PREMIUM + PRI-UNEARNED-PREMIUM)",
+        "line_number": 527
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Calculate absolute reconciliation difference.",
+        "expression": "WS-ABS-DIFF = FUNCTION ABS(WS-RECON-DIFF)",
+        "line_number": 531
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "CONDITIONAL",
+        "description": "If absolute reconciliation difference exceeds tolerance, record a reconciliation error.",
+        "expression": "WS-ABS-DIFF > WS-TOLERANCE",
+        "line_number": 535
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "CALCULATION",
+        "description": "Increment missing‑premium counter and data‑quality error count when a policy has no matching premium.",
+        "expression": "ADD 1 TO WS-MISSING-PREM; ADD 1 TO WS-DQ-ERRORS",
+        "line_number": 562
+      }
+    },
+    {
+      "id": "TRANSFORMATION:KPICALC.CBL:T11",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T11",
+        "rule_type": "CALCULATION",
+        "description": "Increment orphan‑premium counter and data‑quality error count when a premium has no matching policy.",
+        "expression": "ADD 1 TO WS-ORPHAN-PREM; ADD 1 TO WS-DQ-ERRORS",
+        "line_number": 576
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "FILE:PREMIUM-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "FILE:KPI-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "FILE:ERROR-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:PI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PI-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:PRI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-PREMIUM-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-UNEARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:PRI-CALCULATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:KPI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:ER-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:ER-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:ER-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:ER-MESSAGE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:WS-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PI-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PR-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-KO-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-ER-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:WS-SWITCHES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PI-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PR-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-FATAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PI-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PR-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-KO-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-ER-OPEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:WS-SEQUENCE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PREV-PI-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PREV-PR-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:WS-COUNTS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-TOTAL-POLICIES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-ACTIVE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-PENDING",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-EXPIRED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-CANCELLED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-HO-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-AU-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-UNKNOWN-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-UNKNOWN-PROD",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-MISSING-PREM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-ORPHAN-PREM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-RECON-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-DQ-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-IO-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "VARIABLE:WS-TOTALS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-WRITTEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-EARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-UNEARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-HO-WRITTEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-HO-EARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-HO-UNEARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-AU-WRITTEN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-AU-EARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-AU-UNEARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-RECON-DIFF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-ABS-DIFF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "COLUMN:WS-TOLERANCE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:MAIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:OPEN-FILES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:READ-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:READ-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:PROCESS-MATCHED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:HANDLE-MISSING-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:HANDLE-ORPHAN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:WRITE-ERROR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:WRITE-KPI-REPORT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:KPICALC.CBL",
+      "target_id": "PROCEDURE:CLOSE-FILES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:PI-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 43,
+        "description": "Sequential input file POLICY-IN holds records defined by PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-POLICY-NO",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 63,
+        "description": "Policy number field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-CUSTOMER-ID",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 64,
+        "description": "Customer identifier field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-AGENT-ID",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 65,
+        "description": "Agent identifier field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-PRODUCT-TYPE",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 66,
+        "description": "Product type code field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-POLICY-STATUS",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 67,
+        "description": "Policy status code field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-EFFECTIVE-DATE",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 68,
+        "description": "Effective date field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-EXPIRY-DATE",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 69,
+        "description": "Expiry date field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-WRITTEN-PREMIUM",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 70,
+        "description": "Written premium amount field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-CREATE-DT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 71,
+        "description": "Record creation date field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-UPDATE-DT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 72,
+        "description": "Record last‑update date field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-IN",
+      "target_id": "TABLE:PRI-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 47,
+        "description": "Sequential input file PREMIUM-IN holds records defined by PRI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-PREMIUM-ID",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 76,
+        "description": "Premium record identifier field within PRI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-POLICY-NO",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 77,
+        "description": "Policy number key linking premium to policy record."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-WRITTEN-PREMIUM",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 78,
+        "description": "Written premium amount from premium extract."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-POLICY-NO",
+      "target_id": "TABLE:PRI-POLICY-NO",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Policy number used to match records from POLICY-IN and PREMIUM-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:KPI-OUT",
+      "target_id": "TABLE:KPI summary data",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 51,
+        "description": "Aggregated KPI totals are written to KPI-OUT after processing."
+      }
+    },
+    {
+      "source_id": "TABLE:ERROR-OUT",
+      "target_id": "TABLE:error records",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 55,
+        "description": "Data‑quality and reconciliation errors are written to ERROR-OUT."
+      }
+    }
+  ]
+}

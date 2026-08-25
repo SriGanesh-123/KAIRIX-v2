@@ -1,0 +1,42 @@
+{
+  "purpose": "Calculate daily premium amounts for validated policies by aggregating property, vehicle, and coverage data, applying product‑specific rating rules (Homeowners and Auto), and outputting premium records with a unique premium ID while logging any processing errors.",
+  "high_level_narrative": "The program opens five sequential files (policy, property, vehicle, coverage, premium output, error output). It reads the first property, vehicle, and coverage records to prime look‑ahead buffers. It then enters a loop reading each policy record (sorted by policy number). For each policy it resets calculation work fields, determines the product type, and attempts to locate the associated property (HO) or vehicle (AU) record by scanning the respective input file until the policy numbers match. If a matching asset record is found, it scans the coverage file to collect all coverage records belonging to the same policy, summing coverage limits and deductibles and counting coverages. With these aggregates it invokes the appropriate calculation routine (CALC‑HO or CALC‑AU) that uses hard‑coded rating constants to compute risk value, discount, and final premium, enforcing minimum premium and maximum discount limits. A premium ID is built from the first six characters of the policy number plus the current date. The premium record is written to PREMIUM‑OUT and counters are updated. If any required asset or coverage is missing, or the product type is unsupported, an error record with a specific error code and message is written to ERROR‑OUT. After all policies are processed the files are closed and processing statistics are displayed. Fatal file‑open or I/O errors abort the run.",
+  "business_domain": "Premium Calculation (Insurance Rating) for Homeowners and Auto policies.",
+  "inputs": [
+    "POLICY-IN (sequential file containing policy header records)",
+    "PROPERTY-IN (sequential file containing property asset records)",
+    "VEHICLE-IN (sequential file containing vehicle asset records)",
+    "COVERAGE-IN (sequential file containing coverage detail records)"
+  ],
+  "outputs": [
+    "PREMIUM-OUT (sequential file containing calculated premium records)",
+    "ERROR-OUT (sequential file containing error records for missing data or validation failures)"
+  ],
+  "key_transformations": [
+    "Read and buffer the next property, vehicle, and coverage records to enable sequential matching by policy number.",
+    "Aggregate all coverage records for a policy: total coverage limit (WS-COV-LIMIT-TOTAL), total deductible (WS-DEDUCT-TOTAL), and coverage count (WS-COVERAGE-COUNT).",
+    "Calculate risk value as (asset value * risk‑rate) using WS‑HO‑RISK‑RATE or WS‑AU‑RISK‑RATE.",
+    "Calculate premium components: base amount, coverage‑rate component, deductible‑rate component, then apply discount (capped by WS‑HO‑MAX‑DISC / WS‑AU‑MAX‑DISC) and enforce minimum premium (WS‑HO‑MIN / WS‑AU‑MIN).",
+    "Compose PO-PREMIUM-ID = first 6 characters of PI-POLICY-NO concatenated with WS-CURRENT-DATE (YYMMDD).",
+    "Populate PO-REC with written premium (from policy), earned premium (calculated), unearned premium (written minus earned), and calculation date.",
+    "Write error records with ER-CODE and ER-MESSAGE when required asset or coverage data is missing or product type is invalid."
+  ],
+  "key_dependencies": [
+    "File definitions for POLICY-IN, PROPERTY-IN, VEHICLE-IN, COVERAGE-IN, PREMIUM-OUT, ERROR-OUT.",
+    "Rating constants defined in WS‑RATING‑CONSTANTS (HO and AU base, rates, min, max‑discount).",
+    "Cobol intrinsic FUNCTION CURRENT‑DATE for generating the calculation date.",
+    "Work‑storage fields for file status, EOF switches, calculation accumulators, and counters."
+  ],
+  "business_rules": [
+    "Product type must be either 'HO' (Homeowners) or 'AU' (Auto); otherwise error P004 is generated.",
+    "Homeowners policies require a matching property record; missing record generates error P001.",
+    "Auto policies require a matching vehicle record; missing record generates error P002.",
+    "At least one coverage record must exist for a policy; missing coverage generates error P003.",
+    "Premium ID is 12 bytes: first 6 bytes of the policy number + YYMMDD of the calculation date, assuming one calculation per policy per day.",
+    "Premium calculation uses product‑specific constants: base amount, risk rate, coverage rate, deductible rate, minimum premium, and maximum discount.",
+    "Discount applied cannot exceed the product‑specific maximum discount and premium cannot fall below the product‑specific minimum.",
+    "Earned premium = calculated premium; unearned premium = written premium – earned premium.",
+    "All input files must be sorted by policy number to allow sequential matching.",
+    "Fatal file‑open or I/O errors abort processing and set RETURN‑CODE to 12."
+  ]
+}

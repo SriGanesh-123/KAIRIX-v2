@@ -1,32 +1,23 @@
-import os
 import json
 import xml.etree.ElementTree as ET
-
+from pathlib import Path
+import os
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Project root:
-# <project>/parsers/ssis/parse.py -> <project>
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(BASE_DIR, "..", "..")
+DTSX_DIR = PROJECT_ROOT / "source" / "ssis" / "packages"
+
+OUTPUT_DIR = PROJECT_ROOT / "output" / "ssis"
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
 )
 
-DTSX_DIR = os.path.join(
-    PROJECT_ROOT,
-    "source",
-    "ssis",
-    "packages"
-)
-
-OUTPUT_DIR = os.path.join(
-    PROJECT_ROOT,
-    "output",
-    "ssis"
-)
 
 
 # ============================================================

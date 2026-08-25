@@ -19,14 +19,17 @@ from sqlglot.errors import ParseError
 # 1. CONFIGURATION
 # ============================================================
 
-INPUT_FOLDER = Path(
-    r"C:\Users\GaneshSriKumarMarimu\legacy-code-agentic-rag\source\sql"
-)
-OUTPUT_FOLDER = Path(
-    r"C:\Users\GaneshSriKumarMarimu\legacy-code-agentic-rag\output\sql"
-)
-OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+INPUT_FOLDER = PROJECT_ROOT / "source" / "sql"
+
+OUTPUT_FOLDER = PROJECT_ROOT / "output" / "sql"
+
+OUTPUT_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 # ============================================================
 # 2. HELPERS

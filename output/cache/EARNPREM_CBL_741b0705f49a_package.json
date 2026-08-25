@@ -1,0 +1,3290 @@
+{
+  "package_id": "PKG-COBOL-EARNPREM.CBL-75f5f70e",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\EARNPREM.CBL",
+    "file_name": "EARNPREM.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 691,
+    "size_bytes": 14302
+  },
+  "summary": {
+    "purpose": "Calculate the earned and unearned premium amounts for each premium record by applying the formula Earned = Written * Earned‑Days / Term‑Days, after validating policy and calculation dates, and write the results to an output file while logging any errors.",
+    "high_level_narrative": "The program opens four sequential files: POLICY‑IN (policy master), PREMIUM‑IN (premium input), PREMIUM‑OUT (calculated premium output) and ERROR‑OUT (error log). It reads the first policy record to establish ordering, then enters a loop reading each premium record. For each premium record it attempts to locate the matching policy by sequentially reading the policy file until the policy numbers match or the end of the policy file is reached. If the policy is found, the program validates the policy effective date, expiry date and the premium calculation date using calendar rules (including leap‑year handling). Once dates are confirmed, it converts the three dates to integer day counts, computes the total term days (inclusive), determines earned days based on where the calculation date falls relative to the effective and expiry dates, and finally calculates Earned Premium = Written Premium * Earned‑Days / Term‑Days and Unearned Premium = Written Premium – Earned Premium. The calculated values together with identifiers are written to PREMIUM‑OUT. If any validation or lookup fails, an appropriate error code and message are written to ERROR‑OUT. Counters for records read, calculated, and errors are displayed at the end of execution. Fatal I/O errors abort processing and set a non‑zero return code.",
+    "business_domain": "Premium (Earned Premium) Calculation",
+    "inputs": [
+      "POLICY‑IN (sequential file containing policy master records: PI‑POLICY‑NO, PI‑EFFECTIVE‑DATE, PI‑EXPIRY‑DATE, etc.)",
+      "PREMIUM‑IN (sequential file containing premium input records: PRI‑PREMIUM‑ID, PRI‑POLICY‑NO, PRI‑WRITTEN‑PREMIUM, PRI‑CALCULATION‑DATE)",
+      "File status variables WS‑PI‑ST, WS‑PR‑ST, WS‑PO‑ST, WS‑ER‑ST (used to detect I/O errors)"
+    ],
+    "outputs": [
+      "PREMIUM‑OUT (sequential file with calculated premium records: PRO‑PREMIUM‑ID, PRO‑POLICY‑NO, PRO‑WRITTEN‑PREMIUM, PRO‑EARNED‑PREMIUM, PRO‑UNEARNED‑PREMIUM, PRO‑CALCULATION‑DATE)",
+      "ERROR‑OUT (sequential file with error records: ER‑POLICY‑NO, ER‑CODE, ER‑MESSAGE)",
+      "Console display of processing counters (READ, CALCULATED, ERRORS, I/O ERRORS)",
+      "RETURN‑CODE set to 12 on fatal error"
+    ],
+    "key_transformations": [
+      "Calendar validation of effective, expiry and calculation dates (numeric check, month/day range, leap‑year handling).",
+      "Conversion of dates to integer day numbers using FUNCTION INTEGER‑OF‑DATE.",
+      "Term‑Days calculation: TERM‑DAYS = EXPIRY‑INT – EFFECTIVE‑INT + 1 (inclusive).",
+      "Earned‑Days determination: 0 if calculation date < effective date; TERM‑DAYS if calculation date > expiry date; otherwise (CALC‑INT – EFFECTIVE‑INT + 1).",
+      "Earned Premium calculation: WS‑EARNED = WRITTEN‑PREMIUM * WS‑EARNED‑DAYS / WS‑TERM‑DAYS.",
+      "Unearned Premium calculation: WS‑UNEARNED = WRITTEN‑PREMIUM – WS‑EARNED.",
+      "Population of output record fields with calculated amounts and identifiers."
+    ],
+    "key_dependencies": [
+      "COBOL intrinsic functions: FUNCTION INTEGER‑OF‑DATE, FUNCTION MOD.",
+      "Sequential file definitions for POLICY‑IN, PREMIUM‑IN, PREMIUM‑OUT, ERROR‑OUT.",
+      "Task‑5 POLLOAD and Task‑6 PREMCALC (mentioned in comments as upstream data providers).",
+      "Standard COBOL runtime environment for file handling and arithmetic."
+    ],
+    "business_rules": [
+      "EARNED = WRITTEN * EARNED‑DAYS / TERM‑DAYS (term and earned days are inclusive).",
+      "Policy effective date must be a valid calendar date; same for expiry and calculation dates.",
+      "Expiry date must not be earlier than effective date (error E004).",
+      "Term days must be greater than zero; otherwise error E005.",
+      "If calculation date is before effective date, earned days = 0.",
+      "If calculation date is after expiry date, earned days = term days.",
+      "If calculation date falls within the policy period, earned days = (calc‑date – effective‑date + 1).",
+      "Error handling codes: E001 – policy not found; E002 – invalid effective date; E003 – invalid expiry date; E004 – expiry before effective; E005 – invalid term days; E006 – invalid calculation date.",
+      "Input files must be sorted by policy number; out‑of‑order detection raises a fatal error.",
+      "All I/O status codes must be '00' for successful operations; any other status triggers a fatal error."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "EARNPREM.CBL",
+    "source_type": "cobol",
+    "purpose": "Calculate earned and unearned premium amounts for each premium record by joining it with the corresponding policy record, validating dates, and applying the business formula Earned = Written * Earned‑Days / Term‑Days (inclusive of start and end dates).",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN (file) containing PI-REC records",
+        "PREMIUM-IN (file) containing PRI-REC records"
+      ],
+      "outputs": [
+        "PREMIUM-OUT (file) containing PRO-REC records",
+        "ERROR-OUT (file) containing ER-REC records"
+      ]
+    },
+    "key_logic": [
+      "Open all input and output files; abort if any file status is not '00'.",
+      "Read the first policy record (PI-REC) and keep it in work‑storage for sequential matching.",
+      "Loop over premium records (PRI-REC) until end‑of‑file or a fatal error:",
+      "  Read next premium record.",
+      "  Increment read counter.",
+      "  Find the matching policy record by advancing the policy file until the policy number equals the premium's policy number or exceeds it.",
+      "  If a matching policy is found, validate the three dates (effective, expiry, calculation) for proper calendar values and logical order.",
+      "  If dates are valid, compute:",
+      "    TERM‑DAYS = (ExpiryDate – EffectiveDate) + 1",
+      "    Earned‑Days based on calculation date relative to effective/expiry dates",
+      "    EarnedPremium = WrittenPremium * Earned‑Days / TERM‑DAYS",
+      "    UnearnedPremium = WrittenPremium – EarnedPremium",
+      "  Write the calculated premium (PRO‑REC) to PREMIUM‑OUT.",
+      "  If any validation fails, write an error record (ER‑REC) to ERROR‑OUT and increment error counters.",
+      "Close all files and display processing statistics."
+    ],
+    "entities": [
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 35,
+        "description": "Sequential input file containing policy master records."
+      },
+      {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 39,
+        "description": "Sequential input file containing premium records to be processed."
+      },
+      {
+        "name": "PREMIUM-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 43,
+        "description": "Sequential output file for calculated earned/unearned premiums."
+      },
+      {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 47,
+        "description": "Sequential output file for error messages."
+      },
+      {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 57,
+        "description": "Record layout for POLICY-IN."
+      },
+      {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 60,
+        "description": "Policy number (primary key)."
+      },
+      {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 61,
+        "description": "Customer identifier."
+      },
+      {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 62,
+        "description": "Agent identifier."
+      },
+      {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 63,
+        "description": "Product type code."
+      },
+      {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 64,
+        "description": "Policy status code."
+      },
+      {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 65,
+        "description": "Policy effective date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 66,
+        "description": "Policy expiry date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 67,
+        "description": "Written premium amount on the policy."
+      },
+      {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 68,
+        "description": "Record creation date."
+      },
+      {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 69,
+        "description": "Record last update date."
+      },
+      {
+        "name": "PRI-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "PREMIUM-IN",
+        "data_type": null,
+        "line_number": 73,
+        "description": "Record layout for PREMIUM-IN."
+      },
+      {
+        "name": "PRI-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 76,
+        "description": "Unique identifier for the premium transaction."
+      },
+      {
+        "name": "PRI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 77,
+        "description": "Policy number to which the premium belongs."
+      },
+      {
+        "name": "PRI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 78,
+        "description": "Written premium amount from the transaction."
+      },
+      {
+        "name": "PRI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 79,
+        "description": "Previously calculated earned premium (input, not used for calculation)."
+      },
+      {
+        "name": "PRI-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 80,
+        "description": "Previously calculated unearned premium (input, not used for calculation)."
+      },
+      {
+        "name": "PRI-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 81,
+        "description": "Date on which the earned premium should be calculated."
+      },
+      {
+        "name": "PRO-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "PREMIUM-OUT",
+        "data_type": null,
+        "line_number": 85,
+        "description": "Record layout for output premium file."
+      },
+      {
+        "name": "PRO-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 88,
+        "description": "Premium transaction identifier (copied from input)."
+      },
+      {
+        "name": "PRO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 89,
+        "description": "Policy number (copied from input)."
+      },
+      {
+        "name": "PRO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 90,
+        "description": "Written premium amount (copied from input)."
+      },
+      {
+        "name": "PRO-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 91,
+        "description": "Calculated earned premium."
+      },
+      {
+        "name": "PRO-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 92,
+        "description": "Calculated unearned premium."
+      },
+      {
+        "name": "PRO-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PRO-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 93,
+        "description": "Date used for calculation (copied from input)."
+      },
+      {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "ERROR-OUT",
+        "data_type": null,
+        "line_number": 97,
+        "description": "Error record layout."
+      },
+      {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 100,
+        "description": "Policy number related to the error."
+      },
+      {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(4)",
+        "line_number": 101,
+        "description": "Application error code."
+      },
+      {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(54)",
+        "line_number": 102,
+        "description": "Human‑readable error description."
+      },
+      {
+        "name": "WS-STATUS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 108,
+        "description": "Group item holding file‑status variables."
+      },
+      {
+        "name": "WS-PI-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 110,
+        "description": "File status for POLICY-IN."
+      },
+      {
+        "name": "WS-PR-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 111,
+        "description": "File status for PREMIUM-IN."
+      },
+      {
+        "name": "WS-PO-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 112,
+        "description": "File status for PREMIUM-OUT."
+      },
+      {
+        "name": "WS-ER-ST",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 113,
+        "description": "File status for ERROR-OUT."
+      },
+      {
+        "name": "WS-SW",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 115,
+        "description": "Switches and flags used throughout processing."
+      },
+      {
+        "name": "WS-POL-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "PIC X",
+        "line_number": 117,
+        "description": "End‑of‑file flag for POLICY-IN."
+      },
+      {
+        "name": "POL-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 118,
+        "description": "Condition name for WS-POL-EOF = 'Y'."
+      },
+      {
+        "name": "WS-PREM-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "PIC X",
+        "line_number": 120,
+        "description": "End‑of‑file flag for PREMIUM-IN."
+      },
+      {
+        "name": "PREM-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 121,
+        "description": "Condition name for WS-PREM-EOF = 'Y'."
+      },
+      {
+        "name": "WS-POL-FOUND",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "PIC X",
+        "line_number": 123,
+        "description": "Flag indicating that a matching policy record was found."
+      },
+      {
+        "name": "WS-FATAL",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "PIC X",
+        "line_number": 124,
+        "description": "Flag indicating a fatal processing error."
+      },
+      {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 125,
+        "description": "Condition name for WS-FATAL = 'Y'."
+      },
+      {
+        "name": "WS-DATE-VALID",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-SW",
+        "data_type": "PIC X",
+        "line_number": 127,
+        "description": "Flag set to 'Y' when a date passes calendar validation."
+      },
+      {
+        "name": "WS-TERM-DAYS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(9)",
+        "line_number": 150,
+        "description": "Number of days in the policy term (inclusive)."
+      },
+      {
+        "name": "WS-EARNED-DAYS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(9)",
+        "line_number": 151,
+        "description": "Number of days earned as of the calculation date."
+      },
+      {
+        "name": "WS-EARNED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-AMOUNTS",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 144,
+        "description": "Calculated earned premium amount."
+      },
+      {
+        "name": "WS-UNEARNED",
+        "entity_type": "VARIABLE",
+        "parent_entity": "WS-AMOUNTS",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 145,
+        "description": "Calculated unearned premium amount."
+      },
+      {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 205,
+        "description": "Program entry point."
+      },
+      {
+        "name": "OPEN-FILES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 241,
+        "description": "Opens all input and output files."
+      },
+      {
+        "name": "READ-POLICY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 279,
+        "description": "Reads next policy record and checks ordering."
+      },
+      {
+        "name": "READ-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 323,
+        "description": "Reads next premium record and checks ordering."
+      },
+      {
+        "name": "PROCESS-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 369,
+        "description": "Coordinates policy lookup, date validation and premium calculation."
+      },
+      {
+        "name": "FIND-POLICY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 389,
+        "description": "Advances the policy file until the matching policy number is found."
+      },
+      {
+        "name": "VALIDATE-DATES",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 411,
+        "description": "Validates effective, expiry and calculation dates and checks logical order."
+      },
+      {
+        "name": "VALIDATE-CALENDAR-DATE",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 479,
+        "description": "Ensures a numeric YYYYMMDD value represents a real calendar date."
+      },
+      {
+        "name": "SET-MAX-DAY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 507,
+        "description": "Sets WS-MAX-DAY based on month and leap‑year status."
+      },
+      {
+        "name": "CHECK-LEAP-YEAR",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 535,
+        "description": "Determines if WS-YEAR is a leap year."
+      },
+      {
+        "name": "CALCULATE-EARNED",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "EARNPREM",
+        "data_type": null,
+        "line_number": 559,
+        "description": "Performs integer‑of‑date conversion, term‑day calculation, earned‑day logic and premium arithmetic."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Convert effective, expiry and calculation dates to integer Julian values.",
+        "source_entities": [
+          "PI-EFFECTIVE-DATE",
+          "PI-EXPIRY-DATE",
+          "PRI-CALCULATION-DATE"
+        ],
+        "target_entities": [
+          "WS-EFF-INT",
+          "WS-EXP-INT",
+          "WS-CALC-INT"
+        ],
+        "expression": "FUNCTION INTEGER-OF-DATE(date)",
+        "line_number": 564,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T002",
+        "rule_type": "CALCULATION",
+        "description": "Calculate total term days inclusive of start and end dates.",
+        "source_entities": [
+          "WS-EXP-INT",
+          "WS-EFF-INT"
+        ],
+        "target_entities": [
+          "WS-TERM-DAYS"
+        ],
+        "expression": "WS-EXP-INT - WS-EFF-INT + 1",
+        "line_number": 568,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T003",
+        "rule_type": "CONDITIONAL",
+        "description": "If calculation date is before effective date, earned days = 0.",
+        "source_entities": [
+          "WS-CALC-INT",
+          "WS-EFF-INT"
+        ],
+        "target_entities": [
+          "WS-EARNED-DAYS"
+        ],
+        "expression": "IF WS-CALC-INT < WS-EFF-INT THEN WS-EARNED-DAYS = 0",
+        "line_number": 572,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "If calculation date is after expiry date, earned days = term days.",
+        "source_entities": [
+          "WS-CALC-INT",
+          "WS-EXP-INT",
+          "WS-TERM-DAYS"
+        ],
+        "target_entities": [
+          "WS-EARNED-DAYS"
+        ],
+        "expression": "IF WS-CALC-INT > WS-EXP-INT THEN WS-EARNED-DAYS = WS-TERM-DAYS",
+        "line_number": 576,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T005",
+        "rule_type": "CALCULATION",
+        "description": "When calculation date falls within the policy term, earned days = calculation date - effective date + 1.",
+        "source_entities": [
+          "WS-CALC-INT",
+          "WS-EFF-INT"
+        ],
+        "target_entities": [
+          "WS-EARNED-DAYS"
+        ],
+        "expression": "WS-EARNED-DAYS = WS-CALC-INT - WS-EFF-INT + 1",
+        "line_number": 580,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T006",
+        "rule_type": "CALCULATION",
+        "description": "Earned premium = Written premium * Earned‑Days / Term‑Days.",
+        "source_entities": [
+          "PI-WRITTEN-PREMIUM",
+          "WS-EARNED-DAYS",
+          "WS-TERM-DAYS"
+        ],
+        "target_entities": [
+          "WS-EARNED"
+        ],
+        "expression": "WS-EARNED = PI-WRITTEN-PREMIUM * WS-EARNED-DAYS / WS-TERM-DAYS",
+        "line_number": 588,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T007",
+        "rule_type": "CALCULATION",
+        "description": "Unearned premium = Written premium – Earned premium.",
+        "source_entities": [
+          "PI-WRITTEN-PREMIUM",
+          "WS-EARNED"
+        ],
+        "target_entities": [
+          "WS-UNEARNED"
+        ],
+        "expression": "WS-UNEARNED = PI-WRITTEN-PREMIUM - WS-EARNED",
+        "line_number": 590,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T008",
+        "rule_type": "MAPPING",
+        "description": "Populate output record PRO-REC with calculated values and original identifiers.",
+        "source_entities": [
+          "PRI-PREMIUM-ID",
+          "PRI-POLICY-NO",
+          "PRI-WRITTEN-PREMIUM",
+          "WS-EARNED",
+          "WS-UNEARNED",
+          "PRI-CALCULATION-DATE"
+        ],
+        "target_entities": [
+          "PRO-PREMIUM-ID",
+          "PRO-POLICY-NO",
+          "PRO-WRITTEN-PREMIUM",
+          "PRO-EARNED-PREMIUM",
+          "PRO-UNEARNED-PREMIUM",
+          "PRO-CALCULATION-DATE"
+        ],
+        "expression": "MOVE ...",
+        "line_number": 595,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T009",
+        "rule_type": "FILTER",
+        "description": "Skip premium processing when PREM-EOF or a fatal error is set.",
+        "source_entities": [
+          "PREM-EOF",
+          "FATAL-ERROR"
+        ],
+        "target_entities": [],
+        "expression": "PERFORM UNTIL PREM-EOF OR FATAL-ERROR",
+        "line_number": 213,
+        "confidence": 0.99
+      },
+      {
+        "rule_id": "T010",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Policy records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+        "source_entities": [
+          "PI-POLICY-NO",
+          "WS-PREV-POLICY"
+        ],
+        "target_entities": [],
+        "expression": "IF WS-PREV-POLICY NOT = LOW-VALUES AND PI-POLICY-NO < WS-PREV-POLICY THEN FATAL-ERROR",
+        "line_number": 298,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T011",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Premium records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+        "source_entities": [
+          "PRI-POLICY-NO",
+          "WS-PREV-PREMIUM-POLICY"
+        ],
+        "target_entities": [],
+        "expression": "IF WS-PREV-PREMIUM-POLICY NOT = LOW-VALUES AND PRI-POLICY-NO < WS-PREV-PREMIUM-POLICY THEN FATAL-ERROR",
+        "line_number": 336,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T012",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Effective date must be a valid calendar date; otherwise write error E002.",
+        "source_entities": [
+          "PI-EFFECTIVE-DATE"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E002', ER-MESSAGE='INVALID POLICY EFFECTIVE DATE'",
+        "line_number": 419,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T013",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Expiry date must be a valid calendar date; otherwise write error E003.",
+        "source_entities": [
+          "PI-EXPIRY-DATE"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E003', ER-MESSAGE='INVALID POLICY EXPIRY DATE'",
+        "line_number": 433,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T014",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Calculation date must be a valid calendar date; otherwise write error E006.",
+        "source_entities": [
+          "PRI-CALCULATION-DATE"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E006', ER-MESSAGE='INVALID PREMIUM CALCULATION DATE'",
+        "line_number": 447,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T015",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Expiry date cannot be earlier than effective date; otherwise write error E004.",
+        "source_entities": [
+          "PI-EXPIRY-DATE",
+          "PI-EFFECTIVE-DATE"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF PI-EXPIRY-DATE < PI-EFFECTIVE-DATE THEN ER-CODE='E004', ER-MESSAGE='EXPIRY DATE BEFORE EFFECTIVE DATE'",
+        "line_number": 459,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T016",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Term days must be greater than zero; otherwise write error E005.",
+        "source_entities": [
+          "WS-TERM-DAYS"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF WS-TERM-DAYS <= 0 THEN ER-CODE='E005', ER-MESSAGE='POLICY TERM DAYS INVALID'",
+        "line_number": 574,
+        "confidence": 0.97
+      }
+    ],
+    "business_rules": [
+      "Earned premium is calculated as WrittenPremium * EarnedDays / TermDays, where EarnedDays and TermDays are inclusive of start and end dates.",
+      "TermDays = (ExpiryDate – EffectiveDate) + 1; must be > 0.",
+      "If CalculationDate < EffectiveDate, EarnedDays = 0.",
+      "If CalculationDate > ExpiryDate, EarnedDays = TermDays.",
+      "All dates must be valid calendar dates (numeric, month 1‑12, day within month limits, leap‑year handling).",
+      "Policy and premium input files must be sorted by policy number; out‑of‑order records cause a fatal error.",
+      "ExpiryDate must not be earlier than EffectiveDate.",
+      "Any validation failure results in an error record written to ERROR‑OUT with a specific error code (E001‑E006).",
+      "Fatal errors abort further processing and set RETURN‑CODE to 12."
+    ],
+    "dependencies": [
+      "POLICY-IN file (external sequential file)",
+      "PREMIUM-IN file (external sequential file)",
+      "PREMIUM-OUT file (external sequential file)",
+      "ERROR-OUT file (external sequential file)",
+      "COBOL intrinsic FUNCTION INTEGER-OF-DATE",
+      "COBOL intrinsic FUNCTION MOD"
+    ],
+    "relationships": [
+      {
+        "source": "EARNPREM",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 283,
+        "description": "READ POLICY-IN in READ-POLICY paragraph."
+      },
+      {
+        "source": "EARNPREM",
+        "target": "PREMIUM-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 327,
+        "description": "READ PREMIUM-IN in READ-PREMIUM paragraph."
+      },
+      {
+        "source": "EARNPREM",
+        "target": "PREMIUM-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 651,
+        "description": "WRITE PRO-REC to PREMIUM-OUT after calculation."
+      },
+      {
+        "source": "EARNPREM",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 671,
+        "description": "WRITE ER-REC to ERROR-OUT on validation errors."
+      },
+      {
+        "source": "MAIN",
+        "target": "OPEN-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 207,
+        "description": "PERFORM OPEN-FILES from MAIN."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 211,
+        "description": "PERFORM READ-POLICY before processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-PREMIUM",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 215,
+        "description": "PERFORM READ-PREMIUM inside processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "PROCESS-PREMIUM",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 221,
+        "description": "PERFORM PROCESS-PREMIUM after reading a premium record."
+      },
+      {
+        "source": "MAIN",
+        "target": "CLOSE-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 227,
+        "description": "PERFORM CLOSE-FILES at end of processing."
+      },
+      {
+        "source": "PROCESS-PREMIUM",
+        "target": "FIND-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 373,
+        "description": "PERFORM FIND-POLICY to locate matching policy."
+      },
+      {
+        "source": "PROCESS-PREMIUM",
+        "target": "VALIDATE-DATES",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 377,
+        "description": "PERFORM VALIDATE-DATES after policy is found."
+      },
+      {
+        "source": "FIND-POLICY",
+        "target": "READ-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 395,
+        "description": "PERFORM READ-POLICY while searching for matching policy."
+      },
+      {
+        "source": "VALIDATE-DATES",
+        "target": "VALIDATE-CALENDAR-DATE",
+        "relationship_type": "CALLS",
+        "confidence": 0.98,
+        "evidence_line": 415,
+        "description": "Validate each of the three dates using VALIDATE-CALENDAR-DATE."
+      },
+      {
+        "source": "VALIDATE-CALENDAR-DATE",
+        "target": "SET-MAX-DAY",
+        "relationship_type": "CALLS",
+        "confidence": 0.97,
+        "evidence_line": 495,
+        "description": "CALL SET-MAX-DAY to determine month length."
+      },
+      {
+        "source": "SET-MAX-DAY",
+        "target": "CHECK-LEAP-YEAR",
+        "relationship_type": "CALLS",
+        "confidence": 0.96,
+        "evidence_line": 521,
+        "description": "CALL CHECK-LEAP-YEAR for February."
+      },
+      {
+        "source": "VALIDATE-DATES",
+        "target": "CALCULATE-EARNED",
+        "relationship_type": "CALLS",
+        "confidence": 0.99,
+        "evidence_line": 469,
+        "description": "PERFORM CALCULATE-EARNED when all dates are valid and logical."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-EFF-INT",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.99,
+        "evidence_line": 564,
+        "description": "INTEGER-OF-DATE conversion of PI-EFFECTIVE-DATE."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-EXP-INT",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.99,
+        "evidence_line": 566,
+        "description": "INTEGER-OF-DATE conversion of PI-EXPIRY-DATE."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-CALC-INT",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.99,
+        "evidence_line": 568,
+        "description": "INTEGER-OF-DATE conversion of PRI-CALCULATION-DATE."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-TERM-DAYS",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.99,
+        "evidence_line": 572,
+        "description": "Term days = WS-EXP-INT - WS-EFF-INT + 1."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-EARNED-DAYS",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.98,
+        "evidence_line": 580,
+        "description": "Earned days derived from calculation date relative to term."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-EARNED",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.99,
+        "evidence_line": 588,
+        "description": "Earned premium calculation."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "WS-UNEARNED",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.99,
+        "evidence_line": 590,
+        "description": "Unearned premium calculation."
+      },
+      {
+        "source": "CALCULATE-EARNED",
+        "target": "PRO-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 595,
+        "description": "Populate PRO-REC with calculated values."
+      },
+      {
+        "source": "VALIDATE-DATES",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": 425,
+        "description": "Write error record when a date validation fails."
+      },
+      {
+        "source": "PROCESS-PREMIUM",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": 383,
+        "description": "Write error when policy not found for premium."
+      }
+    ],
+    "confidence": 0.94
+  },
+  "reconciliation": {
+    "parser_facts_count": 4,
+    "llm_findings_count": 62,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "PREMIUM-IN",
+      "PREMIUM-OUT",
+      "ERROR-OUT"
+    ],
+    "inferred_entities": [
+      "PI-REC",
+      "PI-POLICY-NO",
+      "PI-CUSTOMER-ID",
+      "PI-AGENT-ID",
+      "PI-PRODUCT-TYPE",
+      "PI-POLICY-STATUS",
+      "PI-EFFECTIVE-DATE",
+      "PI-EXPIRY-DATE",
+      "PI-WRITTEN-PREMIUM",
+      "PI-CREATE-DT",
+      "PI-UPDATE-DT",
+      "PRI-REC",
+      "PRI-PREMIUM-ID",
+      "PRI-POLICY-NO",
+      "PRI-WRITTEN-PREMIUM"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "POLICY-IN",
+        "target": "PI-REC",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": 35,
+        "description": "Input file POLICY-IN holds policy master records defined by layout PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 60,
+        "description": "Policy number field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-CUSTOMER-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 61,
+        "description": "Customer identifier field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-AGENT-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 62,
+        "description": "Agent identifier field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-PRODUCT-TYPE",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 63,
+        "description": "Product type code field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-STATUS",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 64,
+        "description": "Policy status code field within PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-EFFECTIVE-DATE",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 65,
+        "description": "Effective date of the policy."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-EXPIRY-DATE",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 66,
+        "description": "Expiry date of the policy."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-WRITTEN-PREMIUM",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 67,
+        "description": "Written premium amount on the policy."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-CREATE-DT",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 68,
+        "description": "Record creation date."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-UPDATE-DT",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 69,
+        "description": "Record last update date."
+      },
+      {
+        "source": "PREMIUM-IN",
+        "target": "PRI-REC",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": 39,
+        "description": "Input file PREMIUM-IN holds premium transaction records defined by layout PRI-REC."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-PREMIUM-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 76,
+        "description": "Unique identifier for the premium transaction."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 77,
+        "description": "Policy number referenced by the premium transaction."
+      },
+      {
+        "source": "PRI-REC",
+        "target": "PRI-WRITTEN-PREMIUM",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 78,
+        "description": "Written premium amount from the transaction."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PRI-REC",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Premium records are matched to policy records using the policy number field (PI-POLICY-NO = PRI-POLICY-NO)."
+      },
+      {
+        "source": "PREMIUM-OUT",
+        "target": "PRO-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Calculated earned/unearned premium records are written to output file PREMIUM-OUT."
+      },
+      {
+        "source": "ERROR-OUT",
+        "target": "ER-REC",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Error records are written to output file ERROR-OUT."
+      }
+    ],
+    "discrepancies": [
+      "Parser did not extract any table or column definitions; LLM provided detailed record layouts. Resolved by accepting LLM structures as inferred entities.",
+      "Parser listed only file names; LLM added implicit relationships (file contains table, table has columns). No conflict, just augmentation."
+    ],
+    "gaps_detected": [
+      "No explicit definition of output record layouts (PRO-REC, ER-REC) found in either source; relationship to output files inferred.",
+      "Date validation routine and error‑handling subprograms are referenced in the purpose description but not detailed in extracted entities.",
+      "Business formula implementation details (Earned‑Days calculation) are described but not mapped to specific variables in the AST."
+    ],
+    "overall_confidence": 0.92
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "PI-REC",
+        "PRI-REC",
+        "PRO-REC",
+        "ER-REC"
+      ],
+      "columns": [
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PRI-PREMIUM-ID",
+        "PRI-POLICY-NO",
+        "PRI-WRITTEN-PREMIUM",
+        "PRI-EARNED-PREMIUM",
+        "PRI-UNEARNED-PREMIUM",
+        "PRI-CALCULATION-DATE",
+        "PRO-PREMIUM-ID",
+        "PRO-POLICY-NO",
+        "PRO-WRITTEN-PREMIUM",
+        "PRO-EARNED-PREMIUM",
+        "PRO-UNEARNED-PREMIUM",
+        "PRO-CALCULATION-DATE",
+        "ER-POLICY-NO",
+        "ER-CODE",
+        "ER-MESSAGE"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Calculate the earned and unearned premium amounts for each premium record by applying the formula Earned = Written * Earned‑Days / Term‑Days, after validating policy and calculation dates, and write the results to an output file while logging any errors.",
+      "narrative": "The program opens four sequential files: POLICY‑IN (policy master), PREMIUM‑IN (premium input), PREMIUM‑OUT (calculated premium output) and ERROR‑OUT (error log). It reads the first policy record to establish ordering, then enters a loop reading each premium record. For each premium record it attempts to locate the matching policy by sequentially reading the policy file until the policy numbers match or the end of the policy file is reached. If the policy is found, the program validates the policy effective date, expiry date and the premium calculation date using calendar rules (including leap‑year handling). Once dates are confirmed, it converts the three dates to integer day counts, computes the total term days (inclusive), determines earned days based on where the calculation date falls relative to the effective and expiry dates, and finally calculates Earned Premium = Written Premium * Earned‑Days / Term‑Days and Unearned Premium = Written Premium – Earned Premium. The calculated values together with identifiers are written to PREMIUM‑OUT. If any validation or lookup fails, an appropriate error code and message are written to ERROR‑OUT. Counters for records read, calculated, and errors are displayed at the end of execution. Fatal I/O errors abort processing and set a non‑zero return code.",
+      "business_domain": "Premium (Earned Premium) Calculation",
+      "business_rules": [
+        "EARNED = WRITTEN * EARNED‑DAYS / TERM‑DAYS (term and earned days are inclusive).",
+        "Policy effective date must be a valid calendar date; same for expiry and calculation dates.",
+        "Expiry date must not be earlier than effective date (error E004).",
+        "Term days must be greater than zero; otherwise error E005.",
+        "If calculation date is before effective date, earned days = 0.",
+        "If calculation date is after expiry date, earned days = term days.",
+        "If calculation date falls within the policy period, earned days = (calc‑date – effective‑date + 1).",
+        "Error handling codes: E001 – policy not found; E002 – invalid effective date; E003 – invalid expiry date; E004 – expiry before effective; E005 – invalid term days; E006 – invalid calculation date.",
+        "Input files must be sorted by policy number; out‑of‑order detection raises a fatal error.",
+        "All I/O status codes must be '00' for successful operations; any other status triggers a fatal error."
+      ],
+      "key_logic": [
+        "Open all input and output files; abort if any file status is not '00'.",
+        "Read the first policy record (PI-REC) and keep it in work‑storage for sequential matching.",
+        "Loop over premium records (PRI-REC) until end‑of‑file or a fatal error:",
+        "  Read next premium record.",
+        "  Increment read counter.",
+        "  Find the matching policy record by advancing the policy file until the policy number equals the premium's policy number or exceeds it.",
+        "  If a matching policy is found, validate the three dates (effective, expiry, calculation) for proper calendar values and logical order.",
+        "  If dates are valid, compute:",
+        "    TERM‑DAYS = (ExpiryDate – EffectiveDate) + 1",
+        "    Earned‑Days based on calculation date relative to effective/expiry dates",
+        "    EarnedPremium = WrittenPremium * Earned‑Days / TERM‑DAYS",
+        "    UnearnedPremium = WrittenPremium – EarnedPremium",
+        "  Write the calculated premium (PRO‑REC) to PREMIUM‑OUT.",
+        "  If any validation fails, write an error record (ER‑REC) to ERROR‑OUT and increment error counters.",
+        "Close all files and display processing statistics."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "PI-REC",
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PRI-REC",
+        "PRI-PREMIUM-ID",
+        "PRI-POLICY-NO",
+        "PRI-WRITTEN-PREMIUM"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T001",
+          "rule_type": "CALCULATION",
+          "description": "Convert effective, expiry and calculation dates to integer Julian values.",
+          "source_entities": [
+            "PI-EFFECTIVE-DATE",
+            "PI-EXPIRY-DATE",
+            "PRI-CALCULATION-DATE"
+          ],
+          "target_entities": [
+            "WS-EFF-INT",
+            "WS-EXP-INT",
+            "WS-CALC-INT"
+          ],
+          "expression": "FUNCTION INTEGER-OF-DATE(date)",
+          "line_number": 564,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T002",
+          "rule_type": "CALCULATION",
+          "description": "Calculate total term days inclusive of start and end dates.",
+          "source_entities": [
+            "WS-EXP-INT",
+            "WS-EFF-INT"
+          ],
+          "target_entities": [
+            "WS-TERM-DAYS"
+          ],
+          "expression": "WS-EXP-INT - WS-EFF-INT + 1",
+          "line_number": 568,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T003",
+          "rule_type": "CONDITIONAL",
+          "description": "If calculation date is before effective date, earned days = 0.",
+          "source_entities": [
+            "WS-CALC-INT",
+            "WS-EFF-INT"
+          ],
+          "target_entities": [
+            "WS-EARNED-DAYS"
+          ],
+          "expression": "IF WS-CALC-INT < WS-EFF-INT THEN WS-EARNED-DAYS = 0",
+          "line_number": 572,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T004",
+          "rule_type": "CONDITIONAL",
+          "description": "If calculation date is after expiry date, earned days = term days.",
+          "source_entities": [
+            "WS-CALC-INT",
+            "WS-EXP-INT",
+            "WS-TERM-DAYS"
+          ],
+          "target_entities": [
+            "WS-EARNED-DAYS"
+          ],
+          "expression": "IF WS-CALC-INT > WS-EXP-INT THEN WS-EARNED-DAYS = WS-TERM-DAYS",
+          "line_number": 576,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T005",
+          "rule_type": "CALCULATION",
+          "description": "When calculation date falls within the policy term, earned days = calculation date - effective date + 1.",
+          "source_entities": [
+            "WS-CALC-INT",
+            "WS-EFF-INT"
+          ],
+          "target_entities": [
+            "WS-EARNED-DAYS"
+          ],
+          "expression": "WS-EARNED-DAYS = WS-CALC-INT - WS-EFF-INT + 1",
+          "line_number": 580,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T006",
+          "rule_type": "CALCULATION",
+          "description": "Earned premium = Written premium * Earned‑Days / Term‑Days.",
+          "source_entities": [
+            "PI-WRITTEN-PREMIUM",
+            "WS-EARNED-DAYS",
+            "WS-TERM-DAYS"
+          ],
+          "target_entities": [
+            "WS-EARNED"
+          ],
+          "expression": "WS-EARNED = PI-WRITTEN-PREMIUM * WS-EARNED-DAYS / WS-TERM-DAYS",
+          "line_number": 588,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T007",
+          "rule_type": "CALCULATION",
+          "description": "Unearned premium = Written premium – Earned premium.",
+          "source_entities": [
+            "PI-WRITTEN-PREMIUM",
+            "WS-EARNED"
+          ],
+          "target_entities": [
+            "WS-UNEARNED"
+          ],
+          "expression": "WS-UNEARNED = PI-WRITTEN-PREMIUM - WS-EARNED",
+          "line_number": 590,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T008",
+          "rule_type": "MAPPING",
+          "description": "Populate output record PRO-REC with calculated values and original identifiers.",
+          "source_entities": [
+            "PRI-PREMIUM-ID",
+            "PRI-POLICY-NO",
+            "PRI-WRITTEN-PREMIUM",
+            "WS-EARNED",
+            "WS-UNEARNED",
+            "PRI-CALCULATION-DATE"
+          ],
+          "target_entities": [
+            "PRO-PREMIUM-ID",
+            "PRO-POLICY-NO",
+            "PRO-WRITTEN-PREMIUM",
+            "PRO-EARNED-PREMIUM",
+            "PRO-UNEARNED-PREMIUM",
+            "PRO-CALCULATION-DATE"
+          ],
+          "expression": "MOVE ...",
+          "line_number": 595,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T009",
+          "rule_type": "FILTER",
+          "description": "Skip premium processing when PREM-EOF or a fatal error is set.",
+          "source_entities": [
+            "PREM-EOF",
+            "FATAL-ERROR"
+          ],
+          "target_entities": [],
+          "expression": "PERFORM UNTIL PREM-EOF OR FATAL-ERROR",
+          "line_number": 213,
+          "confidence": 0.99
+        },
+        {
+          "rule_id": "T010",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Policy records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+          "source_entities": [
+            "PI-POLICY-NO",
+            "WS-PREV-POLICY"
+          ],
+          "target_entities": [],
+          "expression": "IF WS-PREV-POLICY NOT = LOW-VALUES AND PI-POLICY-NO < WS-PREV-POLICY THEN FATAL-ERROR",
+          "line_number": 298,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T011",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Premium records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+          "source_entities": [
+            "PRI-POLICY-NO",
+            "WS-PREV-PREMIUM-POLICY"
+          ],
+          "target_entities": [],
+          "expression": "IF WS-PREV-PREMIUM-POLICY NOT = LOW-VALUES AND PRI-POLICY-NO < WS-PREV-PREMIUM-POLICY THEN FATAL-ERROR",
+          "line_number": 336,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T012",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Effective date must be a valid calendar date; otherwise write error E002.",
+          "source_entities": [
+            "PI-EFFECTIVE-DATE"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E002', ER-MESSAGE='INVALID POLICY EFFECTIVE DATE'",
+          "line_number": 419,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T013",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Expiry date must be a valid calendar date; otherwise write error E003.",
+          "source_entities": [
+            "PI-EXPIRY-DATE"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E003', ER-MESSAGE='INVALID POLICY EXPIRY DATE'",
+          "line_number": 433,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T014",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Calculation date must be a valid calendar date; otherwise write error E006.",
+          "source_entities": [
+            "PRI-CALCULATION-DATE"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E006', ER-MESSAGE='INVALID PREMIUM CALCULATION DATE'",
+          "line_number": 447,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T015",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Expiry date cannot be earlier than effective date; otherwise write error E004.",
+          "source_entities": [
+            "PI-EXPIRY-DATE",
+            "PI-EFFECTIVE-DATE"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF PI-EXPIRY-DATE < PI-EFFECTIVE-DATE THEN ER-CODE='E004', ER-MESSAGE='EXPIRY DATE BEFORE EFFECTIVE DATE'",
+          "line_number": 459,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T016",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Term days must be greater than zero; otherwise write error E005.",
+          "source_entities": [
+            "WS-TERM-DAYS"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF WS-TERM-DAYS <= 0 THEN ER-CODE='E005', ER-MESSAGE='POLICY TERM DAYS INVALID'",
+          "line_number": 574,
+          "confidence": 0.97
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "POLICY-IN",
+          "target": "PI-REC",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": 35,
+          "description": "Input file POLICY-IN holds policy master records defined by layout PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 60,
+          "description": "Policy number field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-CUSTOMER-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 61,
+          "description": "Customer identifier field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-AGENT-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 62,
+          "description": "Agent identifier field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-PRODUCT-TYPE",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 63,
+          "description": "Product type code field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-POLICY-STATUS",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 64,
+          "description": "Policy status code field within PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-EFFECTIVE-DATE",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 65,
+          "description": "Effective date of the policy."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-EXPIRY-DATE",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 66,
+          "description": "Expiry date of the policy."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-WRITTEN-PREMIUM",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 67,
+          "description": "Written premium amount on the policy."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-CREATE-DT",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 68,
+          "description": "Record creation date."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-UPDATE-DT",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 69,
+          "description": "Record last update date."
+        },
+        {
+          "source": "PREMIUM-IN",
+          "target": "PRI-REC",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": 39,
+          "description": "Input file PREMIUM-IN holds premium transaction records defined by layout PRI-REC."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-PREMIUM-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 76,
+          "description": "Unique identifier for the premium transaction."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 77,
+          "description": "Policy number referenced by the premium transaction."
+        },
+        {
+          "source": "PRI-REC",
+          "target": "PRI-WRITTEN-PREMIUM",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 78,
+          "description": "Written premium amount from the transaction."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PRI-REC",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Premium records are matched to policy records using the policy number field (PI-POLICY-NO = PRI-POLICY-NO)."
+        },
+        {
+          "source": "PREMIUM-OUT",
+          "target": "PRO-REC",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.85,
+          "evidence_line": null,
+          "description": "Calculated earned/unearned premium records are written to output file PREMIUM-OUT."
+        },
+        {
+          "source": "ERROR-OUT",
+          "target": "ER-REC",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.85,
+          "evidence_line": null,
+          "description": "Error records are written to output file ERROR-OUT."
+        }
+      ],
+      "gaps": [
+        "No explicit definition of output record layouts (PRO-REC, ER-REC) found in either source; relationship to output files inferred.",
+        "Date validation routine and error‑handling subprograms are referenced in the purpose description but not detailed in extracted entities.",
+        "Business formula implementation details (Earned‑Days calculation) are described but not mapped to specific variables in the AST."
+      ]
+    },
+    "overall_confidence": 0.92
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:EARNPREM.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "EARNPREM.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\EARNPREM.CBL",
+        "total_lines": 691
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 35
+      }
+    },
+    {
+      "id": "FILE:PREMIUM-IN",
+      "label": "File",
+      "properties": {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 39
+      }
+    },
+    {
+      "id": "FILE:PREMIUM-OUT",
+      "label": "File",
+      "properties": {
+        "name": "PREMIUM-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 43
+      }
+    },
+    {
+      "id": "FILE:ERROR-OUT",
+      "label": "File",
+      "properties": {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 47
+      }
+    },
+    {
+      "id": "TABLE:PI-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 57
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PI-REC",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:PI-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 61
+      }
+    },
+    {
+      "id": "COLUMN:PI-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 62
+      }
+    },
+    {
+      "id": "COLUMN:PI-PRODUCT-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 63
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 64
+      }
+    },
+    {
+      "id": "COLUMN:PI-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 65
+      }
+    },
+    {
+      "id": "COLUMN:PI-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 66
+      }
+    },
+    {
+      "id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PI-REC",
+        "line_number": 67
+      }
+    },
+    {
+      "id": "COLUMN:PI-CREATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 68
+      }
+    },
+    {
+      "id": "COLUMN:PI-UPDATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 69
+      }
+    },
+    {
+      "id": "TABLE:PRI-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PRI-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PREMIUM-IN",
+        "line_number": 73
+      }
+    },
+    {
+      "id": "COLUMN:PRI-PREMIUM-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRI-REC",
+        "line_number": 76
+      }
+    },
+    {
+      "id": "COLUMN:PRI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRI-REC",
+        "line_number": 77
+      }
+    },
+    {
+      "id": "COLUMN:PRI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 78
+      }
+    },
+    {
+      "id": "COLUMN:PRI-EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 79
+      }
+    },
+    {
+      "id": "COLUMN:PRI-UNEARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRI-REC",
+        "line_number": 80
+      }
+    },
+    {
+      "id": "COLUMN:PRI-CALCULATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PRI-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PRI-REC",
+        "line_number": 81
+      }
+    },
+    {
+      "id": "TABLE:PRO-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PRO-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PREMIUM-OUT",
+        "line_number": 85
+      }
+    },
+    {
+      "id": "COLUMN:PRO-PREMIUM-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRO-REC",
+        "line_number": 88
+      }
+    },
+    {
+      "id": "COLUMN:PRO-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PRO-REC",
+        "line_number": 89
+      }
+    },
+    {
+      "id": "COLUMN:PRO-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRO-REC",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "COLUMN:PRO-EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRO-REC",
+        "line_number": 91
+      }
+    },
+    {
+      "id": "COLUMN:PRO-UNEARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PRO-REC",
+        "line_number": 92
+      }
+    },
+    {
+      "id": "COLUMN:PRO-CALCULATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PRO-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PRO-REC",
+        "line_number": 93
+      }
+    },
+    {
+      "id": "TABLE:ER-REC",
+      "label": "Table",
+      "properties": {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "ERROR-OUT",
+        "line_number": 97
+      }
+    },
+    {
+      "id": "COLUMN:ER-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "ER-REC",
+        "line_number": 100
+      }
+    },
+    {
+      "id": "COLUMN:ER-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(4)",
+        "parent": "ER-REC",
+        "line_number": 101
+      }
+    },
+    {
+      "id": "COLUMN:ER-MESSAGE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(54)",
+        "parent": "ER-REC",
+        "line_number": 102
+      }
+    },
+    {
+      "id": "VARIABLE:WS-STATUS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-STATUS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 108
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PI-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PI-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 110
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PR-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PR-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 111
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PO-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PO-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 112
+      }
+    },
+    {
+      "id": "VARIABLE:WS-ER-ST",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-ER-ST",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC XX",
+        "parent": "WS-STATUS",
+        "line_number": 113
+      }
+    },
+    {
+      "id": "VARIABLE:WS-SW",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-SW",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 115
+      }
+    },
+    {
+      "id": "VARIABLE:WS-POL-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-POL-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": "WS-SW",
+        "line_number": 117
+      }
+    },
+    {
+      "id": "VARIABLE:POL-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "POL-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 118
+      }
+    },
+    {
+      "id": "VARIABLE:WS-PREM-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-PREM-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": "WS-SW",
+        "line_number": 120
+      }
+    },
+    {
+      "id": "VARIABLE:PREM-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "PREM-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 121
+      }
+    },
+    {
+      "id": "VARIABLE:WS-POL-FOUND",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-POL-FOUND",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": "WS-SW",
+        "line_number": 123
+      }
+    },
+    {
+      "id": "VARIABLE:WS-FATAL",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-FATAL",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": "WS-SW",
+        "line_number": 124
+      }
+    },
+    {
+      "id": "VARIABLE:FATAL-ERROR",
+      "label": "Variable",
+      "properties": {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 125
+      }
+    },
+    {
+      "id": "VARIABLE:WS-DATE-VALID",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-DATE-VALID",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": "WS-SW",
+        "line_number": 127
+      }
+    },
+    {
+      "id": "VARIABLE:WS-TERM-DAYS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-TERM-DAYS",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(9)",
+        "parent": null,
+        "line_number": 150
+      }
+    },
+    {
+      "id": "VARIABLE:WS-EARNED-DAYS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-EARNED-DAYS",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(9)",
+        "parent": null,
+        "line_number": 151
+      }
+    },
+    {
+      "id": "VARIABLE:WS-EARNED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-EARNED",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(9)V99",
+        "parent": "WS-AMOUNTS",
+        "line_number": 144
+      }
+    },
+    {
+      "id": "VARIABLE:WS-UNEARNED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-UNEARNED",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(9)V99",
+        "parent": "WS-AMOUNTS",
+        "line_number": 145
+      }
+    },
+    {
+      "id": "PROCEDURE:MAIN",
+      "label": "Procedure",
+      "properties": {
+        "name": "MAIN",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 205
+      }
+    },
+    {
+      "id": "PROCEDURE:OPEN-FILES",
+      "label": "Procedure",
+      "properties": {
+        "name": "OPEN-FILES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 241
+      }
+    },
+    {
+      "id": "PROCEDURE:READ-POLICY",
+      "label": "Procedure",
+      "properties": {
+        "name": "READ-POLICY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 279
+      }
+    },
+    {
+      "id": "PROCEDURE:READ-PREMIUM",
+      "label": "Procedure",
+      "properties": {
+        "name": "READ-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 323
+      }
+    },
+    {
+      "id": "PROCEDURE:PROCESS-PREMIUM",
+      "label": "Procedure",
+      "properties": {
+        "name": "PROCESS-PREMIUM",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 369
+      }
+    },
+    {
+      "id": "PROCEDURE:FIND-POLICY",
+      "label": "Procedure",
+      "properties": {
+        "name": "FIND-POLICY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 389
+      }
+    },
+    {
+      "id": "PROCEDURE:VALIDATE-DATES",
+      "label": "Procedure",
+      "properties": {
+        "name": "VALIDATE-DATES",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 411
+      }
+    },
+    {
+      "id": "PROCEDURE:VALIDATE-CALENDAR-DATE",
+      "label": "Procedure",
+      "properties": {
+        "name": "VALIDATE-CALENDAR-DATE",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 479
+      }
+    },
+    {
+      "id": "PROCEDURE:SET-MAX-DAY",
+      "label": "Procedure",
+      "properties": {
+        "name": "SET-MAX-DAY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 507
+      }
+    },
+    {
+      "id": "PROCEDURE:CHECK-LEAP-YEAR",
+      "label": "Procedure",
+      "properties": {
+        "name": "CHECK-LEAP-YEAR",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 535
+      }
+    },
+    {
+      "id": "PROCEDURE:CALCULATE-EARNED",
+      "label": "Procedure",
+      "properties": {
+        "name": "CALCULATE-EARNED",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "EARNPREM",
+        "line_number": 559
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T001",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Convert effective, expiry and calculation dates to integer Julian values.",
+        "expression": "FUNCTION INTEGER-OF-DATE(date)",
+        "line_number": 564
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T002",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T002",
+        "rule_type": "CALCULATION",
+        "description": "Calculate total term days inclusive of start and end dates.",
+        "expression": "WS-EXP-INT - WS-EFF-INT + 1",
+        "line_number": 568
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T003",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T003",
+        "rule_type": "CONDITIONAL",
+        "description": "If calculation date is before effective date, earned days = 0.",
+        "expression": "IF WS-CALC-INT < WS-EFF-INT THEN WS-EARNED-DAYS = 0",
+        "line_number": 572
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T004",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "If calculation date is after expiry date, earned days = term days.",
+        "expression": "IF WS-CALC-INT > WS-EXP-INT THEN WS-EARNED-DAYS = WS-TERM-DAYS",
+        "line_number": 576
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T005",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T005",
+        "rule_type": "CALCULATION",
+        "description": "When calculation date falls within the policy term, earned days = calculation date - effective date + 1.",
+        "expression": "WS-EARNED-DAYS = WS-CALC-INT - WS-EFF-INT + 1",
+        "line_number": 580
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T006",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T006",
+        "rule_type": "CALCULATION",
+        "description": "Earned premium = Written premium * Earned‑Days / Term‑Days.",
+        "expression": "WS-EARNED = PI-WRITTEN-PREMIUM * WS-EARNED-DAYS / WS-TERM-DAYS",
+        "line_number": 588
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T007",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T007",
+        "rule_type": "CALCULATION",
+        "description": "Unearned premium = Written premium – Earned premium.",
+        "expression": "WS-UNEARNED = PI-WRITTEN-PREMIUM - WS-EARNED",
+        "line_number": 590
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T008",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T008",
+        "rule_type": "MAPPING",
+        "description": "Populate output record PRO-REC with calculated values and original identifiers.",
+        "expression": "MOVE ...",
+        "line_number": 595
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T009",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T009",
+        "rule_type": "FILTER",
+        "description": "Skip premium processing when PREM-EOF or a fatal error is set.",
+        "expression": "PERFORM UNTIL PREM-EOF OR FATAL-ERROR",
+        "line_number": 213
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T010",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T010",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Policy records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+        "expression": "IF WS-PREV-POLICY NOT = LOW-VALUES AND PI-POLICY-NO < WS-PREV-POLICY THEN FATAL-ERROR",
+        "line_number": 298
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T011",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T011",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Premium records must be sorted ascending by policy number; out‑of‑order input raises a fatal error.",
+        "expression": "IF WS-PREV-PREMIUM-POLICY NOT = LOW-VALUES AND PRI-POLICY-NO < WS-PREV-PREMIUM-POLICY THEN FATAL-ERROR",
+        "line_number": 336
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T012",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T012",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Effective date must be a valid calendar date; otherwise write error E002.",
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E002', ER-MESSAGE='INVALID POLICY EFFECTIVE DATE'",
+        "line_number": 419
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T013",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T013",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Expiry date must be a valid calendar date; otherwise write error E003.",
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E003', ER-MESSAGE='INVALID POLICY EXPIRY DATE'",
+        "line_number": 433
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T014",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T014",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Calculation date must be a valid calendar date; otherwise write error E006.",
+        "expression": "IF WS-DATE-VALID <> 'Y' THEN ER-CODE='E006', ER-MESSAGE='INVALID PREMIUM CALCULATION DATE'",
+        "line_number": 447
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T015",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T015",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Expiry date cannot be earlier than effective date; otherwise write error E004.",
+        "expression": "IF PI-EXPIRY-DATE < PI-EFFECTIVE-DATE THEN ER-CODE='E004', ER-MESSAGE='EXPIRY DATE BEFORE EFFECTIVE DATE'",
+        "line_number": 459
+      }
+    },
+    {
+      "id": "TRANSFORMATION:EARNPREM.CBL:T016",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T016",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Term days must be greater than zero; otherwise write error E005.",
+        "expression": "IF WS-TERM-DAYS <= 0 THEN ER-CODE='E005', ER-MESSAGE='POLICY TERM DAYS INVALID'",
+        "line_number": 574
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "FILE:PREMIUM-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "FILE:PREMIUM-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "FILE:ERROR-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "TABLE:PI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PI-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "TABLE:PRI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-PREMIUM-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-UNEARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRI-CALCULATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "TABLE:PRO-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-PREMIUM-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-UNEARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:PRO-CALCULATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "TABLE:ER-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:ER-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:ER-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "COLUMN:ER-MESSAGE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-PI-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-PR-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-PO-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-ER-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-SW",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-POL-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:POL-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-PREM-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:PREM-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-POL-FOUND",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-FATAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:FATAL-ERROR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-DATE-VALID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-TERM-DAYS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-EARNED-DAYS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-EARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "VARIABLE:WS-UNEARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:MAIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:OPEN-FILES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:READ-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:READ-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:PROCESS-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:FIND-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:VALIDATE-DATES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:VALIDATE-CALENDAR-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:SET-MAX-DAY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:CHECK-LEAP-YEAR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:EARNPREM.CBL",
+      "target_id": "PROCEDURE:CALCULATE-EARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:PI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 35,
+        "description": "Input file POLICY-IN holds policy master records defined by layout PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 60,
+        "description": "Policy number field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 61,
+        "description": "Customer identifier field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 62,
+        "description": "Agent identifier field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 63,
+        "description": "Product type code field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 64,
+        "description": "Policy status code field within PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 65,
+        "description": "Effective date of the policy."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 66,
+        "description": "Expiry date of the policy."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 67,
+        "description": "Written premium amount on the policy."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 68,
+        "description": "Record creation date."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 69,
+        "description": "Record last update date."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-IN",
+      "target_id": "TABLE:PRI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 39,
+        "description": "Input file PREMIUM-IN holds premium transaction records defined by layout PRI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-PREMIUM-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 76,
+        "description": "Unique identifier for the premium transaction."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 77,
+        "description": "Policy number referenced by the premium transaction."
+      }
+    },
+    {
+      "source_id": "TABLE:PRI-REC",
+      "target_id": "TABLE:PRI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 78,
+        "description": "Written premium amount from the transaction."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PRI-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Premium records are matched to policy records using the policy number field (PI-POLICY-NO = PRI-POLICY-NO)."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-OUT",
+      "target_id": "TABLE:PRO-REC",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Calculated earned/unearned premium records are written to output file PREMIUM-OUT."
+      }
+    },
+    {
+      "source_id": "TABLE:ERROR-OUT",
+      "target_id": "TABLE:ER-REC",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.85,
+        "evidence_line": null,
+        "description": "Error records are written to output file ERROR-OUT."
+      }
+    }
+  ]
+}

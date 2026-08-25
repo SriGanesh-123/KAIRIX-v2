@@ -1,0 +1,51 @@
+# Source Code Summary: Extract_Account
+
+**Business Domain:** PolicyCenter Account Master Data (Insurance Data Warehouse)
+
+## Purpose
+Extracts ACCOUNT master records from the Guidewire PolicyCenter PostgreSQL replica, cleanses and validates the data, and loads the clean rows into the insurance data warehouse while quarantining invalid rows and logging audit information.
+
+## High-Level Narrative
+When the package runs it first inserts a row into etl.etl_audit_log marking the start of the Extract_Account run. The main Data Flow task then reads all columns from public.account via the CM_Guidewire_PG_Source connection. Each row passes through a Derived Column component that trims whitespace from account_name and forces state_code to upper‑case. A second Derived Column adds ETL metadata columns (etl_load_date = current timestamp, etl_source_system = 'Guidewire PolicyCenter'). The rows are then evaluated by a Conditional Split that enforces three business rules: created_date cannot be in the future, account_status must be ACTIVE, INACTIVE or CLOSED, and account_number must match the pattern ACC****** (9 characters total). Valid rows are directed to an OLE DB Destination that fast‑loads them into the staging table stg.account in the DW. Invalid rows, source‑error rows, and any lookup‑no‑match rows are merged by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, an Execute SQL task updates the audit log with end_time, status = COMPLETED, and the row counts (RowsRead, RowsInserted, RowsRejected). An OnError event handler captures any package‑level errors and inserts details into etl.etl_error_log.
+
+## Inputs
+- public.account (Guidewire PostgreSQL source table)
+- etl.etl_audit_log (used for start/end logging)
+- etl.etl_error_log (used for error logging via OnError handler)
+
+## Outputs
+- stg.account (staging table in the DW for validated account rows)
+- stg.error_quarantine (table for rejected/invalid rows)
+- etl.etl_audit_log (audit record updated with row counts and timestamps)
+- etl.etl_error_log (error records captured by OnError handler)
+
+## Key Transformations
+- SELECT account_id, account_number, account_name, industry_type, state_code, account_status, created_date, updated_timestamp FROM public.account
+- TRIM(account_name) to remove leading/trailing whitespace
+- UPPER(TRIM(state_code)) to standardize state codes
+- Add etl_load_date = GETDATE() and etl_source_system = 'Guidewire PolicyCenter'
+- Conditional split applying business rule validation (future‑date check, status list, account_number pattern/length)
+- Union All to combine source error output, invalid rows, and lookup‑no‑match rows into a single error stream
+- Fast load (bulk insert) into stg.account with commit size 10,000
+- Insert rejected rows into stg.error_quarantine
+
+## Key Dependencies
+- Connection Manager CM_Guidewire_PG_Source (Npgsql provider, read‑only replica)
+- Connection Manager CM_DW_PG_Target (Npgsql provider, DW target)
+- Execute SQL Task – Log Package Start (writes to etl.etl_audit_log)
+- Execute SQL Task – Log Package End (updates etl.etl_audit_log with row counts)
+- Execute SQL Task – Log Error (writes to etl.etl_error_log)
+- Derived Column components for cleansing and metadata enrichment
+- Conditional Split component for business rule validation
+- Union All component for error stream consolidation
+- OLE DB Destination components for stg.account and stg.error_quarantine
+- Npgsql PostgreSQL provider libraries
+
+## Business Rules
+- created_date must be less than or equal to the current system date (no future‑dated records).
+- account_status must be one of the allowed values: 'ACTIVE', 'INACTIVE', or 'CLOSED'.
+- account_number must start with the literal 'ACC' and be exactly 9 characters long.
+- account_name is trimmed of surrounding whitespace before loading.
+- state_code is trimmed and converted to upper case to ensure consistent coding.
+- Rows that fail any of the above validations are routed to the error quarantine table.
+- Audit logging records start time, end time, status, and row counts for monitoring and reconciliation.
