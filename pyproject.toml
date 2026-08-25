@@ -7,7 +7,7 @@ name = "kairix"
 version = "1.0.0"
 description = "Legacy Reverse Engineering & Knowledge Extraction Platform"
 readme = "README.md"
-requires-python = ">=3.10, <=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "tree-sitter==0.26.0",
     "tree-sitter-language-pack==1.14.3",
