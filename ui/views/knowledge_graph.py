@@ -43,7 +43,7 @@ def render_knowledge_graph() -> None:
     scope_options.extend([f"📄 {fn}" for fn in all_file_names])
 
     # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Limit + Refresh)
-    col_search, col_scope, col_type, col_limit, col_reset = st.columns([3.6, 2.8, 1.8, 1.0, 0.8])
+    col_search, col_scope, col_type, col_limit, col_reset = st.columns([3.5, 2.7, 1.8, 1.0, 1.0])
 
     with col_search:
         pre_search = st.session_state.pop("graph_search_term", None)
@@ -51,19 +51,17 @@ def render_knowledge_graph() -> None:
             st.session_state["graph_search_input"] = pre_search
 
         search_query = st.text_input(
-            "Search Node / Entity / File:",
-            placeholder="e.g. EARNPREM, PolicyCenter, Extract_Account",
+            "Search Node / File:",
+            placeholder="Search node or file...",
             key="graph_search_input",
-            label_visibility="collapsed",
         )
 
     with col_scope:
         selected_scope = st.selectbox(
-            "Graph Scope / Source File:",
+            "Graph Scope:",
             options=scope_options,
             index=0,
             key="kg_single_scope_select",
-            label_visibility="collapsed",
         )
 
     with col_type:
@@ -73,14 +71,14 @@ def render_knowledge_graph() -> None:
             options=type_options,
             index=0,
             key="graph_type_filter_select",
-            label_visibility="collapsed",
         )
 
     with col_limit:
-        max_nodes = st.selectbox("Limit", options=[30, 50, 80, 150], index=2, key="graph_limit_select", label_visibility="collapsed")
+        max_nodes = st.selectbox("Max Nodes:", options=[30, 50, 80, 150], index=2, key="graph_limit_select")
 
     with col_reset:
-        if st.button("🔄", use_container_width=True, help="Refresh Graph"):
+        st.markdown("<div style='margin-top: 1.55rem;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Refresh", use_container_width=True, help="Refresh Graph"):
             st.session_state.pop("graph_override_subgraph", None)
             st.rerun()
 
@@ -164,8 +162,8 @@ def render_knowledge_graph() -> None:
             nodes = filtered_nodes
             edges = [e for e in edges if str(e.get("source")) in filtered_node_ids and str(e.get("target")) in filtered_node_ids]
 
-    # Layout: Graph Canvas on Left (68%), Node Details on Right (32%)
-    col_canvas, col_details = st.columns([68, 32])
+    # Layout: Graph Canvas on Left (70%), Node Details on Right (30%)
+    col_canvas, col_details = st.columns([70, 30])
 
     with col_canvas:
         st.markdown(
@@ -181,12 +179,19 @@ def render_knowledge_graph() -> None:
         render_graph_canvas(
             nodes=nodes,
             edges=edges,
-            height=660,
+            height=700,
             selected_node_id=selected_node.get("id") if selected_node else None,
         )
 
     with col_details:
-        st.markdown("#### Node Inspector")
+        st.markdown(
+            """
+            <div style="font-size:1.05rem; font-weight:800; color:#0F172A; margin-bottom:0.3rem;">
+                Node Inspector
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         if nodes:
             node_labels_dict = {}
@@ -196,9 +201,10 @@ def render_knowledge_graph() -> None:
                 node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
 
             chosen_label = st.selectbox(
-                "Select Canvas Node to Inspect:",
+                "Select Node to Inspect:",
                 options=list(node_labels_dict.keys()),
                 key="canvas_node_inspect_select",
+                label_visibility="collapsed",
             )
             chosen_id = node_labels_dict.get(chosen_label, nodes[0].get("id"))
             selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
@@ -210,13 +216,13 @@ def render_knowledge_graph() -> None:
 
         render_node_details_panel(selected_node, connected_edges=connected_edges)
 
-        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
         if selected_node:
             node_name = selected_node.get("name") or selected_node.get("file_name") or ""
             if node_name:
+                st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
-                    if st.button("Trace Lineage", use_container_width=True):
+                    if st.button("🔍 Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
                         lineage_graph = GraphService.trace_lineage(node_name)
                         if lineage_graph.get("nodes"):
                             st.session_state["graph_override_subgraph"] = lineage_graph
@@ -224,7 +230,7 @@ def render_knowledge_graph() -> None:
                         else:
                             st.info("No extended lineage edges found.")
                 with col_b2:
-                    if st.button("Ask Agent", use_container_width=True):
+                    if st.button("💬 Ask Agent", use_container_width=True, key="btn_ask_agent"):
                         st.session_state["pending_investigation_query"] = f"Explain the dependencies and business logic associated with graph node {node_name}"
                         st.session_state["navigate_to_page"] = "Investigation Agent"
                         st.rerun()

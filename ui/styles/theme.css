@@ -37,22 +37,33 @@ html, body, [class*="css"] {
   background-color: var(--bg-primary);
 }
 
-/* Main Container Padding */
-.block-container {
-  padding-top: 1.5rem !important;
+/* Main Content Container Padding & Header Clearance */
+.main .block-container,
+section.main .block-container,
+div[data-testid="stAppViewBlockContainer"] {
+  padding-top: 3.5rem !important;
   padding-bottom: 3rem !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
   max-width: 96% !important;
 }
 
-/* Sidebar Top Alignment */
+/* Sidebar Top Alignment & Stacking */
 section[data-testid="stSidebar"] {
   background-color: #FFFFFF !important;
+  z-index: 99 !important;
 }
 
 section[data-testid="stSidebar"] .block-container {
-  padding-top: 0.25rem !important;
+  padding-top: 0.5rem !important;
   padding-left: 1.1rem !important;
   padding-right: 1.1rem !important;
+}
+
+/* Streamlit Header Bar */
+header[data-testid="stHeader"] {
+  background: transparent !important;
+  z-index: 10 !important;
 }
 
 
@@ -569,48 +580,56 @@ div[data-testid="stRadio"] > div[role="radiogroup"] {
   background: #F1F5F9;
   padding: 0.3rem 0.4rem;
   border-radius: 8px;
-  border: 1px solid #E2E8F0;
-  width: fit-content;
-  margin-bottom: 0.5rem;
+  display: inline-flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.4rem !important;
+  background: #F1F5F9 !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 10px !important;
+  padding: 0.35rem 0.6rem !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
 }
 
 div[data-testid="stRadio"] > div[role="radiogroup"] label {
-  background: transparent;
-  padding: 0.35rem 0.85rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-  cursor: pointer;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 7px !important;
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  cursor: pointer !important;
   margin-right: 0 !important;
-  transition: all 0.15s ease-in-out;
+  transition: all 0.15s ease-in-out !important;
 }
 
 div[data-testid="stRadio"] > div[role="radiogroup"] label:hover {
-  color: #0284C7;
-  background: rgba(2, 132, 199, 0.08);
+  color: #0284C7 !important;
+  background: #E0F2FE !important;
+  border-color: #BAE6FD !important;
 }
 
-/* AI Prompt Search Input Styling */
+/* Form & Input Fields */
 div[data-testid="stForm"] {
   border: 1px solid #CBD5E1 !important;
-  border-radius: 16px !important;
+  border-radius: 14px !important;
   background: #FFFFFF !important;
   padding: 1.25rem 1.5rem !important;
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05) !important;
   transition: all 0.2s ease-in-out;
 }
 
 div[data-testid="stForm"]:focus-within {
   border-color: #0284C7 !important;
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15), 0 6px 16px -2px rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15) !important;
 }
 
 div[data-testid="stTextInput"] input {
-  border-radius: 10px !important;
-  font-size: 0.95rem !important;
-  padding: 0.65rem 0.95rem !important;
-  border: 1px solid #E2E8F0 !important;
+  border-radius: 8px !important;
+  font-size: 0.9rem !important;
+  padding: 0.55rem 0.85rem !important;
+  border: 1px solid #94A3B8 !important;
+  background: #FFFFFF !important;
 }
 
 div[data-testid="stTextInput"] input:focus {
@@ -618,18 +637,75 @@ div[data-testid="stTextInput"] input:focus {
   box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
 }
 
-/* Standard Sleek Compact Button Styling */
-div[data-testid="stButton"] > button {
+/* Selectbox Dropdown Box Styling */
+div[data-testid="stSelectbox"] label p {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  margin-bottom: 0.25rem !important;
+}
+
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+  background: #FFFFFF !important;
+  border: 1px solid #94A3B8 !important;
+  border-radius: 8px !important;
   min-height: 38px !important;
   height: 38px !important;
-  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
   font-size: 0.88rem !important;
+  font-weight: 500 !important;
+  color: #0F172A !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
+  border-color: #0284C7 !important;
+  box-shadow: 0 0 0 1px #0284C7 !important;
+}
+
+/* Standard Sleek Compact Button Styling */
+div[data-testid="stButton"] > button {
+  min-height: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  font-size: 0.85rem !important;
   font-weight: 600 !important;
-  padding: 0.4rem 1rem !important;
+  padding: 0.35rem 0.9rem !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  border: 1px solid #CBD5E1 !important;
+  background: #FFFFFF !important;
+  color: #1E293B !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
   transition: all 0.15s ease-in-out !important;
+}
+
+div[data-testid="stButton"] > button:hover {
+  border-color: #0284C7 !important;
+  background: #F0F9FF !important;
+  color: #0284C7 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12) !important;
+}
+
+/* Primary Button Styling */
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
+  background: #0284C7 !important;
+  border-color: #0284C7 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
+  background: #0369A1 !important;
+  border-color: #0369A1 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.35) !important;
 }
 
 /* Suggested Question Chips (Only applied inside investigation chips container) */
@@ -665,15 +741,109 @@ div[data-testid="stButton"] > button {
   box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
 }
 
-.suggested-chips-container div[data-testid="stButton"] > button p {
-  font-size: 0.84rem !important;
-  line-height: 1.35 !important;
-  text-align: center !important;
-  margin: 0 !important;
-  display: -webkit-box !important;
-  -webkit-line-clamp: 4 !important;
-  -webkit-box-orient: vertical !important;
-  overflow: hidden !important;
+/* Live Pipeline Progress Animations */
+@keyframes pulse-glow {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.75; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes progress-shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
+.badge-running-pulse {
+  background: #FEF3C7 !important;
+  color: #B45309 !important;
+  border: 1px solid #FCD34D !important;
+  font-size: 0.72rem !important;
+  font-weight: 800 !important;
+  padding: 0.2rem 0.55rem !important;
+  border-radius: 12px !important;
+  animation: pulse-glow 1.5s infinite ease-in-out !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+}
+
+.live-spinner-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background-color: #D97706;
+  border-radius: 50%;
+  animation: pulse-glow 0.8s infinite alternate;
+}
+
+.pipeline-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: #E2E8F0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.35rem 0;
+}
+
+.pipeline-progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
+}
+
+.fill-blue {
+  background: linear-gradient(90deg, #0284C7, #38BDF8);
+}
+
+.fill-purple {
+  background: linear-gradient(90deg, #4F46E5, #818CF8);
+}
+
+.fill-green {
+  background: linear-gradient(90deg, #059669, #34D399);
+}
+
+/* Node Inspector Action Buttons (Trace Lineage & Ask Agent) */
+div.st-key-btn_trace_lineage > button,
+div[data-testid="stButton"] > button:has(div:contains("Trace Lineage")),
+div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")) {
+  background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid #4338CA !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+div.st-key-btn_trace_lineage > button:hover,
+div[data-testid="stButton"] > button:has(div:contains("Trace Lineage")):hover,
+div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")):hover {
+  background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
+  color: #FFFFFF !important;
+  border-color: #3730A3 !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
+  transform: translateY(-1px) !important;
+}
+
+div.st-key-btn_ask_agent > button,
+div[data-testid="stButton"] > button:has(div:contains("Ask Agent")),
+div[data-testid="stButton"] > button:has(p:contains("Ask Agent")) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid #047857 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+div.st-key-btn_ask_agent > button:hover,
+div[data-testid="stButton"] > button:has(div:contains("Ask Agent")):hover,
+div[data-testid="stButton"] > button:has(p:contains("Ask Agent")):hover {
+  background: linear-gradient(135deg, #047857 0%, #065F46 100%) !important;
+  color: #FFFFFF !important;
+  border-color: #065F46 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35) !important;
+  transform: translateY(-1px) !important;
 }
 
 

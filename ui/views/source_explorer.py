@@ -185,16 +185,16 @@ def render_source_explorer() -> None:
     prev_selected = st.session_state.get("selected_source_file")
     default_idx = file_options.index(prev_selected) if prev_selected in file_options else 0
 
-    col_sel, col_quick = st.columns([3.6, 1.4])
+    col_sel, col_quick = st.columns([3.8, 1.2])
     with col_sel:
         selected_file_name = st.selectbox(
-            "Select a Legacy Source File:",
+            "Select Source File:",
             options=file_options,
             index=default_idx,
             key="source_explorer_file_select",
         )
     with col_quick:
-        st.markdown("<div style='margin-top: 1.75rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 1.55rem;'></div>", unsafe_allow_html=True)
         if st.button("🔍 Investigate File", use_container_width=True):
             st.session_state["pending_investigation_query"] = f"Explain the business logic and dependencies in {selected_file_name}"
             st.session_state["navigate_to_page"] = "Investigation Agent"

@@ -31,6 +31,10 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "command_label": "python -m knowledge_engineering_agent",
         "description": "Deterministic AST parsing, evidence building, multi-pass LLM review, and canonical package generation.",
         "status": "READY",
+        "current_step": "Ready to execute",
+        "progress_pct": 0,
+        "completed_items": [],
+        "active_item": None,
         "start_time": None,
         "end_time": None,
         "duration": None,
@@ -43,6 +47,10 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "command_label": "python -m graph_layer",
         "description": "Ingest canonical knowledge packages, AST symbols, and cross-file relationships into Neo4j Knowledge Graph.",
         "status": "READY",
+        "current_step": "Ready to execute",
+        "progress_pct": 0,
+        "completed_items": [],
+        "active_item": None,
         "start_time": None,
         "end_time": None,
         "duration": None,
@@ -55,6 +63,10 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "command_label": "python -m vector_layer",
         "description": "Chunk source files, embed with SentenceTransformer, and ingest into Qdrant collections (chunks & summaries).",
         "status": "READY",
+        "current_step": "Ready to execute",
+        "progress_pct": 0,
+        "completed_items": [],
+        "active_item": None,
         "start_time": None,
         "end_time": None,
         "duration": None,
@@ -63,6 +75,10 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "error": None,
     },
 }
+
+
+# Global process tracker for running subprocesses
+_RUNNING_PROCESSES: Dict[str, subprocess.Popen] = {}
 
 
 class PipelineService:
@@ -87,6 +103,40 @@ class PipelineService:
         """Checks if a layer is currently in the RUNNING state."""
         with _LOCK:
             return _PIPELINE_STATES.get(layer_key, {}).get("status") == "RUNNING"
+
+    @classmethod
+    def stop_layer(cls, layer_key: str) -> bool:
+        """
+        Terminates a running pipeline process immediately.
+        """
+        with _LOCK:
+            proc = _RUNNING_PROCESSES.get(layer_key)
+            layer = _PIPELINE_STATES.get(layer_key)
+            if not proc or not layer or layer.get("status") != "RUNNING":
+                return False
+
+        try:
+            # Terminate subprocess tree on Windows / POSIX
+            if sys.platform == "win32":
+                subprocess.call(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                proc.terminate()
+
+            with _LOCK:
+                _RUNNING_PROCESSES.pop(layer_key, None)
+                layer["status"] = "STOPPED"
+                layer["end_time"] = time.time()
+                if layer.get("start_time"):
+                    layer["duration"] = round(layer["end_time"] - layer["start_time"], 2)
+                layer["current_step"] = "Stopped by user"
+                layer["logs"].append(
+                    f"[{time.strftime('%H:%M:%S')}] 🛑 Execution cancelled by user."
+                )
+            logger.info("Successfully terminated pipeline process for %s", layer_key)
+            return True
+        except Exception as e:
+            logger.error("Failed to stop layer %s: %s", layer_key, e)
+            return False
 
     @classmethod
     def run_layer(
@@ -151,11 +201,17 @@ class PipelineService:
     @classmethod
     def _execution_worker(cls, layer_key: str, cmd: List[str]) -> None:
         """Worker function that runs the subprocess and streams stdout/stderr."""
-        logger.info("Starting pipeline execution for %s: %s", layer_key, " ".join(cmd))
+        layer_names = {
+            "knowledge_engineering": "Layer 2 — Deterministic AST & LLM Knowledge Extraction",
+            "graph_layer": "Layer 3 — Neo4j Knowledge Graph Ingestion",
+            "vector_layer": "Layer 3 — Qdrant Semantic Vector Indexing",
+        }
+        human_name = layer_names.get(layer_key, layer_key)
+        logger.info("Starting pipeline execution for %s", human_name)
 
         with _LOCK:
             _PIPELINE_STATES[layer_key]["logs"].append(
-                f"[{time.strftime('%H:%M:%S')}] Launching command: {' '.join(cmd)}"
+                f"[{time.strftime('%H:%M:%S')}] 🚀 Initialized {human_name} pipeline."
             )
 
         start_time = time.time()
@@ -177,16 +233,67 @@ class PipelineService:
                 env=env,
             )
 
+            with _LOCK:
+                _RUNNING_PROCESSES[layer_key] = process
+
             # Stream output line-by-line
             if process.stdout:
                 for raw_line in iter(process.stdout.readline, ""):
                     line = raw_line.rstrip()
                     if line:
                         with _LOCK:
-                            _PIPELINE_STATES[layer_key]["logs"].append(line)
+                            stt = _PIPELINE_STATES[layer_key]
+                            stt["logs"].append(line)
                             # Keep maximum 1000 lines in buffer
-                            if len(_PIPELINE_STATES[layer_key]["logs"]) > 1000:
-                                _PIPELINE_STATES[layer_key]["logs"] = _PIPELINE_STATES[layer_key]["logs"][-1000:]
+                            if len(stt["logs"]) > 1000:
+                                stt["logs"] = stt["logs"][-1000:]
+
+                            # Parse real-time progress events
+                            # 1. File processing events (e.g. "[1/6] Processing ... PREMCALC.CBL...")
+                            m_file = re.search(r"\[(\d+)/(\d+)\]\s+Processing\s+(?:\[.*?\]\s+)?([A-Za-z0-9_\-\.]+)", line)
+                            if m_file:
+                                cur_idx, total_cnt, fname = m_file.group(1), m_file.group(2), m_file.group(3)
+                                stt["current_step"] = f"Processing ({cur_idx}/{total_cnt}): {fname}"
+                                stt["active_item"] = fname
+                                try:
+                                    stt["progress_pct"] = int((int(cur_idx) - 0.5) / int(total_cnt) * 100)
+                                except Exception:
+                                    pass
+
+                            m_saved = re.search(r"\[\+\]\s+Saved:\s+([A-Za-z0-9_\-\.]+)", line)
+                            if m_saved:
+                                sfname = m_saved.group(1)
+                                if sfname not in stt["completed_items"]:
+                                    stt["completed_items"].append(sfname)
+                                    try:
+                                        if len(stt["completed_items"]) > 0:
+                                            stt["progress_pct"] = min(95, int(len(stt["completed_items"]) / 6 * 100))
+                                    except Exception:
+                                        pass
+
+                            # 2. Graph layer events
+                            if "[Neo4j]" in line:
+                                clean_line = line.replace("[Neo4j]", "").strip()
+                                stt["current_step"] = clean_line
+                                stt["active_item"] = "Neo4j Graph"
+                                if "Connecting" in line or "Connected" in line:
+                                    stt["progress_pct"] = 20
+                                elif "Loading" in line or "Ingesting" in line:
+                                    stt["progress_pct"] = 55
+                                elif "discovery" in line or "complete" in line.lower():
+                                    stt["progress_pct"] = 90
+
+                            # 3. Vector layer events
+                            if "[Qdrant]" in line:
+                                clean_line = line.replace("[Qdrant]", "").strip()
+                                stt["current_step"] = clean_line
+                                stt["active_item"] = "Qdrant Vector Store"
+                                if "Connected" in line:
+                                    stt["progress_pct"] = 25
+                                elif "Ingesting chunks" in line:
+                                    stt["progress_pct"] = 50
+                                elif "Ingested" in line or "summaries" in line:
+                                    stt["progress_pct"] = 85
 
             process.wait()
             exit_code = process.returncode
@@ -200,11 +307,14 @@ class PipelineService:
 
                 if exit_code == 0:
                     _PIPELINE_STATES[layer_key]["status"] = "COMPLETED"
+                    _PIPELINE_STATES[layer_key]["progress_pct"] = 100
+                    _PIPELINE_STATES[layer_key]["current_step"] = f"Finished in {duration}s"
                     _PIPELINE_STATES[layer_key]["logs"].append(
                         f"[{time.strftime('%H:%M:%S')}] Execution completed successfully in {duration}s."
                     )
                 else:
                     _PIPELINE_STATES[layer_key]["status"] = "FAILED"
+                    _PIPELINE_STATES[layer_key]["current_step"] = f"Failed (exit code {exit_code})"
                     err_msg = f"Process exited with non-zero code: {exit_code}"
                     _PIPELINE_STATES[layer_key]["error"] = err_msg
                     _PIPELINE_STATES[layer_key]["logs"].append(
