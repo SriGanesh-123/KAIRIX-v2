@@ -7,6 +7,7 @@ dependencies across COBOL, SQL, and SSIS.
 """
 from __future__ import annotations
 
+import time
 import streamlit as st
 from ui.components.answer_panel import render_answer_panel
 from ui.services.investigation_service import InvestigationService
@@ -81,66 +82,122 @@ def render_investigation() -> None:
         # 4. Suggested Questions Grid (Equal width & height cards)
         st.markdown(
             """
-            <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
-                Suggested Questions:
-            </div>
+            <style>
+            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button {
+                min-height: 98px !important;
+                height: 98px !important;
+                max-height: 98px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                text-align: center !important;
+                padding: 0.75rem 0.6rem !important;
+                font-size: 0.84rem !important;
+                font-weight: 500 !important;
+                line-height: 1.35 !important;
+                border-radius: 10px !important;
+                border: 1px solid #CBD5E1 !important;
+                background: #FFFFFF !important;
+                color: #1E293B !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                white-space: normal !important;
+                word-wrap: break-word !important;
+                overflow: hidden !important;
+            }
+            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button:hover {
+                border-color: #0284C7 !important;
+                background: #F0F9FF !important;
+                color: #0369A1 !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
+            }
+            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button p {
+                font-size: 0.84rem !important;
+                line-height: 1.35 !important;
+                text-align: center !important;
+                margin: 0 !important;
+                display: -webkit-box !important;
+                -webkit-line-clamp: 4 !important;
+                -webkit-box-orient: vertical !important;
+                overflow: hidden !important;
+            }
+            </style>
+            <div class="suggested-chips-container">
+                <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
+                    Suggested Questions:
+                </div>
             """,
             unsafe_allow_html=True,
         )
 
-        chip_cols = st.columns(len(SAMPLE_QUESTIONS))
-        for i, q in enumerate(SAMPLE_QUESTIONS):
-            with chip_cols[i]:
-                if st.button(q, key=f"inv_chip_{i}", use_container_width=True):
-                    st.session_state["pending_investigation_query"] = q
-                    st.rerun()
+        with st.container():
+            st.markdown('<div class="suggested-chips-container">', unsafe_allow_html=True)
+            chip_cols = st.columns(len(SAMPLE_QUESTIONS))
+            for i, q in enumerate(SAMPLE_QUESTIONS):
+                with chip_cols[i]:
+                    if st.button(q, key=f"inv_chip_{i}", use_container_width=True):
+                        st.session_state["pending_investigation_query"] = q
+                        st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
 
-        # 5. Handle Query Execution with Progressive Real-Time Feedback
+        # 5. Handle Query Submission & Background Execution
         target_query = (user_question.strip() if (submit and user_question) else (preloaded_query.strip() if preloaded_query else ""))
 
         if target_query:
-            st.session_state["is_investigating"] = True
-            with st.status(f"Investigating: \"{target_query}\"", expanded=True) as status_box:
-                st.write("1. Intent Classification: Analyzing inquiry scope and target architecture...")
+            task_id = InvestigationService.start_background_query(target_query)
+            st.session_state["active_investigation_task_id"] = task_id
+            st.rerun()
 
-                def progress_callback(stage: str, msg: str):
-                    if stage == "intent":
-                        st.write("• Intent classified successfully")
-                    elif stage == "retrieval":
-                        st.write("2. Hybrid Graph & Vector Retrieval: Querying Neo4j Cypher and Qdrant in parallel...")
-                    elif stage == "retrieval_complete":
-                        st.write(f"• {msg}")
-                    elif stage == "synthesis":
-                        st.write("3. LLM Evidence Synthesis: Generating verified evidence-backed answer...")
-                    elif stage == "complete":
-                        st.write("• Synthesis complete")
+        # 6. Check Active Background Task Status
+        active_task_id = st.session_state.get("active_investigation_task_id")
+        if active_task_id:
+            task_info = InvestigationService.get_task_status(active_task_id)
+            if task_info:
+                status = task_info.get("status")
+                question_text = task_info.get("question", "")
 
-                result = InvestigationService.query(target_query, on_progress=progress_callback)
-                st.session_state["is_investigating"] = False
+                if status == "running":
+                    with st.status(f"⚙️ Investigating: \"{question_text}\"...", expanded=True) as status_box:
+                        logs = task_info.get("progress_log", [])
+                        for log_msg in logs:
+                            st.write(f"• {log_msg}")
+                        st.info("💡 You can freely navigate to Source Explorer, Knowledge Graph, etc. — investigation will continue uninterrupted in the background.")
+                    
+                    # Auto-refresh to check progress
+                    time.sleep(1.0)
+                    st.rerun()
 
-                if result.get("success"):
-                    status_box.update(
-                        label=f"Investigation complete ({result.get('execution_time_sec', 0)}s)",
-                        state="complete",
-                        expanded=False,
-                    )
-                    st.session_state["investigation_history"].insert(0, result)
-                else:
-                    status_box.update(
-                        label=f"Investigation failed: {result.get('error', 'Unknown error')}",
-                        state="error",
-                        expanded=True,
-                    )
-                    st.session_state["investigation_history"].insert(0, result)
+                elif status == "complete":
+                    res = task_info.get("result")
+                    if res:
+                        # Add to history if not duplicate
+                        hist = st.session_state["investigation_history"]
+                        if not any(h.get("question") == res.get("question") and h.get("answer") == res.get("answer") for h in hist):
+                            hist.insert(0, res)
+                    st.session_state["active_investigation_task_id"] = None
+                    InvestigationService.clear_task(active_task_id)
+                    st.toast("✅ Investigation complete!", icon="🎯")
+                    st.rerun()
 
-        # 6. Render Investigation Results History
+                elif status == "error":
+                    err_msg = task_info.get("error", "Unknown error")
+                    st.error(f"⚠️ Investigation failed: {err_msg}")
+                    res = task_info.get("result")
+                    if res:
+                        st.session_state["investigation_history"].insert(0, res)
+                    st.session_state["active_investigation_task_id"] = None
+                    InvestigationService.clear_task(active_task_id)
+
+        # 7. Render Investigation Results History
         history = st.session_state.get("investigation_history", [])
         if history:
             st.markdown(
                 f"""
-                <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem;">
+                <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; margin-top: 1.5rem;">
                     Investigation Answers ({len(history)})
                 </div>
                 """,

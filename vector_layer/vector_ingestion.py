@@ -60,13 +60,13 @@ class VectorIngestion:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def ingest_all(self) -> Dict[str, int]:
+    def ingest_all(self, force: bool = False) -> Dict[str, int]:
         """
         Run full ingestion: summaries + source chunks.
 
         Returns stats dict.
         """
-        self.qdrant.ensure_collections()
+        self.qdrant.ensure_collections(recreate=force)
 
         stats: Dict[str, int] = {
             "summary_files": 0,

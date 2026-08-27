@@ -7,13 +7,20 @@ and caches the agent instance (@st.cache_resource) so embeddings & connections s
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import re
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 import streamlit as st
 
 logger = logging.getLogger("kairix.ui.investigation_service")
+
+# Background thread pool and thread-safe task registry
+_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=3, thread_name_prefix="kairix_investigation")
+_TASKS_LOCK = threading.Lock()
+_ACTIVE_TASKS: Dict[str, Dict[str, Any]] = {}
 
 
 @st.cache_resource(show_spinner=False)
@@ -40,8 +47,76 @@ def _get_cached_investigation_agent():
 
 class InvestigationService:
     """
-    Service wrapper around InvestigationAgent with caching and structured parsing.
+    Service wrapper around InvestigationAgent with background task execution,
+    caching, and structured parsing.
     """
+
+    @classmethod
+    def start_background_query(cls, question: str) -> str:
+        """
+        Starts an investigation query in a persistent background thread that
+        survives Streamlit page navigation. Returns unique task_id.
+        """
+        clean_q = (question or "").strip()
+        task_id = f"task_{abs(hash(clean_q))}_{int(time.time() * 1000)}"
+
+        with _TASKS_LOCK:
+            _ACTIVE_TASKS[task_id] = {
+                "task_id": task_id,
+                "question": clean_q,
+                "status": "running",
+                "stage": "intent",
+                "stage_message": "1. Intent Classification: Analyzing inquiry scope & target architecture...",
+                "progress_log": ["1. Intent Classification: Analyzing inquiry scope & target architecture..."],
+                "result": None,
+                "error": None,
+                "start_time": time.perf_counter(),
+                "execution_time_sec": None,
+            }
+
+        def _worker(tid: str, q: str):
+            def _progress_cb(stage: str, msg: str):
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        _ACTIVE_TASKS[tid]["stage"] = stage
+                        _ACTIVE_TASKS[tid]["stage_message"] = msg
+                        _ACTIVE_TASKS[tid]["progress_log"].append(msg)
+
+            try:
+                res = cls.query(q, on_progress=_progress_cb)
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        if res.get("success"):
+                            _ACTIVE_TASKS[tid]["status"] = "complete"
+                            _ACTIVE_TASKS[tid]["result"] = res
+                            _ACTIVE_TASKS[tid]["execution_time_sec"] = res.get("execution_time_sec")
+                        else:
+                            _ACTIVE_TASKS[tid]["status"] = "error"
+                            _ACTIVE_TASKS[tid]["error"] = res.get("error", "Investigation failed")
+                            _ACTIVE_TASKS[tid]["result"] = res
+            except Exception as e:
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        _ACTIVE_TASKS[tid]["status"] = "error"
+                        _ACTIVE_TASKS[tid]["error"] = str(e)
+
+        _EXECUTOR.submit(_worker, task_id, clean_q)
+        return task_id
+
+    @classmethod
+    def get_task_status(cls, task_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve thread-safe snapshot of task status."""
+        with _TASKS_LOCK:
+            task = _ACTIVE_TASKS.get(task_id)
+            if task:
+                return dict(task)
+            return None
+
+    @classmethod
+    def clear_task(cls, task_id: str) -> None:
+        """Clear task from active registry."""
+        with _TASKS_LOCK:
+            _ACTIVE_TASKS.pop(task_id, None)
 
     @classmethod
     def query(
@@ -70,17 +145,18 @@ class InvestigationService:
             raw_answer = result.answer
             sections = cls._parse_answer_sections(raw_answer)
 
-            # Reconcile sources with result.source_files
-            sources = sections.get("sources", [])
-            if not sources and result.source_files:
-                sources = result.source_files
+            # Comprehensive sources union (LLM text sources + all retrieved evidence source files)
+            parsed_sources = sections.get("sources", [])
+            evidence_sources = result.source_files or []
+            combined_sources = list(dict.fromkeys(parsed_sources + evidence_sources))
+            sources = [s.strip() for s in combined_sources if s and s.strip()]
 
             # Numerical confidence
             conf_val = result.confidence
             if isinstance(conf_val, float):
                 conf_pct = round(conf_val * 100, 1) if conf_val <= 1.0 else round(conf_val, 1)
             else:
-                conf_pct = 85.0
+                conf_pct = 70.0
 
             elapsed = round(time.perf_counter() - start_time, 2)
 
@@ -129,7 +205,7 @@ class InvestigationService:
     @staticmethod
     def _parse_answer_sections(raw_text: str) -> Dict[str, Any]:
         """
-        Parses structured section headers:
+        Parses structured section headers with flexible markdown/plain formats:
         ANSWER, KEY POINTS, DATA FLOW, FORMULA, SOURCES, CONFIDENCE, GAPS.
         """
         sections: Dict[str, Any] = {
@@ -143,19 +219,18 @@ class InvestigationService:
         }
 
         header_patterns = [
-            ("ANSWER", r"(?:^|\n)\s*(?:###\s*)?ANSWER\s*:?\s*\n"),
-            ("KEY POINTS", r"(?:^|\n)\s*(?:###\s*)?KEY POINTS\s*:?\s*\n"),
-            ("DATA FLOW", r"(?:^|\n)\s*(?:###\s*)?DATA FLOW\s*:?\s*\n"),
-            ("FORMULA", r"(?:^|\n)\s*(?:###\s*)?FORMULA\s*:?\s*\n"),
-            ("SOURCES", r"(?:^|\n)\s*(?:###\s*)?SOURCES\s*:?\s*\n"),
-            ("CONFIDENCE", r"(?:^|\n)\s*(?:###\s*)?CONFIDENCE\s*:?\s*\n"),
-            ("GAPS", r"(?:^|\n)\s*(?:###\s*)?GAPS\s*:?\s*\n"),
+            ("ANSWER", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?ANSWER(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("KEY POINTS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?KEY POINTS(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("DATA FLOW", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?DATA FLOW(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("FORMULA", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?FORMULA(?:S|\s*/\s*CALCULATION)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("SOURCES", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:CONTRIBUTING\s+)?SOURCES(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("CONFIDENCE", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?CONFIDENCE(?:\s*&\s*RETRIEVAL\s*INTENT)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("GAPS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:KNOWLEDGE\s+)?GAPS(?:\s*&\s*UNVERIFIED\s*ITEMS)?(?:\s*\*\*)?\s*:?\s*\n?"),
         ]
 
         matches = []
         for name, pattern in header_patterns:
-            m = re.search(pattern, raw_text, re.IGNORECASE)
-            if m:
+            for m in re.finditer(pattern, raw_text, re.IGNORECASE):
                 matches.append((m.start(), m.end(), name))
 
         matches.sort(key=lambda x: x[0])

@@ -17,29 +17,36 @@ def render_source_explorer() -> None:
     """
     Renders the Source Explorer view in light theme.
     """
-    st.markdown("## Source Explorer")
-    st.markdown(
-        "<p style='color: #64748B; margin-top: -0.5rem;'>Browse, upload, and inspect legacy source files, extracted entities, and business rules.</p>",
-        unsafe_allow_html=True,
-    )
-
-    # Top Action Toolbar (Add New Source + Refresh)
-    col_hdr, col_add_btn, col_ref_btn = st.columns([6, 2, 1.5])
-    with col_add_btn:
-        show_add = st.button("+ Add New Source", type="primary", use_container_width=True, key="btn_toggle_add_source")
-        if show_add:
-            st.session_state["show_add_source_form"] = not st.session_state.get("show_add_source_form", False)
-    with col_ref_btn:
-        if st.button("Refresh", use_container_width=True, key="btn_refresh_sources"):
-            SourceService.refresh_sources()
-            st.rerun()
+    # Top Header & Action Toolbar on the same line
+    col_hdr, col_actions = st.columns([6, 3])
+    with col_hdr:
+        st.markdown(
+            """
+            <div style="margin-bottom: 0.4rem;">
+                <div style="font-size: 1.65rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2;">Source Explorer</div>
+                <div style="font-size: 0.88rem; color: #64748B; margin-top: 0.15rem;">Browse, upload, and inspect legacy source files, extracted entities, and business rules.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_actions:
+        st.markdown("<div style='margin-top: 0.3rem;'></div>", unsafe_allow_html=True)
+        col_add, col_ref = st.columns([1.3, 1])
+        with col_add:
+            show_add = st.button("+ Add Source", type="primary", use_container_width=True, key="btn_toggle_add_source")
+            if show_add:
+                st.session_state["show_add_source_form"] = not st.session_state.get("show_add_source_form", False)
+        with col_ref:
+            if st.button("Refresh", use_container_width=True, key="btn_refresh_sources"):
+                SourceService.refresh_sources()
+                st.rerun()
 
     # Expandable "Add New Source" Form
     if st.session_state.get("show_add_source_form", False):
         with st.container():
             st.markdown(
                 """
-                <div style="background: #FFFFFF; border: 1px solid #BFDBFE; border-left: 4px solid #0284C7; border-radius: 8px; padding: 1.25rem; margin: 1rem 0; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.06);">
+                <div style="background: #FFFFFF; border: 1px solid #BFDBFE; border-left: 4px solid #0284C7; border-radius: 8px; padding: 1.25rem; margin: 0.75rem 0; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.06);">
                     <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A; margin-bottom: 0.25rem;">Register New Legacy Source</div>
                     <div style="font-size: 0.85rem; color: #64748B; margin-bottom: 1rem;">Upload or paste legacy code (COBOL, SQL, or SSIS DTSX) for deterministic parsing and knowledge extraction.</div>
                 </div>
@@ -178,7 +185,7 @@ def render_source_explorer() -> None:
     prev_selected = st.session_state.get("selected_source_file")
     default_idx = file_options.index(prev_selected) if prev_selected in file_options else 0
 
-    col_sel, col_quick = st.columns([3, 1])
+    col_sel, col_quick = st.columns([3.6, 1.4])
     with col_sel:
         selected_file_name = st.selectbox(
             "Select a Legacy Source File:",
@@ -187,8 +194,8 @@ def render_source_explorer() -> None:
             key="source_explorer_file_select",
         )
     with col_quick:
-        st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
-        if st.button("Investigate This File", use_container_width=True):
+        st.markdown("<div style='margin-top: 1.75rem;'></div>", unsafe_allow_html=True)
+        if st.button("🔍 Investigate File", use_container_width=True):
             st.session_state["pending_investigation_query"] = f"Explain the business logic and dependencies in {selected_file_name}"
             st.session_state["navigate_to_page"] = "Investigation Agent"
             st.rerun()
@@ -274,6 +281,7 @@ def render_source_explorer() -> None:
                         [{"Name": e.get("name"), "Type": e.get("entity_type"), "Data Type": e.get("data_type", "—"), "Line": e.get("line_number", "—")} for e in entities],
                         use_container_width=True,
                         hide_index=True,
+                        height=420,
                     )
                 else:
                     st.text("No entities listed.")
@@ -281,8 +289,20 @@ def render_source_explorer() -> None:
             with col_e2:
                 st.markdown(f"#### Business Rules ({format_metric(len(rules))})")
                 if rules:
-                    for i, r in enumerate(rules):
-                        st.markdown(f"**Rule {i+1}:** {r}")
+                    rules_html = "".join([
+                        f'<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 3px solid #0284C7; border-radius: 6px; padding: 0.65rem 0.85rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1E293B; line-height: 1.45;">'
+                        f'<span style="font-weight: 700; color: #0369A1; font-family: monospace;">Rule {i+1}:</span> {r}'
+                        f'</div>'
+                        for i, r in enumerate(rules)
+                    ])
+                    st.markdown(
+                        f"""
+                        <div style="height: 420px; max-height: 420px; overflow-y: auto; padding: 0.6rem; border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);">
+                            {rules_html}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.text("No business rules listed.")
 
@@ -292,6 +312,7 @@ def render_source_explorer() -> None:
                     [{"Rule ID": t.get("rule_id"), "Type": t.get("rule_type"), "Description": t.get("description"), "Expression": t.get("expression", "—")} for t in transforms],
                     use_container_width=True,
                     hide_index=True,
+                    height=280,
                 )
         else:
             st.info("No extracted entity details available.")

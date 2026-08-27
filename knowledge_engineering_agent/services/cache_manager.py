@@ -29,11 +29,14 @@ class CacheManager:
 
     @staticmethod
     def get_file_hash(file_path: str | Path) -> str:
-        """Calculates SHA-256 content hash of the source file."""
+        """Calculates SHA-256 content hash of the source file (normalized newlines)."""
         path = Path(file_path)
         if not path.exists():
             return ""
-        content = path.read_bytes()
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").encode("utf-8")
+        except Exception:
+            content = path.read_bytes()
         return hashlib.sha256(content).hexdigest()
 
     def _get_cache_key(self, file_path: str | Path) -> str:
@@ -52,20 +55,55 @@ class CacheManager:
         force_refresh: bool = False,
     ) -> Optional[dict[str, Any]]:
         """
-        Retrieves cached raw KnowledgePackage dictionary if available and hash matches.
+        Retrieves cached raw KnowledgePackage dictionary if available.
+        Checks exact hash-matched cache file first, then falls back to any existing
+        cache file or knowledge package for the same source file.
         """
         if force_refresh:
             return None
 
         cache_file = self._get_cache_file_path(file_path)
-        if not cache_file.exists():
-            return None
+        if cache_file.exists():
+            try:
+                return json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
 
-        try:
-            data = json.loads(cache_file.read_text(encoding="utf-8"))
-            return data
-        except Exception:
-            return None
+        # Fallback 1: check cache_dir for any valid package matching safe_name
+        path = Path(file_path)
+        safe_name = path.name.replace(".", "_")
+        for match in sorted(self.cache_dir.glob(f"{safe_name}_*_package.json"), reverse=True):
+            try:
+                data = json.loads(match.read_text(encoding="utf-8"))
+                # Save under current hash for fast future lookup
+                try:
+                    cache_file.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
+                return data
+            except Exception:
+                continue
+
+        # Fallback 2: check knowledge directory for existing generated package
+        knowledge_file = self.cache_dir.parent / "knowledge" / f"{path.name}_knowledge_package.json"
+        if knowledge_file.exists():
+            try:
+                data = json.loads(knowledge_file.read_text(encoding="utf-8"))
+                try:
+                    cache_file.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
+                return data
+            except Exception:
+                pass
+
+        return None
 
     def save_cached_package(
         self,

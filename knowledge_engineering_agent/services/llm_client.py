@@ -280,8 +280,20 @@ class LLMClient(OpenAICompatibleClient):
         provider = os.getenv("LLM_PROVIDER", "nim").lower().strip()
         if provider == "groq":
             api_key = kwargs.get("api_key") or os.getenv("GROQ_API_KEY", "")
-            base_url = kwargs.get("base_url") or "https://api.groq.com/openai/v1"
+            base_url = kwargs.get("base_url") or os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
             model = kwargs.get("model") or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        elif provider == "openai":
+            api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY", "")
+            base_url = kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+            model = kwargs.get("model") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        elif provider == "openrouter":
+            api_key = kwargs.get("api_key") or os.getenv("OPENROUTER_API_KEY", "")
+            base_url = kwargs.get("base_url") or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+            model = kwargs.get("model") or os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
+        elif provider in ("local", "ollama"):
+            api_key = kwargs.get("api_key") or os.getenv("LOCAL_LLM_API_KEY", "ollama")
+            base_url = kwargs.get("base_url") or os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
+            model = kwargs.get("model") or os.getenv("LOCAL_LLM_MODEL", "qwen2.5-coder:32b")
         else:
             api_key = (
                 kwargs.get("api_key")
@@ -293,14 +305,14 @@ class LLMClient(OpenAICompatibleClient):
                 kwargs.get("model")
                 or os.getenv("NIM_MODEL", "")
                 or os.getenv("LLM_MODEL", "")
-                or "meta/llama-3.3-70b-instruct"
+                or "nvidia/llama-3.1-nemotron-70b-instruct"
             )
 
         super().__init__(
             api_key=api_key,
             base_url=base_url,
             model=model,
-            timeout_seconds=kwargs.get("timeout_seconds", 90),
-            max_retries=kwargs.get("max_retries", 3),
+            timeout_seconds=kwargs.get("timeout_seconds", int(os.getenv("LLM_TIMEOUT", "30"))),
+            max_retries=kwargs.get("max_retries", int(os.getenv("LLM_MAX_RETRIES", "1"))),
             debug=kwargs.get("debug", False),
         )

@@ -164,81 +164,165 @@ h1, h2, h3, h4, h5, h6 {
 /* Investigation Answer Panels */
 .answer-container {
   background: #FFFFFF;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 1.5rem;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 1.75rem;
   margin-top: 1rem;
   margin-bottom: 1.5rem;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
 }
 
 .section-title {
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.84rem;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #0284C7;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.3rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.35rem;
   border-bottom: 2px solid #E0F2FE;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
-.answer-body {
-  font-size: 1.02rem;
-  line-height: 1.65;
-  color: #1E293B;
+.section-title-emerald {
+  color: #059669 !important;
+  border-color: #DCFCE7 !important;
+}
+
+.section-title-amber {
+  color: #D97706 !important;
+  border-color: #FEF3C7 !important;
+}
+
+.answer-body-card {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #0F172A;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-left: 4px solid #0284C7;
+  border-radius: 0 10px 10px 0;
+  padding: 1.1rem 1.4rem;
   margin-bottom: 1.25rem;
 }
 
+.answer-body-card strong {
+  color: #0369A1;
+  font-weight: 700;
+}
+
+/* Key Points Cards */
 .keypoint-item {
-  background: #F8FAFC;
-  border-left: 3px solid #0284C7;
-  border-radius: 0 6px 6px 0;
-  padding: 0.6rem 1rem;
-  margin-bottom: 0.5rem;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-left: 4px solid #0284C7;
+  border-radius: 0 8px 8px 0;
+  padding: 0.75rem 1.1rem;
+  margin-bottom: 0.55rem;
   font-size: 0.95rem;
   color: #334155;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: all 0.15s ease-in-out;
 }
 
-.dataflow-box {
-  background: #F1F5F9;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  font-family: 'JetBrains Mono', monospace;
+.keypoint-item:hover {
+  background: #F8FAFC;
+  border-color: #93C5FD;
+  transform: translateX(2px);
+}
+
+.kp-icon {
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.kp-code {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
   font-size: 0.88rem;
-  color: #0369A1;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Visual Data Flow Pipeline */
+.dataflow-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
 }
 
-.formula-box {
+.flow-step {
+  background: #FFFFFF;
+  border: 1px solid #94A3B8;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1E293B;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.flow-step-file {
+  background: #EFF6FF;
+  border-color: #3B82F6;
+  color: #1D4ED8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.flow-arrow {
+  color: #0284C7;
+  font-size: 1.1rem;
+  font-weight: 800;
+  user-select: none;
+}
+
+/* Formula & Calculation Rules */
+.formula-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   background: #F0FDF4;
   border: 1px solid #BBF7D0;
   border-left: 4px solid #059669;
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 10px 10px 0;
   padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.formula-line {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.92rem;
+  color: #065F46;
+  line-height: 1.6;
+}
+
+.formula-bullet {
+  color: #10B981;
+  margin-right: 0.35rem;
+}
+
+.eq-code {
+  background: #DCFCE7;
+  border: 1px solid #86EFAC;
   color: #047857;
-  margin-bottom: 1.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
-.gaps-box {
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  color: #92400E;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
-}
-
+/* Sources & Tech Pills */
 .sources-row {
   display: flex;
   flex-wrap: wrap;
@@ -247,14 +331,102 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .source-pill {
-  background: #F1F5F9;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #FFFFFF;
   border: 1px solid #CBD5E1;
   border-radius: 6px;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.82rem;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
   font-family: 'JetBrains Mono', monospace;
   color: #1E293B;
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.tech-tag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.pill-cobol {
+  border-color: #93C5FD;
+  background: #F0F9FF;
+  color: #0369A1;
+}
+
+.pill-cobol .tech-tag {
+  background: #0284C7;
+  color: #FFFFFF;
+}
+
+.pill-sql {
+  border-color: #A7F3D0;
+  background: #F0FDF4;
+  color: #047857;
+}
+
+.pill-sql .tech-tag {
+  background: #059669;
+  color: #FFFFFF;
+}
+
+.pill-ssis {
+  border-color: #E9D5FF;
+  background: #FAF5FF;
+  color: #7E22CE;
+}
+
+.pill-ssis .tech-tag {
+  background: #9333EA;
+  color: #FFFFFF;
+}
+
+/* Intent & Perf Badges */
+.intent-badge {
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #0369A1;
+  font-weight: 600;
+}
+
+.perf-badge {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  text-align: center;
+  color: #475569;
+}
+
+/* Knowledge Gaps */
+.gaps-box {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-left: 4px solid #D97706;
+  border-radius: 0 10px 10px 0;
+  padding: 1rem 1.25rem;
+  color: #92400E;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+
+.gap-item {
+  margin-bottom: 0.35rem;
+}
+
+.gap-item:last-child {
+  margin-bottom: 0;
 }
 
 /* Sidebar Custom Styling */
@@ -444,6 +616,64 @@ div[data-testid="stTextInput"] input {
 div[data-testid="stTextInput"] input:focus {
   border-color: #0284C7 !important;
   box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* Standard Sleek Compact Button Styling */
+div[data-testid="stButton"] > button {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  padding: 0.4rem 1rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+/* Suggested Question Chips (Only applied inside investigation chips container) */
+.suggested-chips-container div[data-testid="stButton"] > button {
+  min-height: 98px !important;
+  height: 98px !important;
+  max-height: 98px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0.75rem 0.6rem !important;
+  font-size: 0.84rem !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  border-radius: 10px !important;
+  border: 1px solid #CBD5E1 !important;
+  background: #FFFFFF !important;
+  color: #1E293B !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow: hidden !important;
+}
+
+.suggested-chips-container div[data-testid="stButton"] > button:hover {
+  border-color: #0284C7 !important;
+  background: #F0F9FF !important;
+  color: #0369A1 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
+}
+
+.suggested-chips-container div[data-testid="stButton"] > button p {
+  font-size: 0.84rem !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+  margin: 0 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 4 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
 }
 
 

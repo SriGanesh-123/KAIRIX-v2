@@ -1,0 +1,2162 @@
+{
+  "package_id": "PKG-COBOL-RPTEXTRACT.CBL-0b63a39a",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\RPTEXTRACT.CBL",
+    "file_name": "RPTEXTRACT.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 172,
+    "size_bytes": 4538
+  },
+  "summary": {
+    "purpose": "Generate a monthly insurance report by merging policy data with premium data, calculating unearned premium for each policy, and appending a static KPI summary to the output file.",
+    "high_level_narrative": "The program opens the sequential files POLICY.DAT (policy records) and PREMIUM.DAT (premium records) for input and creates MONTHLY_REPORT.TXT for output. It writes a header line describing the columns. It then enters a loop that reads one policy record at a time; for each policy it reads the next premium record, computes the unearned premium as WRITTEN-PREMIUM minus EARNED-PREMIUM, moves the month constant and all relevant fields into a report‑record structure (defined in the RPTEXTRACT copybook), and writes the assembled line to the report file. When the end of the policy file is reached, the loop terminates. After the data rows, the program performs a sub‑paragraph that writes a series of hard‑coded KPI summary lines (total policies, active, pending, expired, cancelled, and a validation that WRITTEN = EARNED + UNEARNED). Finally, it closes all files and stops execution.",
+    "business_domain": "Insurance Premium and Policy Reporting",
+    "inputs": [
+      "POLICY-IN (POLICY.DAT) – sequential file containing policy number, customer ID, agent ID, product code, and status",
+      "PREMIUM-IN (PREMIUM.DAT) – sequential file containing policy number, written premium, and earned premium"
+    ],
+    "outputs": [
+      "REPORT-OUT (MONTHLY_REPORT.TXT) – sequential text file containing the header, one line per policy with calculated unearned premium, and a KPI summary section"
+    ],
+    "key_transformations": [
+      "Compute WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM for each policy",
+      "Map month constant (WS-REPORT-MONTH) and all policy/premium fields into the report record layout (RPTEXTRACT copybook)",
+      "Concatenate fields into a pipe‑delimited line written to the output file",
+      "Append static KPI summary lines with pre‑calculated totals"
+    ],
+    "key_dependencies": [
+      "Copybook RPTEXTRACT (defines REPORT-RECORD layout fields such as RPT-REPORT-MONTH, RPT-POLICY-NO, etc.)",
+      "File definitions in the ENVIRONMENT DIVISION for POLICY-IN, PREMIUM-IN, and REPORT-OUT",
+      "Sequential file I/O operations (OPEN, READ, WRITE, CLOSE) provided by the COBOL runtime"
+    ],
+    "business_rules": [
+      "Unearned premium must equal written premium minus earned premium",
+      "Report month is fixed to the value '202607' (July 2026)",
+      "Each policy record is assumed to have a matching premium record in the same order",
+      "KPI summary totals are hard‑coded (e.g., TOTAL POLICIES = 14500, ACTIVE POLICIES = 13100, etc.)",
+      "Status codes are carried through unchanged from the policy file to the report"
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "RPTEXTRACT.CBL",
+    "source_type": "cobol",
+    "purpose": "Generate a monthly policy report that combines policy information with premium data, calculates unearned premium, and appends a static KPI summary to the output file.",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN (file POLICY.DAT)",
+        "PREMIUM-IN (file PREMIUM.DAT)",
+        "Copybook RPTEXTRACT"
+      ],
+      "outputs": [
+        "REPORT-OUT (file MONTHLY_REPORT.TXT)",
+        "REPORT-OUT-REC (record written to REPORT-OUT)"
+      ]
+    },
+    "key_logic": [
+      "Open POLICY-IN for input, PREMIUM-IN for input and REPORT-OUT for output.",
+      "Write a header line (WS-HEADER) to the report.",
+      "Loop reading POLICY-IN records until end‑of‑file.",
+      "For each policy record, read the corresponding premium record.",
+      "Compute WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM.",
+      "Map fields from the policy and premium records (and WS‑REPORT‑MONTH) to the report layout fields (RPT‑...).",
+      "Write the populated report record to REPORT-OUT.",
+      "After all records are processed, perform WRITE‑KPI‑SUMMARY to output static KPI lines.",
+      "Close all files and terminate the program."
+    ],
+    "entities": [
+      {
+        "name": "RPTEXTRACT",
+        "entity_type": "PROGRAM",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 2,
+        "description": "Main COBOL program."
+      },
+      {
+        "name": "RPTEXTRACT",
+        "entity_type": "COPYBOOK",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 48,
+        "description": "Copybook included in the program (contents not shown)."
+      },
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 10,
+        "description": "Input file containing policy master records."
+      },
+      {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 14,
+        "description": "Input file containing premium data."
+      },
+      {
+        "name": "REPORT-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 18,
+        "description": "Output text file for the monthly report."
+      },
+      {
+        "name": "POLICY-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 28,
+        "description": "Record layout for POLICY-IN."
+      },
+      {
+        "name": "PREMIUM-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "PREMIUM-IN",
+        "data_type": null,
+        "line_number": 37,
+        "description": "Record layout for PREMIUM-IN."
+      },
+      {
+        "name": "REPORT-OUT-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "REPORT-OUT",
+        "data_type": null,
+        "line_number": 44,
+        "description": "Single‑field record written to the output file."
+      },
+      {
+        "name": "POL-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 29,
+        "description": null
+      },
+      {
+        "name": "POL-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 30,
+        "description": null
+      },
+      {
+        "name": "POL-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-REC",
+        "data_type": "PIC X(10)",
+        "line_number": 31,
+        "description": null
+      },
+      {
+        "name": "POL-PRODUCT",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-REC",
+        "data_type": "PIC X(02)",
+        "line_number": 32,
+        "description": null
+      },
+      {
+        "name": "POL-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "POLICY-REC",
+        "data_type": "PIC X(02)",
+        "line_number": 33,
+        "description": null
+      },
+      {
+        "name": "PREM-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PREMIUM-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 38,
+        "description": null
+      },
+      {
+        "name": "WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PREMIUM-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 39,
+        "description": null
+      },
+      {
+        "name": "EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PREMIUM-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 40,
+        "description": null
+      },
+      {
+        "name": "EOF-POLICY",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC X",
+        "line_number": 50,
+        "description": "Flag used to detect end of POLICY file."
+      },
+      {
+        "name": "END-OF-POLICY",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 51,
+        "description": "88‑level condition name for EOF-POLICY."
+      },
+      {
+        "name": "WS-UNEARNED",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC 9(9)V99",
+        "line_number": 53,
+        "description": "Calculated unearned premium."
+      },
+      {
+        "name": "WS-REPORT-MONTH",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC X(06)",
+        "line_number": 55,
+        "description": "Report month identifier (e.g., 202607)."
+      },
+      {
+        "name": "WS-HEADER",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "PIC X(120)",
+        "line_number": 58,
+        "description": "Header line written at the top of the report."
+      },
+      {
+        "name": "MAIN-PARA",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "RPTEXTRACT",
+        "data_type": null,
+        "line_number": 64,
+        "description": "Main processing paragraph."
+      },
+      {
+        "name": "WRITE-KPI-SUMMARY",
+        "entity_type": "PROCEDURE",
+        "parent_entity": "RPTEXTRACT",
+        "data_type": null,
+        "line_number": 127,
+        "description": "Paragraph that writes static KPI summary lines."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Calculate unearned premium as written premium minus earned premium.",
+        "source_entities": [
+          "WRITTEN-PREMIUM",
+          "EARNED-PREMIUM"
+        ],
+        "target_entities": [
+          "WS-UNEARNED"
+        ],
+        "expression": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM",
+        "line_number": 81,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "MAPPING",
+        "description": "Map report month value to report field RPT-REPORT-MONTH.",
+        "source_entities": [
+          "WS-REPORT-MONTH"
+        ],
+        "target_entities": [
+          "RPT-REPORT-MONTH"
+        ],
+        "expression": "MOVE WS-REPORT-MONTH TO RPT-REPORT-MONTH",
+        "line_number": 85,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "Map policy number to report field RPT-POLICY-NO.",
+        "source_entities": [
+          "POL-POLICY-NO"
+        ],
+        "target_entities": [
+          "RPT-POLICY-NO"
+        ],
+        "expression": "MOVE POL-POLICY-NO TO RPT-POLICY-NO",
+        "line_number": 88,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "MAPPING",
+        "description": "Map customer ID to report field RPT-CUSTOMER-ID.",
+        "source_entities": [
+          "POL-CUSTOMER-ID"
+        ],
+        "target_entities": [
+          "RPT-CUSTOMER-ID"
+        ],
+        "expression": "MOVE POL-CUSTOMER-ID TO RPT-CUSTOMER-ID",
+        "line_number": 91,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "MAPPING",
+        "description": "Map agent ID to report field RPT-AGENT-ID.",
+        "source_entities": [
+          "POL-AGENT-ID"
+        ],
+        "target_entities": [
+          "RPT-AGENT-ID"
+        ],
+        "expression": "MOVE POL-AGENT-ID TO RPT-AGENT-ID",
+        "line_number": 94,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "Map product code to report field RPT-PRODUCT.",
+        "source_entities": [
+          "POL-PRODUCT"
+        ],
+        "target_entities": [
+          "RPT-PRODUCT"
+        ],
+        "expression": "MOVE POL-PRODUCT TO RPT-PRODUCT",
+        "line_number": 97,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Map policy status to report field RPT-STATUS.",
+        "source_entities": [
+          "POL-STATUS"
+        ],
+        "target_entities": [
+          "RPT-STATUS"
+        ],
+        "expression": "MOVE POL-STATUS TO RPT-STATUS",
+        "line_number": 100,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "MAPPING",
+        "description": "Map written premium to report field RPT-WRITTEN-PREM.",
+        "source_entities": [
+          "WRITTEN-PREMIUM"
+        ],
+        "target_entities": [
+          "RPT-WRITTEN-PREM"
+        ],
+        "expression": "MOVE WRITTEN-PREMIUM TO RPT-WRITTEN-PREM",
+        "line_number": 103,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "Map earned premium to report field RPT-EARNED-PREM.",
+        "source_entities": [
+          "EARNED-PREMIUM"
+        ],
+        "target_entities": [
+          "RPT-EARNED-PREM"
+        ],
+        "expression": "MOVE EARNED-PREMIUM TO RPT-EARNED-PREM",
+        "line_number": 106,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "Map calculated unearned premium to report field RPT-UNEARNED-PREM.",
+        "source_entities": [
+          "WS-UNEARNED"
+        ],
+        "target_entities": [
+          "RPT-UNEARNED-PREM"
+        ],
+        "expression": "MOVE WS-UNEARNED TO RPT-UNEARNED-PREM",
+        "line_number": 109,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "Write header line to the report file.",
+        "source_entities": [
+          "WS-HEADER"
+        ],
+        "target_entities": [
+          "REPORT-OUT-REC"
+        ],
+        "expression": "WRITE REPORT-OUT-REC FROM WS-HEADER",
+        "line_number": 70,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T12",
+        "rule_type": "MAPPING",
+        "description": "Write populated report record to the output file.",
+        "source_entities": [
+          "REPORT-RECORD"
+        ],
+        "target_entities": [
+          "REPORT-OUT-REC"
+        ],
+        "expression": "WRITE REPORT-OUT-REC FROM REPORT-RECORD",
+        "line_number": 112,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T13",
+        "rule_type": "MAPPING",
+        "description": "Write KPI separator line to the report.",
+        "source_entities": [
+          "'=============================================================='"
+        ],
+        "target_entities": [
+          "REPORT-OUT-REC"
+        ],
+        "expression": "MOVE '====...' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 129,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T14",
+        "rule_type": "MAPPING",
+        "description": "Write KPI title line to the report.",
+        "source_entities": [
+          "'MONTHLY KPI SUMMARY'"
+        ],
+        "target_entities": [
+          "REPORT-OUT-REC"
+        ],
+        "expression": "MOVE 'MONTHLY KPI SUMMARY' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 134,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T15",
+        "rule_type": "MAPPING",
+        "description": "Write static KPI metric lines (total, active, pending, expired, cancelled).",
+        "source_entities": [
+          "'TOTAL POLICIES        : 14500'",
+          "'ACTIVE POLICIES       : 13100'",
+          "'PENDING POLICIES      : 300'",
+          "'EXPIRED POLICIES      : 800'",
+          "'CANCELLED POLICIES    : 300'"
+        ],
+        "target_entities": [
+          "REPORT-OUT-REC"
+        ],
+        "expression": "MOVE <literal> TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 144,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T16",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Validate that WRITTEN-PREMIUM equals EARNED-PREMIUM plus UNEARNED-PREMIUM (displayed as PASSED).",
+        "source_entities": [
+          "WRITTEN-PREMIUM",
+          "EARNED-PREMIUM",
+          "WS-UNEARNED"
+        ],
+        "target_entities": [],
+        "expression": "WRITTEN-PREMIUM = EARNED-PREMIUM + WS-UNEARNED",
+        "line_number": 170,
+        "confidence": 0.92
+      }
+    ],
+    "business_rules": [
+      "Process records until END-OF-POLICY (EOF on POLICY-IN) is true.",
+      "Unearned premium is derived as WRITTEN-PREMIUM minus EARNED-PREMIUM.",
+      "The KPI summary lines are static values and do not depend on input data.",
+      "Validation rule: WRITTEN = EARNED + UNEARNED must hold (reported as PASSED)."
+    ],
+    "dependencies": [
+      "POLICY.DAT (external file)",
+      "PREMIUM.DAT (external file)",
+      "MONTHLY_REPORT.TXT (output file)",
+      "Copybook RPTEXTRACT (included via COPY statement)"
+    ],
+    "relationships": [
+      {
+        "source": "RPTEXTRACT (PROGRAM)",
+        "target": "POLICY-IN (FILE)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 66,
+        "description": "OPEN INPUT POLICY-IN and subsequent READ statements."
+      },
+      {
+        "source": "RPTEXTRACT (PROGRAM)",
+        "target": "PREMIUM-IN (FILE)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 79,
+        "description": "READ PREMIUM-IN inside the processing loop."
+      },
+      {
+        "source": "RPTEXTRACT (PROGRAM)",
+        "target": "REPORT-OUT (FILE)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": 70,
+        "description": "WRITE statements output to REPORT-OUT."
+      },
+      {
+        "source": "MAIN-PARA (PROCEDURE)",
+        "target": "WRITE-KPI-SUMMARY (PROCEDURE)",
+        "relationship_type": "CALLS",
+        "confidence": 0.97,
+        "evidence_line": 119,
+        "description": "PERFORM WRITE-KPI-SUMMARY after processing loop."
+      },
+      {
+        "source": "POLICY-REC (TABLE)",
+        "target": "POLICY-IN (FILE)",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 28,
+        "description": "FD POLICY-IN defines record POLICY-REC."
+      },
+      {
+        "source": "PREMIUM-REC (TABLE)",
+        "target": "PREMIUM-IN (FILE)",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 37,
+        "description": "FD PREMIUM-IN defines record PREMIUM-REC."
+      },
+      {
+        "source": "REPORT-OUT-REC (TABLE)",
+        "target": "REPORT-OUT (FILE)",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 44,
+        "description": "FD REPORT-OUT defines record REPORT-OUT-REC."
+      },
+      {
+        "source": "RPTEXTRACT (PROGRAM)",
+        "target": "RPTEXTRACT (COPYBOOK)",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": 48,
+        "description": "COPY statement includes the copybook."
+      },
+      {
+        "source": "WS-UNEARNED (VARIABLE)",
+        "target": "WRITTEN-PREMIUM (COLUMN)",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.95,
+        "evidence_line": 81,
+        "description": "COMPUTE uses WRITTEN-PREMIUM."
+      },
+      {
+        "source": "WS-UNEARNED (VARIABLE)",
+        "target": "EARNED-PREMIUM (COLUMN)",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.95,
+        "evidence_line": 81,
+        "description": "COMPUTE uses EARNED-PREMIUM."
+      },
+      {
+        "source": "POL-POLICY-NO (COLUMN)",
+        "target": "RPT-POLICY-NO (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 88,
+        "description": "MOVE statement maps policy number to report field."
+      },
+      {
+        "source": "POL-CUSTOMER-ID (COLUMN)",
+        "target": "RPT-CUSTOMER-ID (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 91,
+        "description": "MOVE statement maps customer ID."
+      },
+      {
+        "source": "POL-AGENT-ID (COLUMN)",
+        "target": "RPT-AGENT-ID (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 94,
+        "description": "MOVE statement maps agent ID."
+      },
+      {
+        "source": "POL-PRODUCT (COLUMN)",
+        "target": "RPT-PRODUCT (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 97,
+        "description": "MOVE statement maps product code."
+      },
+      {
+        "source": "POL-STATUS (COLUMN)",
+        "target": "RPT-STATUS (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 100,
+        "description": "MOVE statement maps policy status."
+      },
+      {
+        "source": "WRITTEN-PREMIUM (COLUMN)",
+        "target": "RPT-WRITTEN-PREM (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 103,
+        "description": "MOVE statement maps written premium."
+      },
+      {
+        "source": "EARNED-PREMIUM (COLUMN)",
+        "target": "RPT-EARNED-PREM (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 106,
+        "description": "MOVE statement maps earned premium."
+      },
+      {
+        "source": "WS-UNEARNED (VARIABLE)",
+        "target": "RPT-UNEARNED-PREM (COLUMN)",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.94,
+        "evidence_line": 109,
+        "description": "MOVE statement maps calculated unearned premium."
+      },
+      {
+        "source": "WS-HEADER (VARIABLE)",
+        "target": "REPORT-OUT-REC (TABLE)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.95,
+        "evidence_line": 70,
+        "description": "Header line written as first record."
+      },
+      {
+        "source": "REPORT-RECORD (VARIABLE/RECORD FROM COPYBOOK)",
+        "target": "REPORT-OUT-REC (TABLE)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.93,
+        "evidence_line": 112,
+        "description": "Populated report record written for each policy."
+      }
+    ],
+    "confidence": 0.88
+  },
+  "reconciliation": {
+    "parser_facts_count": 3,
+    "llm_findings_count": 23,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "PREMIUM-IN",
+      "REPORT-OUT"
+    ],
+    "inferred_entities": [
+      "RPTEXTRACT (PROGRAM)",
+      "RPTEXTRACT (COPYBOOK)",
+      "POLICY-REC",
+      "PREMIUM-REC",
+      "REPORT-OUT-REC",
+      "POL-POLICY-NO",
+      "POL-CUSTOMER-ID",
+      "POL-AGENT-ID",
+      "POL-PRODUCT",
+      "POL-STATUS",
+      "PREM-POLICY-NO",
+      "WRITTEN-PREMIUM",
+      "EARNED-PREMIUM",
+      "EOF-POLICY",
+      "END-OF-POLICY",
+      "WS-UNEARNED",
+      "WS-REPORT-MONTH",
+      "WS-HEADER",
+      "MAIN-PARA",
+      "WRITE-KPI-SUMMARY"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "POLICY-IN",
+        "target": "POLICY-REC",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": 28,
+        "description": "Record layout defined for POLICY-IN."
+      },
+      {
+        "source": "PREMIUM-IN",
+        "target": "PREMIUM-REC",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": 37,
+        "description": "Record layout defined for PREMIUM-IN."
+      },
+      {
+        "source": "REPORT-OUT",
+        "target": "REPORT-OUT-REC",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": 44,
+        "description": "Single‑field record written to the output file."
+      },
+      {
+        "source": "POLICY-REC",
+        "target": "POL-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 29,
+        "description": null
+      },
+      {
+        "source": "POLICY-REC",
+        "target": "POL-CUSTOMER-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 30,
+        "description": null
+      },
+      {
+        "source": "POLICY-REC",
+        "target": "POL-AGENT-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 31,
+        "description": null
+      },
+      {
+        "source": "POLICY-REC",
+        "target": "POL-PRODUCT",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 32,
+        "description": null
+      },
+      {
+        "source": "POLICY-REC",
+        "target": "POL-STATUS",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 33,
+        "description": null
+      },
+      {
+        "source": "PREMIUM-REC",
+        "target": "PREM-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 38,
+        "description": null
+      },
+      {
+        "source": "PREMIUM-REC",
+        "target": "WRITTEN-PREMIUM",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 39,
+        "description": null
+      },
+      {
+        "source": "PREMIUM-REC",
+        "target": "EARNED-PREMIUM",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": 40,
+        "description": null
+      },
+      {
+        "source": "RPTEXTRACT",
+        "target": "MAIN-PARA",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": 64,
+        "description": "Main processing paragraph."
+      },
+      {
+        "source": "RPTEXTRACT",
+        "target": "WRITE-KPI-SUMMARY",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": 127,
+        "description": "Paragraph that writes static KPI summary."
+      },
+      {
+        "source": "MAIN-PARA",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Loop reads POLICY-IN records."
+      },
+      {
+        "source": "MAIN-PARA",
+        "target": "PREMIUM-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Corresponding premium record is read."
+      },
+      {
+        "source": "MAIN-PARA",
+        "target": "REPORT-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Populated report record written to output."
+      },
+      {
+        "source": "MAIN-PARA",
+        "target": "WS-UNEARNED",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.92,
+        "evidence_line": 53,
+        "description": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM."
+      },
+      {
+        "source": "WRITE-KPI-SUMMARY",
+        "target": "REPORT-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "Writes static KPI lines after main data."
+      },
+      {
+        "source": "EOF-POLICY",
+        "target": "END-OF-POLICY",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": 51,
+        "description": "88‑level condition for end‑of‑file detection."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser reported no tables or columns, whereas LLM extracted multiple record layouts and fields.",
+      "Parser listed only file names; LLM identified a copybook and program name not present in parser output."
+    ],
+    "gaps_detected": [
+      "Content of the RPTEXTRACT copybook is not provided; relationships to its fields cannot be validated.",
+      "Implementation details of WRITE-KPI-SUMMARY paragraph are missing.",
+      "Error‑handling logic for file I/O failures is not described.",
+      "Exact mapping rules from policy/premium fields to report layout (RPT‑…) are not enumerated."
+    ],
+    "overall_confidence": 0.93
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "POLICY-REC",
+        "PREMIUM-REC",
+        "REPORT-OUT-REC"
+      ],
+      "columns": [
+        "POL-POLICY-NO",
+        "POL-CUSTOMER-ID",
+        "POL-AGENT-ID",
+        "POL-PRODUCT",
+        "POL-STATUS",
+        "PREM-POLICY-NO",
+        "WRITTEN-PREMIUM",
+        "EARNED-PREMIUM"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Generate a monthly insurance report by merging policy data with premium data, calculating unearned premium for each policy, and appending a static KPI summary to the output file.",
+      "narrative": "The program opens the sequential files POLICY.DAT (policy records) and PREMIUM.DAT (premium records) for input and creates MONTHLY_REPORT.TXT for output. It writes a header line describing the columns. It then enters a loop that reads one policy record at a time; for each policy it reads the next premium record, computes the unearned premium as WRITTEN-PREMIUM minus EARNED-PREMIUM, moves the month constant and all relevant fields into a report‑record structure (defined in the RPTEXTRACT copybook), and writes the assembled line to the report file. When the end of the policy file is reached, the loop terminates. After the data rows, the program performs a sub‑paragraph that writes a series of hard‑coded KPI summary lines (total policies, active, pending, expired, cancelled, and a validation that WRITTEN = EARNED + UNEARNED). Finally, it closes all files and stops execution.",
+      "business_domain": "Insurance Premium and Policy Reporting",
+      "business_rules": [
+        "Unearned premium must equal written premium minus earned premium",
+        "Report month is fixed to the value '202607' (July 2026)",
+        "Each policy record is assumed to have a matching premium record in the same order",
+        "KPI summary totals are hard‑coded (e.g., TOTAL POLICIES = 14500, ACTIVE POLICIES = 13100, etc.)",
+        "Status codes are carried through unchanged from the policy file to the report"
+      ],
+      "key_logic": [
+        "Open POLICY-IN for input, PREMIUM-IN for input and REPORT-OUT for output.",
+        "Write a header line (WS-HEADER) to the report.",
+        "Loop reading POLICY-IN records until end‑of‑file.",
+        "For each policy record, read the corresponding premium record.",
+        "Compute WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM.",
+        "Map fields from the policy and premium records (and WS‑REPORT‑MONTH) to the report layout fields (RPT‑...).",
+        "Write the populated report record to REPORT-OUT.",
+        "After all records are processed, perform WRITE‑KPI‑SUMMARY to output static KPI lines.",
+        "Close all files and terminate the program."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "RPTEXTRACT (PROGRAM)",
+        "RPTEXTRACT (COPYBOOK)",
+        "POLICY-REC",
+        "PREMIUM-REC",
+        "REPORT-OUT-REC",
+        "POL-POLICY-NO",
+        "POL-CUSTOMER-ID",
+        "POL-AGENT-ID",
+        "POL-PRODUCT",
+        "POL-STATUS",
+        "PREM-POLICY-NO",
+        "WRITTEN-PREMIUM",
+        "EARNED-PREMIUM",
+        "EOF-POLICY",
+        "END-OF-POLICY",
+        "WS-UNEARNED",
+        "WS-REPORT-MONTH",
+        "WS-HEADER",
+        "MAIN-PARA",
+        "WRITE-KPI-SUMMARY"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "CALCULATION",
+          "description": "Calculate unearned premium as written premium minus earned premium.",
+          "source_entities": [
+            "WRITTEN-PREMIUM",
+            "EARNED-PREMIUM"
+          ],
+          "target_entities": [
+            "WS-UNEARNED"
+          ],
+          "expression": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM",
+          "line_number": 81,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "MAPPING",
+          "description": "Map report month value to report field RPT-REPORT-MONTH.",
+          "source_entities": [
+            "WS-REPORT-MONTH"
+          ],
+          "target_entities": [
+            "RPT-REPORT-MONTH"
+          ],
+          "expression": "MOVE WS-REPORT-MONTH TO RPT-REPORT-MONTH",
+          "line_number": 85,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "MAPPING",
+          "description": "Map policy number to report field RPT-POLICY-NO.",
+          "source_entities": [
+            "POL-POLICY-NO"
+          ],
+          "target_entities": [
+            "RPT-POLICY-NO"
+          ],
+          "expression": "MOVE POL-POLICY-NO TO RPT-POLICY-NO",
+          "line_number": 88,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "MAPPING",
+          "description": "Map customer ID to report field RPT-CUSTOMER-ID.",
+          "source_entities": [
+            "POL-CUSTOMER-ID"
+          ],
+          "target_entities": [
+            "RPT-CUSTOMER-ID"
+          ],
+          "expression": "MOVE POL-CUSTOMER-ID TO RPT-CUSTOMER-ID",
+          "line_number": 91,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "MAPPING",
+          "description": "Map agent ID to report field RPT-AGENT-ID.",
+          "source_entities": [
+            "POL-AGENT-ID"
+          ],
+          "target_entities": [
+            "RPT-AGENT-ID"
+          ],
+          "expression": "MOVE POL-AGENT-ID TO RPT-AGENT-ID",
+          "line_number": 94,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "MAPPING",
+          "description": "Map product code to report field RPT-PRODUCT.",
+          "source_entities": [
+            "POL-PRODUCT"
+          ],
+          "target_entities": [
+            "RPT-PRODUCT"
+          ],
+          "expression": "MOVE POL-PRODUCT TO RPT-PRODUCT",
+          "line_number": 97,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "MAPPING",
+          "description": "Map policy status to report field RPT-STATUS.",
+          "source_entities": [
+            "POL-STATUS"
+          ],
+          "target_entities": [
+            "RPT-STATUS"
+          ],
+          "expression": "MOVE POL-STATUS TO RPT-STATUS",
+          "line_number": 100,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "MAPPING",
+          "description": "Map written premium to report field RPT-WRITTEN-PREM.",
+          "source_entities": [
+            "WRITTEN-PREMIUM"
+          ],
+          "target_entities": [
+            "RPT-WRITTEN-PREM"
+          ],
+          "expression": "MOVE WRITTEN-PREMIUM TO RPT-WRITTEN-PREM",
+          "line_number": 103,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "MAPPING",
+          "description": "Map earned premium to report field RPT-EARNED-PREM.",
+          "source_entities": [
+            "EARNED-PREMIUM"
+          ],
+          "target_entities": [
+            "RPT-EARNED-PREM"
+          ],
+          "expression": "MOVE EARNED-PREMIUM TO RPT-EARNED-PREM",
+          "line_number": 106,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "MAPPING",
+          "description": "Map calculated unearned premium to report field RPT-UNEARNED-PREM.",
+          "source_entities": [
+            "WS-UNEARNED"
+          ],
+          "target_entities": [
+            "RPT-UNEARNED-PREM"
+          ],
+          "expression": "MOVE WS-UNEARNED TO RPT-UNEARNED-PREM",
+          "line_number": 109,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T11",
+          "rule_type": "MAPPING",
+          "description": "Write header line to the report file.",
+          "source_entities": [
+            "WS-HEADER"
+          ],
+          "target_entities": [
+            "REPORT-OUT-REC"
+          ],
+          "expression": "WRITE REPORT-OUT-REC FROM WS-HEADER",
+          "line_number": 70,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T12",
+          "rule_type": "MAPPING",
+          "description": "Write populated report record to the output file.",
+          "source_entities": [
+            "REPORT-RECORD"
+          ],
+          "target_entities": [
+            "REPORT-OUT-REC"
+          ],
+          "expression": "WRITE REPORT-OUT-REC FROM REPORT-RECORD",
+          "line_number": 112,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T13",
+          "rule_type": "MAPPING",
+          "description": "Write KPI separator line to the report.",
+          "source_entities": [
+            "'=============================================================='"
+          ],
+          "target_entities": [
+            "REPORT-OUT-REC"
+          ],
+          "expression": "MOVE '====...' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+          "line_number": 129,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T14",
+          "rule_type": "MAPPING",
+          "description": "Write KPI title line to the report.",
+          "source_entities": [
+            "'MONTHLY KPI SUMMARY'"
+          ],
+          "target_entities": [
+            "REPORT-OUT-REC"
+          ],
+          "expression": "MOVE 'MONTHLY KPI SUMMARY' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+          "line_number": 134,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T15",
+          "rule_type": "MAPPING",
+          "description": "Write static KPI metric lines (total, active, pending, expired, cancelled).",
+          "source_entities": [
+            "'TOTAL POLICIES        : 14500'",
+            "'ACTIVE POLICIES       : 13100'",
+            "'PENDING POLICIES      : 300'",
+            "'EXPIRED POLICIES      : 800'",
+            "'CANCELLED POLICIES    : 300'"
+          ],
+          "target_entities": [
+            "REPORT-OUT-REC"
+          ],
+          "expression": "MOVE <literal> TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+          "line_number": 144,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T16",
+          "rule_type": "BUSINESS_RULE",
+          "description": "Validate that WRITTEN-PREMIUM equals EARNED-PREMIUM plus UNEARNED-PREMIUM (displayed as PASSED).",
+          "source_entities": [
+            "WRITTEN-PREMIUM",
+            "EARNED-PREMIUM",
+            "WS-UNEARNED"
+          ],
+          "target_entities": [],
+          "expression": "WRITTEN-PREMIUM = EARNED-PREMIUM + WS-UNEARNED",
+          "line_number": 170,
+          "confidence": 0.92
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "POLICY-IN",
+          "target": "POLICY-REC",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": 28,
+          "description": "Record layout defined for POLICY-IN."
+        },
+        {
+          "source": "PREMIUM-IN",
+          "target": "PREMIUM-REC",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": 37,
+          "description": "Record layout defined for PREMIUM-IN."
+        },
+        {
+          "source": "REPORT-OUT",
+          "target": "REPORT-OUT-REC",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": 44,
+          "description": "Single‑field record written to the output file."
+        },
+        {
+          "source": "POLICY-REC",
+          "target": "POL-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 29,
+          "description": null
+        },
+        {
+          "source": "POLICY-REC",
+          "target": "POL-CUSTOMER-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 30,
+          "description": null
+        },
+        {
+          "source": "POLICY-REC",
+          "target": "POL-AGENT-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 31,
+          "description": null
+        },
+        {
+          "source": "POLICY-REC",
+          "target": "POL-PRODUCT",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 32,
+          "description": null
+        },
+        {
+          "source": "POLICY-REC",
+          "target": "POL-STATUS",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 33,
+          "description": null
+        },
+        {
+          "source": "PREMIUM-REC",
+          "target": "PREM-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 38,
+          "description": null
+        },
+        {
+          "source": "PREMIUM-REC",
+          "target": "WRITTEN-PREMIUM",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 39,
+          "description": null
+        },
+        {
+          "source": "PREMIUM-REC",
+          "target": "EARNED-PREMIUM",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": 40,
+          "description": null
+        },
+        {
+          "source": "RPTEXTRACT",
+          "target": "MAIN-PARA",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": 64,
+          "description": "Main processing paragraph."
+        },
+        {
+          "source": "RPTEXTRACT",
+          "target": "WRITE-KPI-SUMMARY",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": 127,
+          "description": "Paragraph that writes static KPI summary."
+        },
+        {
+          "source": "MAIN-PARA",
+          "target": "POLICY-IN",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Loop reads POLICY-IN records."
+        },
+        {
+          "source": "MAIN-PARA",
+          "target": "PREMIUM-IN",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Corresponding premium record is read."
+        },
+        {
+          "source": "MAIN-PARA",
+          "target": "REPORT-OUT",
+          "relationship_type": "WRITES_TO",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Populated report record written to output."
+        },
+        {
+          "source": "MAIN-PARA",
+          "target": "WS-UNEARNED",
+          "relationship_type": "CALCULATES",
+          "confidence": 0.92,
+          "evidence_line": 53,
+          "description": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM."
+        },
+        {
+          "source": "WRITE-KPI-SUMMARY",
+          "target": "REPORT-OUT",
+          "relationship_type": "USES",
+          "confidence": 0.91,
+          "evidence_line": null,
+          "description": "Writes static KPI lines after main data."
+        },
+        {
+          "source": "EOF-POLICY",
+          "target": "END-OF-POLICY",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": 51,
+          "description": "88‑level condition for end‑of‑file detection."
+        }
+      ],
+      "gaps": [
+        "Content of the RPTEXTRACT copybook is not provided; relationships to its fields cannot be validated.",
+        "Implementation details of WRITE-KPI-SUMMARY paragraph are missing.",
+        "Error‑handling logic for file I/O failures is not described.",
+        "Exact mapping rules from policy/premium fields to report layout (RPT‑…) are not enumerated."
+      ]
+    },
+    "overall_confidence": 0.93
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:RPTEXTRACT.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "RPTEXTRACT.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\RPTEXTRACT.CBL",
+        "total_lines": 172
+      }
+    },
+    {
+      "id": "PROGRAM:RPTEXTRACT",
+      "label": "Program",
+      "properties": {
+        "name": "RPTEXTRACT",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": null,
+        "line_number": 2
+      }
+    },
+    {
+      "id": "COPYBOOK:RPTEXTRACT",
+      "label": "Copybook",
+      "properties": {
+        "name": "RPTEXTRACT",
+        "entity_type": "COPYBOOK",
+        "data_type": null,
+        "parent": null,
+        "line_number": 48
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 10
+      }
+    },
+    {
+      "id": "FILE:PREMIUM-IN",
+      "label": "File",
+      "properties": {
+        "name": "PREMIUM-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 14
+      }
+    },
+    {
+      "id": "FILE:REPORT-OUT",
+      "label": "File",
+      "properties": {
+        "name": "REPORT-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 18
+      }
+    },
+    {
+      "id": "TABLE:POLICY-REC",
+      "label": "Table",
+      "properties": {
+        "name": "POLICY-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 28
+      }
+    },
+    {
+      "id": "TABLE:PREMIUM-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PREMIUM-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PREMIUM-IN",
+        "line_number": 37
+      }
+    },
+    {
+      "id": "TABLE:REPORT-OUT-REC",
+      "label": "Table",
+      "properties": {
+        "name": "REPORT-OUT-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "REPORT-OUT",
+        "line_number": 44
+      }
+    },
+    {
+      "id": "COLUMN:POL-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "POL-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "POLICY-REC",
+        "line_number": 29
+      }
+    },
+    {
+      "id": "COLUMN:POL-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "POL-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-REC",
+        "line_number": 30
+      }
+    },
+    {
+      "id": "COLUMN:POL-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "POL-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(10)",
+        "parent": "POLICY-REC",
+        "line_number": 31
+      }
+    },
+    {
+      "id": "COLUMN:POL-PRODUCT",
+      "label": "Column",
+      "properties": {
+        "name": "POL-PRODUCT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(02)",
+        "parent": "POLICY-REC",
+        "line_number": 32
+      }
+    },
+    {
+      "id": "COLUMN:POL-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "POL-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(02)",
+        "parent": "POLICY-REC",
+        "line_number": 33
+      }
+    },
+    {
+      "id": "COLUMN:PREM-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PREM-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PREMIUM-REC",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "COLUMN:WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PREMIUM-REC",
+        "line_number": 39
+      }
+    },
+    {
+      "id": "COLUMN:EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PREMIUM-REC",
+        "line_number": 40
+      }
+    },
+    {
+      "id": "VARIABLE:EOF-POLICY",
+      "label": "Variable",
+      "properties": {
+        "name": "EOF-POLICY",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X",
+        "parent": null,
+        "line_number": 50
+      }
+    },
+    {
+      "id": "VARIABLE:END-OF-POLICY",
+      "label": "Variable",
+      "properties": {
+        "name": "END-OF-POLICY",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 51
+      }
+    },
+    {
+      "id": "VARIABLE:WS-UNEARNED",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-UNEARNED",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC 9(9)V99",
+        "parent": null,
+        "line_number": 53
+      }
+    },
+    {
+      "id": "VARIABLE:WS-REPORT-MONTH",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-REPORT-MONTH",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X(06)",
+        "parent": null,
+        "line_number": 55
+      }
+    },
+    {
+      "id": "VARIABLE:WS-HEADER",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-HEADER",
+        "entity_type": "VARIABLE",
+        "data_type": "PIC X(120)",
+        "parent": null,
+        "line_number": 58
+      }
+    },
+    {
+      "id": "PROCEDURE:MAIN-PARA",
+      "label": "Procedure",
+      "properties": {
+        "name": "MAIN-PARA",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "RPTEXTRACT",
+        "line_number": 64
+      }
+    },
+    {
+      "id": "PROCEDURE:WRITE-KPI-SUMMARY",
+      "label": "Procedure",
+      "properties": {
+        "name": "WRITE-KPI-SUMMARY",
+        "entity_type": "PROCEDURE",
+        "data_type": null,
+        "parent": "RPTEXTRACT",
+        "line_number": 127
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Calculate unearned premium as written premium minus earned premium.",
+        "expression": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM",
+        "line_number": 81
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "MAPPING",
+        "description": "Map report month value to report field RPT-REPORT-MONTH.",
+        "expression": "MOVE WS-REPORT-MONTH TO RPT-REPORT-MONTH",
+        "line_number": 85
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "MAPPING",
+        "description": "Map policy number to report field RPT-POLICY-NO.",
+        "expression": "MOVE POL-POLICY-NO TO RPT-POLICY-NO",
+        "line_number": 88
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "MAPPING",
+        "description": "Map customer ID to report field RPT-CUSTOMER-ID.",
+        "expression": "MOVE POL-CUSTOMER-ID TO RPT-CUSTOMER-ID",
+        "line_number": 91
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "MAPPING",
+        "description": "Map agent ID to report field RPT-AGENT-ID.",
+        "expression": "MOVE POL-AGENT-ID TO RPT-AGENT-ID",
+        "line_number": 94
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "MAPPING",
+        "description": "Map product code to report field RPT-PRODUCT.",
+        "expression": "MOVE POL-PRODUCT TO RPT-PRODUCT",
+        "line_number": 97
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Map policy status to report field RPT-STATUS.",
+        "expression": "MOVE POL-STATUS TO RPT-STATUS",
+        "line_number": 100
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "MAPPING",
+        "description": "Map written premium to report field RPT-WRITTEN-PREM.",
+        "expression": "MOVE WRITTEN-PREMIUM TO RPT-WRITTEN-PREM",
+        "line_number": 103
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "MAPPING",
+        "description": "Map earned premium to report field RPT-EARNED-PREM.",
+        "expression": "MOVE EARNED-PREMIUM TO RPT-EARNED-PREM",
+        "line_number": 106
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "MAPPING",
+        "description": "Map calculated unearned premium to report field RPT-UNEARNED-PREM.",
+        "expression": "MOVE WS-UNEARNED TO RPT-UNEARNED-PREM",
+        "line_number": 109
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T11",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T11",
+        "rule_type": "MAPPING",
+        "description": "Write header line to the report file.",
+        "expression": "WRITE REPORT-OUT-REC FROM WS-HEADER",
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T12",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T12",
+        "rule_type": "MAPPING",
+        "description": "Write populated report record to the output file.",
+        "expression": "WRITE REPORT-OUT-REC FROM REPORT-RECORD",
+        "line_number": 112
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T13",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T13",
+        "rule_type": "MAPPING",
+        "description": "Write KPI separator line to the report.",
+        "expression": "MOVE '====...' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 129
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T14",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T14",
+        "rule_type": "MAPPING",
+        "description": "Write KPI title line to the report.",
+        "expression": "MOVE 'MONTHLY KPI SUMMARY' TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 134
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T15",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T15",
+        "rule_type": "MAPPING",
+        "description": "Write static KPI metric lines (total, active, pending, expired, cancelled).",
+        "expression": "MOVE <literal> TO REPORT-OUT-REC; WRITE REPORT-OUT-REC",
+        "line_number": 144
+      }
+    },
+    {
+      "id": "TRANSFORMATION:RPTEXTRACT.CBL:T16",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T16",
+        "rule_type": "BUSINESS_RULE",
+        "description": "Validate that WRITTEN-PREMIUM equals EARNED-PREMIUM plus UNEARNED-PREMIUM (displayed as PASSED).",
+        "expression": "WRITTEN-PREMIUM = EARNED-PREMIUM + WS-UNEARNED",
+        "line_number": 170
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "PROGRAM:RPTEXTRACT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COPYBOOK:RPTEXTRACT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "FILE:PREMIUM-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "FILE:REPORT-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "TABLE:POLICY-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "TABLE:PREMIUM-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:POL-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:POL-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:POL-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:POL-PRODUCT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:POL-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:PREM-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "COLUMN:EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "VARIABLE:EOF-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "VARIABLE:END-OF-POLICY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "VARIABLE:WS-UNEARNED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "VARIABLE:WS-REPORT-MONTH",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "VARIABLE:WS-HEADER",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "PROCEDURE:MAIN-PARA",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:RPTEXTRACT.CBL",
+      "target_id": "PROCEDURE:WRITE-KPI-SUMMARY",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TRANSFORMATION:RPTEXTRACT.CBL:T11",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:RPTEXTRACT.CBL:T12",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:RPTEXTRACT.CBL:T13",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:RPTEXTRACT.CBL:T14",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TRANSFORMATION:RPTEXTRACT.CBL:T15",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "OUTPUT_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:POLICY-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 28,
+        "description": "Record layout defined for POLICY-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-IN",
+      "target_id": "TABLE:PREMIUM-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 37,
+        "description": "Record layout defined for PREMIUM-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:REPORT-OUT",
+      "target_id": "TABLE:REPORT-OUT-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": 44,
+        "description": "Single‑field record written to the output file."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-REC",
+      "target_id": "TABLE:POL-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 29,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-REC",
+      "target_id": "TABLE:POL-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 30,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-REC",
+      "target_id": "TABLE:POL-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 31,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-REC",
+      "target_id": "TABLE:POL-PRODUCT",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 32,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-REC",
+      "target_id": "TABLE:POL-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 33,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-REC",
+      "target_id": "TABLE:PREM-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 38,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-REC",
+      "target_id": "TABLE:WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 39,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:PREMIUM-REC",
+      "target_id": "TABLE:EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": 40,
+        "description": null
+      }
+    },
+    {
+      "source_id": "TABLE:RPTEXTRACT",
+      "target_id": "TABLE:MAIN-PARA",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 64,
+        "description": "Main processing paragraph."
+      }
+    },
+    {
+      "source_id": "TABLE:RPTEXTRACT",
+      "target_id": "TABLE:WRITE-KPI-SUMMARY",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": 127,
+        "description": "Paragraph that writes static KPI summary."
+      }
+    },
+    {
+      "source_id": "TABLE:MAIN-PARA",
+      "target_id": "TABLE:POLICY-IN",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Loop reads POLICY-IN records."
+      }
+    },
+    {
+      "source_id": "TABLE:MAIN-PARA",
+      "target_id": "TABLE:PREMIUM-IN",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Corresponding premium record is read."
+      }
+    },
+    {
+      "source_id": "TABLE:MAIN-PARA",
+      "target_id": "TABLE:REPORT-OUT",
+      "type": "WRITES_TO",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Populated report record written to output."
+      }
+    },
+    {
+      "source_id": "TABLE:MAIN-PARA",
+      "target_id": "TABLE:WS-UNEARNED",
+      "type": "CALCULATES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": 53,
+        "description": "WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM."
+      }
+    },
+    {
+      "source_id": "TABLE:WRITE-KPI-SUMMARY",
+      "target_id": "TABLE:REPORT-OUT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "Writes static KPI lines after main data."
+      }
+    },
+    {
+      "source_id": "TABLE:EOF-POLICY",
+      "target_id": "TABLE:END-OF-POLICY",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": 51,
+        "description": "88‑level condition for end‑of‑file detection."
+      }
+    }
+  ]
+}

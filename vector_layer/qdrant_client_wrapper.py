@@ -63,13 +63,18 @@ class QdrantWrapper:
 
     # ── Collection management ──────────────────────────────────────────────────
 
-    def ensure_collections(self) -> None:
-        """Create collections if they don't exist yet."""
+    def ensure_collections(self, recreate: bool = False) -> None:
+        """Create collections if they don't exist yet, or recreate if requested."""
         for name in (COLLECTION_CHUNKS, COLLECTION_SUMMARIES):
-            self._ensure_collection(name)
+            self._ensure_collection(name, recreate=recreate)
 
-    def _ensure_collection(self, name: str) -> None:
+    def _ensure_collection(self, name: str, recreate: bool = False) -> None:
         existing = [c.name for c in self._client.get_collections().collections]
+        if recreate and name in existing:
+            self._client.delete_collection(collection_name=name)
+            existing.remove(name)
+            print(f"[Qdrant] Deleted existing collection '{name}' for recreation.")
+
         if name not in existing:
             self._client.create_collection(
                 collection_name=name,

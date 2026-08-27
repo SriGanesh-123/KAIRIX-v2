@@ -1,0 +1,3889 @@
+{
+  "package_id": "PKG-COBOL-PREMCALC.CBL-f08ffcc3",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\PREMCALC.CBL",
+    "file_name": "PREMCALC.CBL",
+    "source_type": "cobol",
+    "file_extension": ".cbl",
+    "total_lines": 433,
+    "size_bytes": 16084
+  },
+  "summary": {
+    "purpose": "Calculate daily premium amounts for validated policies by aggregating property, vehicle, and coverage data, applying product‑specific rating rules (Homeowners and Auto), and outputting premium records with a unique premium ID while logging any processing errors.",
+    "high_level_narrative": "The program opens five sequential files (policy, property, vehicle, coverage, premium output, error output). It reads the first property, vehicle, and coverage records to prime look‑ahead buffers. It then enters a loop reading each policy record (sorted by policy number). For each policy it resets calculation work fields, determines the product type, and attempts to locate the associated property (HO) or vehicle (AU) record by scanning the respective input file until the policy numbers match. If a matching asset record is found, it scans the coverage file to collect all coverage records belonging to the same policy, summing coverage limits and deductibles and counting coverages. With these aggregates it invokes the appropriate calculation routine (CALC‑HO or CALC‑AU) that uses hard‑coded rating constants to compute risk value, discount, and final premium, enforcing minimum premium and maximum discount limits. A premium ID is built from the first six characters of the policy number plus the current date. The premium record is written to PREMIUM‑OUT and counters are updated. If any required asset or coverage is missing, or the product type is unsupported, an error record with a specific error code and message is written to ERROR‑OUT. After all policies are processed the files are closed and processing statistics are displayed. Fatal file‑open or I/O errors abort the run.",
+    "business_domain": "Premium Calculation (Insurance Rating) for Homeowners and Auto policies.",
+    "inputs": [
+      "POLICY-IN (sequential file containing policy header records)",
+      "PROPERTY-IN (sequential file containing property asset records)",
+      "VEHICLE-IN (sequential file containing vehicle asset records)",
+      "COVERAGE-IN (sequential file containing coverage detail records)"
+    ],
+    "outputs": [
+      "PREMIUM-OUT (sequential file containing calculated premium records)",
+      "ERROR-OUT (sequential file containing error records for missing data or validation failures)"
+    ],
+    "key_transformations": [
+      "Read and buffer the next property, vehicle, and coverage records to enable sequential matching by policy number.",
+      "Aggregate all coverage records for a policy: total coverage limit (WS-COV-LIMIT-TOTAL), total deductible (WS-DEDUCT-TOTAL), and coverage count (WS-COVERAGE-COUNT).",
+      "Calculate risk value as (asset value * risk‑rate) using WS‑HO‑RISK‑RATE or WS‑AU‑RISK‑RATE.",
+      "Calculate premium components: base amount, coverage‑rate component, deductible‑rate component, then apply discount (capped by WS‑HO‑MAX‑DISC / WS‑AU‑MAX‑DISC) and enforce minimum premium (WS‑HO‑MIN / WS‑AU‑MIN).",
+      "Compose PO-PREMIUM-ID = first 6 characters of PI-POLICY-NO concatenated with WS-CURRENT-DATE (YYMMDD).",
+      "Populate PO-REC with written premium (from policy), earned premium (calculated), unearned premium (written minus earned), and calculation date.",
+      "Write error records with ER-CODE and ER-MESSAGE when required asset or coverage data is missing or product type is invalid."
+    ],
+    "key_dependencies": [
+      "File definitions for POLICY-IN, PROPERTY-IN, VEHICLE-IN, COVERAGE-IN, PREMIUM-OUT, ERROR-OUT.",
+      "Rating constants defined in WS‑RATING‑CONSTANTS (HO and AU base, rates, min, max‑discount).",
+      "Cobol intrinsic FUNCTION CURRENT‑DATE for generating the calculation date.",
+      "Work‑storage fields for file status, EOF switches, calculation accumulators, and counters."
+    ],
+    "business_rules": [
+      "Product type must be either 'HO' (Homeowners) or 'AU' (Auto); otherwise error P004 is generated.",
+      "Homeowners policies require a matching property record; missing record generates error P001.",
+      "Auto policies require a matching vehicle record; missing record generates error P002.",
+      "At least one coverage record must exist for a policy; missing coverage generates error P003.",
+      "Premium ID is 12 bytes: first 6 bytes of the policy number + YYMMDD of the calculation date, assuming one calculation per policy per day.",
+      "Premium calculation uses product‑specific constants: base amount, risk rate, coverage rate, deductible rate, minimum premium, and maximum discount.",
+      "Discount applied cannot exceed the product‑specific maximum discount and premium cannot fall below the product‑specific minimum.",
+      "Earned premium = calculated premium; unearned premium = written premium – earned premium.",
+      "All input files must be sorted by policy number to allow sequential matching.",
+      "Fatal file‑open or I/O errors abort processing and set RETURN‑CODE to 12."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "PREMCALC.CBL",
+    "source_type": "cobol",
+    "purpose": "Calculate daily premium amounts for each policy by aggregating property, vehicle, and coverage data, applying rating constants, and writing the results to an output premium file while logging any errors.",
+    "inputs_outputs": {
+      "inputs": [
+        "POLICY-IN",
+        "PROPERTY-IN",
+        "VEHICLE-IN",
+        "COVERAGE-IN"
+      ],
+      "outputs": [
+        "PREMIUM-OUT",
+        "ERROR-OUT"
+      ]
+    },
+    "key_logic": [
+      "Initialize current processing date.",
+      "Open all input and output files; abort on any file‑open error.",
+      "Read the first property, vehicle, and coverage records to prime EOF flags.",
+      "Loop over POLICY-IN records until end‑of‑file or a fatal error:",
+      "  Increment read counter.",
+      "  Process each policy:",
+      "    Reset calculation work variables.",
+      "    If product type is HO (homeowners):",
+      "      Locate matching property record; if not found write error P001.",
+      "      Locate all coverage records for the policy; if none write error P003.",
+      "      Perform homeowner premium calculation (CALC-HO) and write premium record.",
+      "    Else if product type is AU (auto):",
+      "      Locate matching vehicle record; if not found write error P002.",
+      "      Locate all coverage records for the policy; if none write error P003.",
+      "      Perform auto premium calculation (CALC-AU) and write premium record.",
+      "    Else write error P004 (invalid product type).",
+      "Close all files and display processing statistics.",
+      "Return appropriate return‑code on fatal error."
+    ],
+    "entities": [
+      {
+        "name": "PREMCALC",
+        "entity_type": "PROGRAM",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 1,
+        "description": "Main COBOL program that performs premium calculations."
+      },
+      {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 32,
+        "description": "Sequential input file containing policy records."
+      },
+      {
+        "name": "PROPERTY-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 35,
+        "description": "Sequential input file containing property records."
+      },
+      {
+        "name": "VEHICLE-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 38,
+        "description": "Sequential input file containing vehicle records."
+      },
+      {
+        "name": "COVERAGE-IN",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 41,
+        "description": "Sequential input file containing coverage records."
+      },
+      {
+        "name": "PREMIUM-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 44,
+        "description": "Sequential output file for calculated premium records."
+      },
+      {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 47,
+        "description": "Sequential output file for error records."
+      },
+      {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "POLICY-IN",
+        "data_type": null,
+        "line_number": 55,
+        "description": "Record layout for POLICY-IN."
+      },
+      {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 57,
+        "description": "Policy number."
+      },
+      {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 58,
+        "description": "Customer identifier."
+      },
+      {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(9)",
+        "line_number": 59,
+        "description": "Agent identifier."
+      },
+      {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 60,
+        "description": "Product type code (HO or AU)."
+      },
+      {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 61,
+        "description": "Policy status."
+      },
+      {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 62,
+        "description": "Policy effective date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 63,
+        "description": "Policy expiry date (YYYYMMDD)."
+      },
+      {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 64,
+        "description": "Written premium amount."
+      },
+      {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 65,
+        "description": "Record creation date."
+      },
+      {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PI-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 66,
+        "description": "Record last update date."
+      },
+      {
+        "name": "PR-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "PROPERTY-IN",
+        "data_type": null,
+        "line_number": 71,
+        "description": "Record layout for PROPERTY-IN."
+      },
+      {
+        "name": "PR-PROPERTY-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 73,
+        "description": "Property identifier."
+      },
+      {
+        "name": "PR-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 74,
+        "description": "Policy number (foreign key)."
+      },
+      {
+        "name": "PR-PROPERTY-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC X(2)",
+        "line_number": 75,
+        "description": "Property type code."
+      },
+      {
+        "name": "PR-ADDRESS",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC X(100)",
+        "line_number": 76,
+        "description": "Property address."
+      },
+      {
+        "name": "PR-CONSTRUCTION-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC X(30)",
+        "line_number": 77,
+        "description": "Construction type."
+      },
+      {
+        "name": "PR-YEAR-BUILT",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC 9(4)",
+        "line_number": 78,
+        "description": "Year built."
+      },
+      {
+        "name": "PR-PROPERTY-VALUE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PR-REC",
+        "data_type": "PIC 9(10)V99",
+        "line_number": 79,
+        "description": "Insured property value."
+      },
+      {
+        "name": "VE-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "VEHICLE-IN",
+        "data_type": null,
+        "line_number": 85,
+        "description": "Record layout for VEHICLE-IN."
+      },
+      {
+        "name": "VE-VEHICLE-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 87,
+        "description": "Vehicle identifier."
+      },
+      {
+        "name": "VE-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 88,
+        "description": "Policy number (foreign key)."
+      },
+      {
+        "name": "VE-VIN",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC X(17)",
+        "line_number": 89,
+        "description": "Vehicle Identification Number."
+      },
+      {
+        "name": "VE-MAKE",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC X(30)",
+        "line_number": 90,
+        "description": "Vehicle make."
+      },
+      {
+        "name": "VE-MODEL",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC X(30)",
+        "line_number": 91,
+        "description": "Vehicle model."
+      },
+      {
+        "name": "VE-YEAR",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC 9(4)",
+        "line_number": 92,
+        "description": "Vehicle model year."
+      },
+      {
+        "name": "VE-VEHICLE-VALUE",
+        "entity_type": "COLUMN",
+        "parent_entity": "VE-REC",
+        "data_type": "PIC 9(10)V99",
+        "line_number": 93,
+        "description": "Insured vehicle value."
+      },
+      {
+        "name": "CO-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "COVERAGE-IN",
+        "data_type": null,
+        "line_number": 99,
+        "description": "Record layout for COVERAGE-IN."
+      },
+      {
+        "name": "CO-COVERAGE-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 101,
+        "description": "Coverage identifier."
+      },
+      {
+        "name": "CO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 102,
+        "description": "Policy number (foreign key)."
+      },
+      {
+        "name": "CO-COVERAGE-TYPE",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC X(4)",
+        "line_number": 103,
+        "description": "Coverage type code."
+      },
+      {
+        "name": "CO-COVERAGE-LIMIT",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC 9(10)V99",
+        "line_number": 104,
+        "description": "Coverage limit amount."
+      },
+      {
+        "name": "CO-DEDUCTIBLE",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC 9(8)V99",
+        "line_number": 105,
+        "description": "Deductible amount."
+      },
+      {
+        "name": "CO-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 106,
+        "description": "Coverage effective date."
+      },
+      {
+        "name": "CO-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "CO-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 107,
+        "description": "Coverage expiry date."
+      },
+      {
+        "name": "PO-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "PREMIUM-OUT",
+        "data_type": null,
+        "line_number": 113,
+        "description": "Record layout for PREMIUM-OUT."
+      },
+      {
+        "name": "PO-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 115,
+        "description": "Generated premium identifier (policy‑no prefix + calculation date)."
+      },
+      {
+        "name": "PO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 116,
+        "description": "Policy number."
+      },
+      {
+        "name": "PO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 117,
+        "description": "Written premium amount from policy record."
+      },
+      {
+        "name": "PO-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 118,
+        "description": "Calculated earned premium."
+      },
+      {
+        "name": "PO-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 119,
+        "description": "Calculated unearned premium."
+      },
+      {
+        "name": "PO-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "PO-REC",
+        "data_type": "PIC 9(8)",
+        "line_number": 120,
+        "description": "Date of premium calculation (YYYYMMDD)."
+      },
+      {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "parent_entity": "ERROR-OUT",
+        "data_type": null,
+        "line_number": 124,
+        "description": "Record layout for ERROR-OUT."
+      },
+      {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(12)",
+        "line_number": 126,
+        "description": "Policy number associated with the error."
+      },
+      {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(4)",
+        "line_number": 127,
+        "description": "Application‑defined error code."
+      },
+      {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "parent_entity": "ER-REC",
+        "data_type": "PIC X(54)",
+        "line_number": 128,
+        "description": "Human‑readable error message."
+      },
+      {
+        "name": "WS-FILE-STATUS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 134,
+        "description": "Group containing file‑status codes for each file."
+      },
+      {
+        "name": "WS-PI-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 136,
+        "description": "File status for POLICY-IN."
+      },
+      {
+        "name": "WS-PR-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 137,
+        "description": "File status for PROPERTY-IN."
+      },
+      {
+        "name": "WS-VE-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 138,
+        "description": "File status for VEHICLE-IN."
+      },
+      {
+        "name": "WS-CO-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 139,
+        "description": "File status for COVERAGE-IN."
+      },
+      {
+        "name": "WS-PO-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 140,
+        "description": "File status for PREMIUM-OUT."
+      },
+      {
+        "name": "WS-ER-ST",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-FILE-STATUS",
+        "data_type": "PIC XX",
+        "line_number": 141,
+        "description": "File status for ERROR-OUT."
+      },
+      {
+        "name": "WS-SWITCHES",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 144,
+        "description": "Group of flags controlling EOF and error handling."
+      },
+      {
+        "name": "WS-POL-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 146,
+        "description": "EOF flag for POLICY-IN."
+      },
+      {
+        "name": "POL-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 147,
+        "description": "88‑level condition name for WS-POL-EOF = 'Y'."
+      },
+      {
+        "name": "WS-PR-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 149,
+        "description": "EOF flag for PROPERTY-IN."
+      },
+      {
+        "name": "PR-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 150,
+        "description": "88‑level condition name for WS-PR-EOF = 'Y'."
+      },
+      {
+        "name": "WS-VE-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 152,
+        "description": "EOF flag for VEHICLE-IN."
+      },
+      {
+        "name": "VE-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 153,
+        "description": "88‑level condition name for WS-VE-EOF = 'Y'."
+      },
+      {
+        "name": "WS-CO-EOF",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 155,
+        "description": "EOF flag for COVERAGE-IN."
+      },
+      {
+        "name": "CO-EOF",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 156,
+        "description": "88‑level condition name for WS-CO-EOF = 'Y'."
+      },
+      {
+        "name": "WS-PR-FOUND",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 158,
+        "description": "Flag indicating a matching property record was found."
+      },
+      {
+        "name": "WS-VE-FOUND",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 159,
+        "description": "Flag indicating a matching vehicle record was found."
+      },
+      {
+        "name": "WS-CO-FOUND",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 160,
+        "description": "Flag indicating at least one coverage record was found."
+      },
+      {
+        "name": "WS-FATAL",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-SWITCHES",
+        "data_type": "PIC X",
+        "line_number": 162,
+        "description": "Flag indicating a fatal processing error."
+      },
+      {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 163,
+        "description": "88‑level condition name for WS-FATAL = 'Y'."
+      },
+      {
+        "name": "WS-RATING-CONSTANTS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 168,
+        "description": "Group of constant values used for rating calculations."
+      },
+      {
+        "name": "WS-HO-BASE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 170,
+        "description": "Base rate for homeowners."
+      },
+      {
+        "name": "WS-HO-RISK-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 171,
+        "description": "Risk multiplier for homeowners."
+      },
+      {
+        "name": "WS-HO-COV-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 172,
+        "description": "Coverage multiplier for homeowners."
+      },
+      {
+        "name": "WS-HO-DED-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 173,
+        "description": "Deductible multiplier for homeowners."
+      },
+      {
+        "name": "WS-HO-MIN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 174,
+        "description": "Minimum premium for homeowners."
+      },
+      {
+        "name": "WS-HO-MAX-DISC",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 175,
+        "description": "Maximum discount for homeowners."
+      },
+      {
+        "name": "WS-AU-BASE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 176,
+        "description": "Base rate for auto."
+      },
+      {
+        "name": "WS-AU-RISK-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 177,
+        "description": "Risk multiplier for auto."
+      },
+      {
+        "name": "WS-AU-COV-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 178,
+        "description": "Coverage multiplier for auto."
+      },
+      {
+        "name": "WS-AU-DED-RATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9V9(6)",
+        "line_number": 179,
+        "description": "Deductible multiplier for auto."
+      },
+      {
+        "name": "WS-AU-MIN",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 180,
+        "description": "Minimum premium for auto."
+      },
+      {
+        "name": "WS-AU-MAX-DISC",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-RATING-CONSTANTS",
+        "data_type": "PIC 9(5)V99",
+        "line_number": 181,
+        "description": "Maximum discount for auto."
+      },
+      {
+        "name": "WS-CALC",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 184,
+        "description": "Group of intermediate calculation fields."
+      },
+      {
+        "name": "WS-RISK-VALUE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(12)V99",
+        "line_number": 186,
+        "description": "Accumulated risk value for the policy."
+      },
+      {
+        "name": "WS-COV-LIMIT-TOTAL",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(12)V99",
+        "line_number": 187,
+        "description": "Sum of all coverage limits for the policy."
+      },
+      {
+        "name": "WS-DEDUCT-TOTAL",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(12)V99",
+        "line_number": 188,
+        "description": "Sum of all deductibles for the policy."
+      },
+      {
+        "name": "WS-DISCOUNT",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 189,
+        "description": "Calculated discount amount."
+      },
+      {
+        "name": "WS-PREMIUM",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(9)V99",
+        "line_number": 190,
+        "description": "Final premium amount before split into earned/unearned."
+      },
+      {
+        "name": "WS-CURRENT-DATE",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(8)",
+        "line_number": 191,
+        "description": "Current processing date (YYYYMMDD)."
+      },
+      {
+        "name": "WS-COVERAGE-COUNT",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-CALC",
+        "data_type": "PIC 9(5)",
+        "line_number": 192,
+        "description": "Number of coverage records processed for the current policy."
+      },
+      {
+        "name": "WS-COUNTERS",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 195,
+        "description": "Group of processing counters."
+      },
+      {
+        "name": "WS-READ",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "PIC 9(9)",
+        "line_number": 197,
+        "description": "Count of policy records read."
+      },
+      {
+        "name": "WS-CALCULATED",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "PIC 9(9)",
+        "line_number": 198,
+        "description": "Count of premiums successfully calculated."
+      },
+      {
+        "name": "WS-ERRORS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "PIC 9(9)",
+        "line_number": 199,
+        "description": "Count of business‑rule errors written to ERROR-OUT."
+      },
+      {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "COLUMN",
+        "parent_entity": "WS-COUNTERS",
+        "data_type": "PIC 9(9)",
+        "line_number": 200,
+        "description": "Count of I/O errors (file read/write failures)."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Set current processing date from system date.",
+        "source_entities": [
+          "FUNCTION CURRENT-DATE"
+        ],
+        "target_entities": [
+          "WS-CURRENT-DATE"
+        ],
+        "expression": "MOVE FUNCTION CURRENT-DATE(1:8) TO WS-CURRENT-DATE",
+        "line_number": 168,
+        "confidence": 1.0
+      },
+      {
+        "rule_id": "T002",
+        "rule_type": "CALCULATION",
+        "description": "Initialize calculation work variables to zero at start of each policy.",
+        "source_entities": [
+          "ZERO"
+        ],
+        "target_entities": [
+          "WS-RISK-VALUE",
+          "WS-COV-LIMIT-TOTAL",
+          "WS-DEDUCT-TOTAL",
+          "WS-DISCOUNT",
+          "WS-PREMIUM",
+          "WS-COVERAGE-COUNT"
+        ],
+        "expression": "MOVE ZERO TO WS-RISK-VALUE WS-COV-LIMIT-TOTAL WS-DEDUCT-TOTAL WS-DISCOUNT WS-PREMIUM WS-COVERAGE-COUNT",
+        "line_number": 283,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T003",
+        "rule_type": "AGGREGATION",
+        "description": "Count each policy record read.",
+        "source_entities": [
+          "WS-READ"
+        ],
+        "target_entities": [
+          "WS-READ"
+        ],
+        "expression": "ADD 1 TO WS-READ",
+        "line_number": 179,
+        "confidence": 1.0
+      },
+      {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "Validate product type; only HO (homeowners) or AU (auto) are allowed.",
+        "source_entities": [
+          "PI-PRODUCT-TYPE"
+        ],
+        "target_entities": [
+          "ER-CODE",
+          "ER-MESSAGE"
+        ],
+        "expression": "IF PI-PRODUCT-TYPE NOT = 'HO' AND PI-PRODUCT-TYPE NOT = 'AU' THEN SET error P004",
+        "line_number": 306,
+        "confidence": 0.9
+      },
+      {
+        "rule_id": "T005",
+        "rule_type": "MAPPING",
+        "description": "Generate premium identifier by concatenating first 6 characters of policy number with calculation date (YYMMDD).",
+        "source_entities": [
+          "PI-POLICY-NO",
+          "WS-CURRENT-DATE"
+        ],
+        "target_entities": [
+          "PO-PREMIUM-ID"
+        ],
+        "expression": "PO-PREMIUM-ID = PI-POLICY-NO(1:6) & WS-CURRENT-DATE(3:8)",
+        "line_number": null,
+        "confidence": 0.6
+      }
+    ],
+    "business_rules": [
+      "Only one premium calculation is performed per policy per day.",
+      "Product type must be either 'HO' (homeowners) or 'AU' (auto); otherwise error P004 is written.",
+      "If a homeowners policy (HO) has no matching property record, error P001 is written.",
+      "If an auto policy (AU) has no matching vehicle record, error P002 is written.",
+      "If no coverage records exist for a policy, error P003 is written.",
+      "Premium ID is a 12‑byte value composed of the first six bytes of the policy number followed by the calculation date in YYMMDD format."
+    ],
+    "dependencies": [
+      "POLIN (device for POLICY-IN)",
+      "PROPIN (device for PROPERTY-IN)",
+      "VEHIN (device for VEHICLE-IN)",
+      "COVGIN (device for COVERAGE-IN)",
+      "PREMOUT (device for PREMIUM-OUT)",
+      "ERROUT (device for ERROR-OUT)"
+    ],
+    "relationships": [
+      {
+        "source": "MAIN",
+        "target": "OPEN-FILES",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 169,
+        "description": "MAIN paragraph performs OPEN-FILES."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-PROPERTY",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 172,
+        "description": "MAIN performs READ-PROPERTY before processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-VEHICLE",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 173,
+        "description": "MAIN performs READ-VEHICLE before processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-COVERAGE",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 174,
+        "description": "MAIN performs READ-COVERAGE before processing loop."
+      },
+      {
+        "source": "MAIN",
+        "target": "READ-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 177,
+        "description": "Inside loop MAIN calls READ-POLICY."
+      },
+      {
+        "source": "MAIN",
+        "target": "PROCESS-POLICY",
+        "relationship_type": "CALLS",
+        "confidence": 1.0,
+        "evidence_line": 180,
+        "description": "After reading a policy, MAIN calls PROCESS-POLICY."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens POLICY-IN for INPUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "PROPERTY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens PROPERTY-IN for INPUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "VEHICLE-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens VEHICLE-IN for INPUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "COVERAGE-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens COVERAGE-IN for INPUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "PREMIUM-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens PREMIUM-OUT for OUTPUT."
+      },
+      {
+        "source": "OPEN-FILES",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 1.0,
+        "evidence_line": 192,
+        "description": "OPEN-FILES opens ERROR-OUT for OUTPUT."
+      },
+      {
+        "source": "READ-POLICY",
+        "target": "POLICY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 221,
+        "description": "READ-POLICY reads a record from POLICY-IN."
+      },
+      {
+        "source": "READ-PROPERTY",
+        "target": "PROPERTY-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 234,
+        "description": "READ-PROPERTY reads a record from PROPERTY-IN."
+      },
+      {
+        "source": "READ-VEHICLE",
+        "target": "VEHICLE-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 248,
+        "description": "READ-VEHICLE reads a record from VEHICLE-IN."
+      },
+      {
+        "source": "READ-COVERAGE",
+        "target": "COVERAGE-IN",
+        "relationship_type": "READS_FROM",
+        "confidence": 1.0,
+        "evidence_line": 262,
+        "description": "READ-COVERAGE reads a record from COVERAGE-IN."
+      },
+      {
+        "source": "WRITE-PREMIUM",
+        "target": "PREMIUM-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "WRITE-PREMIUM writes PO-REC to PREMIUM-OUT (statement appears later in source)."
+      },
+      {
+        "source": "WRITE-ERROR",
+        "target": "ERROR-OUT",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "WRITE-ERROR writes ER-REC to ERROR-OUT (statement appears later in source)."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 57,
+        "description": "Policy record contains policy number field."
+      },
+      {
+        "source": "PR-REC",
+        "target": "PR-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 74,
+        "description": "Property record contains policy number field."
+      },
+      {
+        "source": "VE-REC",
+        "target": "VE-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 88,
+        "description": "Vehicle record contains policy number field."
+      },
+      {
+        "source": "CO-REC",
+        "target": "CO-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 102,
+        "description": "Coverage record contains policy number field."
+      },
+      {
+        "source": "PO-REC",
+        "target": "PO-PREMIUM-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 115,
+        "description": "Premium output record contains premium identifier."
+      },
+      {
+        "source": "ER-REC",
+        "target": "ER-CODE",
+        "relationship_type": "CONTAINS",
+        "confidence": 1.0,
+        "evidence_line": 127,
+        "description": "Error record contains error code."
+      },
+      {
+        "source": "WS-POL-EOF",
+        "target": "POL-EOF",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 1.0,
+        "evidence_line": 147,
+        "description": "88‑level condition derived from WS-POL-EOF."
+      },
+      {
+        "source": "WS-PR-EOF",
+        "target": "PR-EOF",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 1.0,
+        "evidence_line": 150,
+        "description": "88‑level condition derived from WS-PR-EOF."
+      },
+      {
+        "source": "WS-VE-EOF",
+        "target": "VE-EOF",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 1.0,
+        "evidence_line": 153,
+        "description": "88‑level condition derived from WS-VE-EOF."
+      },
+      {
+        "source": "WS-CO-EOF",
+        "target": "CO-EOF",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 1.0,
+        "evidence_line": 156,
+        "description": "88‑level condition derived from WS-CO-EOF."
+      },
+      {
+        "source": "WS-FATAL",
+        "target": "FATAL-ERROR",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 1.0,
+        "evidence_line": 163,
+        "description": "88‑level condition derived from WS-FATAL."
+      }
+    ],
+    "confidence": 0.78
+  },
+  "reconciliation": {
+    "parser_facts_count": 6,
+    "llm_findings_count": 100,
+    "confirmed_entities": [
+      "POLICY-IN",
+      "PROPERTY-IN",
+      "VEHICLE-IN",
+      "COVERAGE-IN",
+      "PREMIUM-OUT",
+      "ERROR-OUT"
+    ],
+    "inferred_entities": [
+      "PREMCALC",
+      "PI-REC",
+      "PI-POLICY-NO",
+      "PI-CUSTOMER-ID",
+      "PI-AGENT-ID",
+      "PI-PRODUCT-TYPE",
+      "PI-POLICY-STATUS",
+      "PI-EFFECTIVE-DATE",
+      "PI-EXPIRY-DATE",
+      "PI-WRITTEN-PREMIUM",
+      "PI-CREATE-DT",
+      "PI-UPDATE-DT",
+      "PR-REC",
+      "PR-PROPERTY-ID",
+      "PR-POLICY-NO",
+      "CALC-HO",
+      "CALC-AU"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "PREMCALC",
+        "target": "POLICY-IN",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads policy records from POLICY-IN."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "PROPERTY-IN",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads property records from PROPERTY-IN."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "VEHICLE-IN",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads vehicle records from VEHICLE-IN."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "COVERAGE-IN",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads coverage records from COVERAGE-IN."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "PREMIUM-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Calculated premiums are written to PREMIUM-OUT."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "ERROR-OUT",
+        "relationship_type": "USES",
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Processing errors are logged to ERROR-OUT."
+      },
+      {
+        "source": "POLICY-IN",
+        "target": "PI-REC",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 32,
+        "description": "File POLICY-IN is defined with record layout PI-REC."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 57,
+        "description": "Column PI-POLICY-NO stores the policy number."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-CUSTOMER-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 58,
+        "description": "Column PI-CUSTOMER-ID stores the customer identifier."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-AGENT-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 59,
+        "description": "Column PI-AGENT-ID stores the agent identifier."
+      },
+      {
+        "source": "PI-REC",
+        "target": "PI-PRODUCT-TYPE",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 60,
+        "description": "Column PI-PRODUCT-TYPE indicates HO or AU."
+      },
+      {
+        "source": "PROPERTY-IN",
+        "target": "PR-REC",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": 35,
+        "description": "File PROPERTY-IN is defined with record layout PR-REC."
+      },
+      {
+        "source": "PR-REC",
+        "target": "PR-PROPERTY-ID",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": 73,
+        "description": "Column PR-PROPERTY-ID stores the property identifier."
+      },
+      {
+        "source": "PR-REC",
+        "target": "PR-POLICY-NO",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Column PR-POLICY-NO links property to a policy."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "CALC-HO",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Homeowner premium calculation routine."
+      },
+      {
+        "source": "PREMCALC",
+        "target": "CALC-AU",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Auto premium calculation routine."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser reported no tables or columns, while LLM extracted detailed record layouts and fields.",
+      "Parser listed only file names; LLM added program name and procedural entities not present in parser output."
+    ],
+    "gaps_detected": [
+      "Definitions and implementations of CALC-HO and CALC-AU procedures are not present in the extracted knowledge.",
+      "Rating constants and business rules used in premium calculations are not captured.",
+      "Error code definitions (P001, P002, P003, P004) lack detailed descriptions.",
+      "External dependencies such as lookup tables for coverage factors are not identified."
+    ],
+    "overall_confidence": 0.94
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "PI-REC",
+        "PR-REC",
+        "VE-REC",
+        "CO-REC",
+        "PO-REC",
+        "ER-REC"
+      ],
+      "columns": [
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PR-PROPERTY-ID",
+        "PR-POLICY-NO",
+        "PR-PROPERTY-TYPE",
+        "PR-ADDRESS",
+        "PR-CONSTRUCTION-TYPE",
+        "PR-YEAR-BUILT",
+        "PR-PROPERTY-VALUE",
+        "VE-VEHICLE-ID",
+        "VE-POLICY-NO",
+        "VE-VIN",
+        "VE-MAKE",
+        "VE-MODEL",
+        "VE-YEAR",
+        "VE-VEHICLE-VALUE",
+        "CO-COVERAGE-ID",
+        "CO-POLICY-NO",
+        "CO-COVERAGE-TYPE",
+        "CO-COVERAGE-LIMIT",
+        "CO-DEDUCTIBLE",
+        "CO-EFFECTIVE-DATE",
+        "CO-EXPIRY-DATE",
+        "PO-PREMIUM-ID",
+        "PO-POLICY-NO",
+        "PO-WRITTEN-PREMIUM",
+        "PO-EARNED-PREMIUM",
+        "PO-UNEARNED-PREMIUM",
+        "PO-CALCULATION-DATE",
+        "ER-POLICY-NO",
+        "ER-CODE",
+        "ER-MESSAGE",
+        "WS-PI-ST",
+        "WS-PR-ST",
+        "WS-VE-ST",
+        "WS-CO-ST",
+        "WS-PO-ST",
+        "WS-ER-ST",
+        "WS-POL-EOF",
+        "WS-PR-EOF",
+        "WS-VE-EOF",
+        "WS-CO-EOF",
+        "WS-PR-FOUND",
+        "WS-VE-FOUND",
+        "WS-CO-FOUND",
+        "WS-FATAL",
+        "WS-HO-BASE",
+        "WS-HO-RISK-RATE",
+        "WS-HO-COV-RATE",
+        "WS-HO-DED-RATE",
+        "WS-HO-MIN",
+        "WS-HO-MAX-DISC",
+        "WS-AU-BASE",
+        "WS-AU-RISK-RATE",
+        "WS-AU-COV-RATE",
+        "WS-AU-DED-RATE",
+        "WS-AU-MIN",
+        "WS-AU-MAX-DISC",
+        "WS-RISK-VALUE",
+        "WS-COV-LIMIT-TOTAL",
+        "WS-DEDUCT-TOTAL",
+        "WS-DISCOUNT",
+        "WS-PREMIUM",
+        "WS-CURRENT-DATE",
+        "WS-COVERAGE-COUNT",
+        "WS-READ",
+        "WS-CALCULATED",
+        "WS-ERRORS",
+        "WS-IO-ERRORS"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Calculate daily premium amounts for validated policies by aggregating property, vehicle, and coverage data, applying product‑specific rating rules (Homeowners and Auto), and outputting premium records with a unique premium ID while logging any processing errors.",
+      "narrative": "The program opens five sequential files (policy, property, vehicle, coverage, premium output, error output). It reads the first property, vehicle, and coverage records to prime look‑ahead buffers. It then enters a loop reading each policy record (sorted by policy number). For each policy it resets calculation work fields, determines the product type, and attempts to locate the associated property (HO) or vehicle (AU) record by scanning the respective input file until the policy numbers match. If a matching asset record is found, it scans the coverage file to collect all coverage records belonging to the same policy, summing coverage limits and deductibles and counting coverages. With these aggregates it invokes the appropriate calculation routine (CALC‑HO or CALC‑AU) that uses hard‑coded rating constants to compute risk value, discount, and final premium, enforcing minimum premium and maximum discount limits. A premium ID is built from the first six characters of the policy number plus the current date. The premium record is written to PREMIUM‑OUT and counters are updated. If any required asset or coverage is missing, or the product type is unsupported, an error record with a specific error code and message is written to ERROR‑OUT. After all policies are processed the files are closed and processing statistics are displayed. Fatal file‑open or I/O errors abort the run.",
+      "business_domain": "Premium Calculation (Insurance Rating) for Homeowners and Auto policies.",
+      "business_rules": [
+        "Product type must be either 'HO' (Homeowners) or 'AU' (Auto); otherwise error P004 is generated.",
+        "Homeowners policies require a matching property record; missing record generates error P001.",
+        "Auto policies require a matching vehicle record; missing record generates error P002.",
+        "At least one coverage record must exist for a policy; missing coverage generates error P003.",
+        "Premium ID is 12 bytes: first 6 bytes of the policy number + YYMMDD of the calculation date, assuming one calculation per policy per day.",
+        "Premium calculation uses product‑specific constants: base amount, risk rate, coverage rate, deductible rate, minimum premium, and maximum discount.",
+        "Discount applied cannot exceed the product‑specific maximum discount and premium cannot fall below the product‑specific minimum.",
+        "Earned premium = calculated premium; unearned premium = written premium – earned premium.",
+        "All input files must be sorted by policy number to allow sequential matching.",
+        "Fatal file‑open or I/O errors abort processing and set RETURN‑CODE to 12."
+      ],
+      "key_logic": [
+        "Initialize current processing date.",
+        "Open all input and output files; abort on any file‑open error.",
+        "Read the first property, vehicle, and coverage records to prime EOF flags.",
+        "Loop over POLICY-IN records until end‑of‑file or a fatal error:",
+        "  Increment read counter.",
+        "  Process each policy:",
+        "    Reset calculation work variables.",
+        "    If product type is HO (homeowners):",
+        "      Locate matching property record; if not found write error P001.",
+        "      Locate all coverage records for the policy; if none write error P003.",
+        "      Perform homeowner premium calculation (CALC-HO) and write premium record.",
+        "    Else if product type is AU (auto):",
+        "      Locate matching vehicle record; if not found write error P002.",
+        "      Locate all coverage records for the policy; if none write error P003.",
+        "      Perform auto premium calculation (CALC-AU) and write premium record.",
+        "    Else write error P004 (invalid product type).",
+        "Close all files and display processing statistics.",
+        "Return appropriate return‑code on fatal error."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "PREMCALC",
+        "PI-REC",
+        "PI-POLICY-NO",
+        "PI-CUSTOMER-ID",
+        "PI-AGENT-ID",
+        "PI-PRODUCT-TYPE",
+        "PI-POLICY-STATUS",
+        "PI-EFFECTIVE-DATE",
+        "PI-EXPIRY-DATE",
+        "PI-WRITTEN-PREMIUM",
+        "PI-CREATE-DT",
+        "PI-UPDATE-DT",
+        "PR-REC",
+        "PR-PROPERTY-ID",
+        "PR-POLICY-NO",
+        "CALC-HO",
+        "CALC-AU"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T001",
+          "rule_type": "CALCULATION",
+          "description": "Set current processing date from system date.",
+          "source_entities": [
+            "FUNCTION CURRENT-DATE"
+          ],
+          "target_entities": [
+            "WS-CURRENT-DATE"
+          ],
+          "expression": "MOVE FUNCTION CURRENT-DATE(1:8) TO WS-CURRENT-DATE",
+          "line_number": 168,
+          "confidence": 1.0
+        },
+        {
+          "rule_id": "T002",
+          "rule_type": "CALCULATION",
+          "description": "Initialize calculation work variables to zero at start of each policy.",
+          "source_entities": [
+            "ZERO"
+          ],
+          "target_entities": [
+            "WS-RISK-VALUE",
+            "WS-COV-LIMIT-TOTAL",
+            "WS-DEDUCT-TOTAL",
+            "WS-DISCOUNT",
+            "WS-PREMIUM",
+            "WS-COVERAGE-COUNT"
+          ],
+          "expression": "MOVE ZERO TO WS-RISK-VALUE WS-COV-LIMIT-TOTAL WS-DEDUCT-TOTAL WS-DISCOUNT WS-PREMIUM WS-COVERAGE-COUNT",
+          "line_number": 283,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T003",
+          "rule_type": "AGGREGATION",
+          "description": "Count each policy record read.",
+          "source_entities": [
+            "WS-READ"
+          ],
+          "target_entities": [
+            "WS-READ"
+          ],
+          "expression": "ADD 1 TO WS-READ",
+          "line_number": 179,
+          "confidence": 1.0
+        },
+        {
+          "rule_id": "T004",
+          "rule_type": "CONDITIONAL",
+          "description": "Validate product type; only HO (homeowners) or AU (auto) are allowed.",
+          "source_entities": [
+            "PI-PRODUCT-TYPE"
+          ],
+          "target_entities": [
+            "ER-CODE",
+            "ER-MESSAGE"
+          ],
+          "expression": "IF PI-PRODUCT-TYPE NOT = 'HO' AND PI-PRODUCT-TYPE NOT = 'AU' THEN SET error P004",
+          "line_number": 306,
+          "confidence": 0.9
+        },
+        {
+          "rule_id": "T005",
+          "rule_type": "MAPPING",
+          "description": "Generate premium identifier by concatenating first 6 characters of policy number with calculation date (YYMMDD).",
+          "source_entities": [
+            "PI-POLICY-NO",
+            "WS-CURRENT-DATE"
+          ],
+          "target_entities": [
+            "PO-PREMIUM-ID"
+          ],
+          "expression": "PO-PREMIUM-ID = PI-POLICY-NO(1:6) & WS-CURRENT-DATE(3:8)",
+          "line_number": null,
+          "confidence": 0.6
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "PREMCALC",
+          "target": "POLICY-IN",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Main program reads policy records from POLICY-IN."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "PROPERTY-IN",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Main program reads property records from PROPERTY-IN."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "VEHICLE-IN",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Main program reads vehicle records from VEHICLE-IN."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "COVERAGE-IN",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Main program reads coverage records from COVERAGE-IN."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "PREMIUM-OUT",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Calculated premiums are written to PREMIUM-OUT."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "ERROR-OUT",
+          "relationship_type": "USES",
+          "confidence": 0.99,
+          "evidence_line": 1,
+          "description": "Processing errors are logged to ERROR-OUT."
+        },
+        {
+          "source": "POLICY-IN",
+          "target": "PI-REC",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 32,
+          "description": "File POLICY-IN is defined with record layout PI-REC."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 57,
+          "description": "Column PI-POLICY-NO stores the policy number."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-CUSTOMER-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 58,
+          "description": "Column PI-CUSTOMER-ID stores the customer identifier."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-AGENT-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 59,
+          "description": "Column PI-AGENT-ID stores the agent identifier."
+        },
+        {
+          "source": "PI-REC",
+          "target": "PI-PRODUCT-TYPE",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 60,
+          "description": "Column PI-PRODUCT-TYPE indicates HO or AU."
+        },
+        {
+          "source": "PROPERTY-IN",
+          "target": "PR-REC",
+          "relationship_type": "USES",
+          "confidence": 0.98,
+          "evidence_line": 35,
+          "description": "File PROPERTY-IN is defined with record layout PR-REC."
+        },
+        {
+          "source": "PR-REC",
+          "target": "PR-PROPERTY-ID",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": 73,
+          "description": "Column PR-PROPERTY-ID stores the property identifier."
+        },
+        {
+          "source": "PR-REC",
+          "target": "PR-POLICY-NO",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.97,
+          "evidence_line": null,
+          "description": "Column PR-POLICY-NO links property to a policy."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "CALC-HO",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Homeowner premium calculation routine."
+        },
+        {
+          "source": "PREMCALC",
+          "target": "CALC-AU",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Auto premium calculation routine."
+        }
+      ],
+      "gaps": [
+        "Definitions and implementations of CALC-HO and CALC-AU procedures are not present in the extracted knowledge.",
+        "Rating constants and business rules used in premium calculations are not captured.",
+        "Error code definitions (P001, P002, P003, P004) lack detailed descriptions.",
+        "External dependencies such as lookup tables for coverage factors are not identified."
+      ]
+    },
+    "overall_confidence": 0.94
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:PREMCALC.CBL",
+      "label": "Artifact",
+      "properties": {
+        "name": "PREMCALC.CBL",
+        "source_type": "cobol",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\mainframe\\cobol\\PREMCALC.CBL",
+        "total_lines": 433
+      }
+    },
+    {
+      "id": "PROGRAM:PREMCALC",
+      "label": "Program",
+      "properties": {
+        "name": "PREMCALC",
+        "entity_type": "PROGRAM",
+        "data_type": null,
+        "parent": null,
+        "line_number": 1
+      }
+    },
+    {
+      "id": "FILE:POLICY-IN",
+      "label": "File",
+      "properties": {
+        "name": "POLICY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 32
+      }
+    },
+    {
+      "id": "FILE:PROPERTY-IN",
+      "label": "File",
+      "properties": {
+        "name": "PROPERTY-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 35
+      }
+    },
+    {
+      "id": "FILE:VEHICLE-IN",
+      "label": "File",
+      "properties": {
+        "name": "VEHICLE-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 38
+      }
+    },
+    {
+      "id": "FILE:COVERAGE-IN",
+      "label": "File",
+      "properties": {
+        "name": "COVERAGE-IN",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 41
+      }
+    },
+    {
+      "id": "FILE:PREMIUM-OUT",
+      "label": "File",
+      "properties": {
+        "name": "PREMIUM-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 44
+      }
+    },
+    {
+      "id": "FILE:ERROR-OUT",
+      "label": "File",
+      "properties": {
+        "name": "ERROR-OUT",
+        "entity_type": "FILE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 47
+      }
+    },
+    {
+      "id": "TABLE:PI-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PI-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "POLICY-IN",
+        "line_number": 55
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PI-REC",
+        "line_number": 57
+      }
+    },
+    {
+      "id": "COLUMN:PI-CUSTOMER-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CUSTOMER-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 58
+      }
+    },
+    {
+      "id": "COLUMN:PI-AGENT-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PI-AGENT-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(9)",
+        "parent": "PI-REC",
+        "line_number": 59
+      }
+    },
+    {
+      "id": "COLUMN:PI-PRODUCT-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-PRODUCT-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 60
+      }
+    },
+    {
+      "id": "COLUMN:PI-POLICY-STATUS",
+      "label": "Column",
+      "properties": {
+        "name": "PI-POLICY-STATUS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PI-REC",
+        "line_number": 61
+      }
+    },
+    {
+      "id": "COLUMN:PI-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 62
+      }
+    },
+    {
+      "id": "COLUMN:PI-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PI-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 63
+      }
+    },
+    {
+      "id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PI-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PI-REC",
+        "line_number": 64
+      }
+    },
+    {
+      "id": "COLUMN:PI-CREATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-CREATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 65
+      }
+    },
+    {
+      "id": "COLUMN:PI-UPDATE-DT",
+      "label": "Column",
+      "properties": {
+        "name": "PI-UPDATE-DT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PI-REC",
+        "line_number": 66
+      }
+    },
+    {
+      "id": "TABLE:PR-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PR-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PROPERTY-IN",
+        "line_number": 71
+      }
+    },
+    {
+      "id": "COLUMN:PR-PROPERTY-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PR-PROPERTY-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PR-REC",
+        "line_number": 73
+      }
+    },
+    {
+      "id": "COLUMN:PR-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PR-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PR-REC",
+        "line_number": 74
+      }
+    },
+    {
+      "id": "COLUMN:PR-PROPERTY-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PR-PROPERTY-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(2)",
+        "parent": "PR-REC",
+        "line_number": 75
+      }
+    },
+    {
+      "id": "COLUMN:PR-ADDRESS",
+      "label": "Column",
+      "properties": {
+        "name": "PR-ADDRESS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(100)",
+        "parent": "PR-REC",
+        "line_number": 76
+      }
+    },
+    {
+      "id": "COLUMN:PR-CONSTRUCTION-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "PR-CONSTRUCTION-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(30)",
+        "parent": "PR-REC",
+        "line_number": 77
+      }
+    },
+    {
+      "id": "COLUMN:PR-YEAR-BUILT",
+      "label": "Column",
+      "properties": {
+        "name": "PR-YEAR-BUILT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(4)",
+        "parent": "PR-REC",
+        "line_number": 78
+      }
+    },
+    {
+      "id": "COLUMN:PR-PROPERTY-VALUE",
+      "label": "Column",
+      "properties": {
+        "name": "PR-PROPERTY-VALUE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(10)V99",
+        "parent": "PR-REC",
+        "line_number": 79
+      }
+    },
+    {
+      "id": "TABLE:VE-REC",
+      "label": "Table",
+      "properties": {
+        "name": "VE-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "VEHICLE-IN",
+        "line_number": 85
+      }
+    },
+    {
+      "id": "COLUMN:VE-VEHICLE-ID",
+      "label": "Column",
+      "properties": {
+        "name": "VE-VEHICLE-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "VE-REC",
+        "line_number": 87
+      }
+    },
+    {
+      "id": "COLUMN:VE-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "VE-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "VE-REC",
+        "line_number": 88
+      }
+    },
+    {
+      "id": "COLUMN:VE-VIN",
+      "label": "Column",
+      "properties": {
+        "name": "VE-VIN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(17)",
+        "parent": "VE-REC",
+        "line_number": 89
+      }
+    },
+    {
+      "id": "COLUMN:VE-MAKE",
+      "label": "Column",
+      "properties": {
+        "name": "VE-MAKE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(30)",
+        "parent": "VE-REC",
+        "line_number": 90
+      }
+    },
+    {
+      "id": "COLUMN:VE-MODEL",
+      "label": "Column",
+      "properties": {
+        "name": "VE-MODEL",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(30)",
+        "parent": "VE-REC",
+        "line_number": 91
+      }
+    },
+    {
+      "id": "COLUMN:VE-YEAR",
+      "label": "Column",
+      "properties": {
+        "name": "VE-YEAR",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(4)",
+        "parent": "VE-REC",
+        "line_number": 92
+      }
+    },
+    {
+      "id": "COLUMN:VE-VEHICLE-VALUE",
+      "label": "Column",
+      "properties": {
+        "name": "VE-VEHICLE-VALUE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(10)V99",
+        "parent": "VE-REC",
+        "line_number": 93
+      }
+    },
+    {
+      "id": "TABLE:CO-REC",
+      "label": "Table",
+      "properties": {
+        "name": "CO-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "COVERAGE-IN",
+        "line_number": 99
+      }
+    },
+    {
+      "id": "COLUMN:CO-COVERAGE-ID",
+      "label": "Column",
+      "properties": {
+        "name": "CO-COVERAGE-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "CO-REC",
+        "line_number": 101
+      }
+    },
+    {
+      "id": "COLUMN:CO-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "CO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "CO-REC",
+        "line_number": 102
+      }
+    },
+    {
+      "id": "COLUMN:CO-COVERAGE-TYPE",
+      "label": "Column",
+      "properties": {
+        "name": "CO-COVERAGE-TYPE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(4)",
+        "parent": "CO-REC",
+        "line_number": 103
+      }
+    },
+    {
+      "id": "COLUMN:CO-COVERAGE-LIMIT",
+      "label": "Column",
+      "properties": {
+        "name": "CO-COVERAGE-LIMIT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(10)V99",
+        "parent": "CO-REC",
+        "line_number": 104
+      }
+    },
+    {
+      "id": "COLUMN:CO-DEDUCTIBLE",
+      "label": "Column",
+      "properties": {
+        "name": "CO-DEDUCTIBLE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)V99",
+        "parent": "CO-REC",
+        "line_number": 105
+      }
+    },
+    {
+      "id": "COLUMN:CO-EFFECTIVE-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "CO-EFFECTIVE-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "CO-REC",
+        "line_number": 106
+      }
+    },
+    {
+      "id": "COLUMN:CO-EXPIRY-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "CO-EXPIRY-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "CO-REC",
+        "line_number": 107
+      }
+    },
+    {
+      "id": "TABLE:PO-REC",
+      "label": "Table",
+      "properties": {
+        "name": "PO-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PREMIUM-OUT",
+        "line_number": 113
+      }
+    },
+    {
+      "id": "COLUMN:PO-PREMIUM-ID",
+      "label": "Column",
+      "properties": {
+        "name": "PO-PREMIUM-ID",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PO-REC",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "COLUMN:PO-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "PO-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "PO-REC",
+        "line_number": 116
+      }
+    },
+    {
+      "id": "COLUMN:PO-WRITTEN-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PO-WRITTEN-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PO-REC",
+        "line_number": 117
+      }
+    },
+    {
+      "id": "COLUMN:PO-EARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PO-EARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PO-REC",
+        "line_number": 118
+      }
+    },
+    {
+      "id": "COLUMN:PO-UNEARNED-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "PO-UNEARNED-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "PO-REC",
+        "line_number": 119
+      }
+    },
+    {
+      "id": "COLUMN:PO-CALCULATION-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "PO-CALCULATION-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "PO-REC",
+        "line_number": 120
+      }
+    },
+    {
+      "id": "TABLE:ER-REC",
+      "label": "Table",
+      "properties": {
+        "name": "ER-REC",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "ERROR-OUT",
+        "line_number": 124
+      }
+    },
+    {
+      "id": "COLUMN:ER-POLICY-NO",
+      "label": "Column",
+      "properties": {
+        "name": "ER-POLICY-NO",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(12)",
+        "parent": "ER-REC",
+        "line_number": 126
+      }
+    },
+    {
+      "id": "COLUMN:ER-CODE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-CODE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(4)",
+        "parent": "ER-REC",
+        "line_number": 127
+      }
+    },
+    {
+      "id": "COLUMN:ER-MESSAGE",
+      "label": "Column",
+      "properties": {
+        "name": "ER-MESSAGE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X(54)",
+        "parent": "ER-REC",
+        "line_number": 128
+      }
+    },
+    {
+      "id": "VARIABLE:WS-FILE-STATUS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-FILE-STATUS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 134
+      }
+    },
+    {
+      "id": "COLUMN:WS-PI-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PI-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 136
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 137
+      }
+    },
+    {
+      "id": "COLUMN:WS-VE-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-VE-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 138
+      }
+    },
+    {
+      "id": "COLUMN:WS-CO-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CO-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 139
+      }
+    },
+    {
+      "id": "COLUMN:WS-PO-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PO-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 140
+      }
+    },
+    {
+      "id": "COLUMN:WS-ER-ST",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ER-ST",
+        "entity_type": "COLUMN",
+        "data_type": "PIC XX",
+        "parent": "WS-FILE-STATUS",
+        "line_number": 141
+      }
+    },
+    {
+      "id": "VARIABLE:WS-SWITCHES",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-SWITCHES",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 144
+      }
+    },
+    {
+      "id": "COLUMN:WS-POL-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-POL-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 146
+      }
+    },
+    {
+      "id": "VARIABLE:POL-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "POL-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 147
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 149
+      }
+    },
+    {
+      "id": "VARIABLE:PR-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "PR-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 150
+      }
+    },
+    {
+      "id": "COLUMN:WS-VE-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-VE-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 152
+      }
+    },
+    {
+      "id": "VARIABLE:VE-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "VE-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 153
+      }
+    },
+    {
+      "id": "COLUMN:WS-CO-EOF",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CO-EOF",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 155
+      }
+    },
+    {
+      "id": "VARIABLE:CO-EOF",
+      "label": "Variable",
+      "properties": {
+        "name": "CO-EOF",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 156
+      }
+    },
+    {
+      "id": "COLUMN:WS-PR-FOUND",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PR-FOUND",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 158
+      }
+    },
+    {
+      "id": "COLUMN:WS-VE-FOUND",
+      "label": "Column",
+      "properties": {
+        "name": "WS-VE-FOUND",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 159
+      }
+    },
+    {
+      "id": "COLUMN:WS-CO-FOUND",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CO-FOUND",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 160
+      }
+    },
+    {
+      "id": "COLUMN:WS-FATAL",
+      "label": "Column",
+      "properties": {
+        "name": "WS-FATAL",
+        "entity_type": "COLUMN",
+        "data_type": "PIC X",
+        "parent": "WS-SWITCHES",
+        "line_number": 162
+      }
+    },
+    {
+      "id": "VARIABLE:FATAL-ERROR",
+      "label": "Variable",
+      "properties": {
+        "name": "FATAL-ERROR",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 163
+      }
+    },
+    {
+      "id": "VARIABLE:WS-RATING-CONSTANTS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-RATING-CONSTANTS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 168
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-BASE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-BASE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 170
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-RISK-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-RISK-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 171
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-COV-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-COV-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 172
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-DED-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-DED-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 173
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-MIN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-MIN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 174
+      }
+    },
+    {
+      "id": "COLUMN:WS-HO-MAX-DISC",
+      "label": "Column",
+      "properties": {
+        "name": "WS-HO-MAX-DISC",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 175
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-BASE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-BASE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 176
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-RISK-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-RISK-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 177
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-COV-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-COV-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 178
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-DED-RATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-DED-RATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9V9(6)",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 179
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-MIN",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-MIN",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 180
+      }
+    },
+    {
+      "id": "COLUMN:WS-AU-MAX-DISC",
+      "label": "Column",
+      "properties": {
+        "name": "WS-AU-MAX-DISC",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)V99",
+        "parent": "WS-RATING-CONSTANTS",
+        "line_number": 181
+      }
+    },
+    {
+      "id": "VARIABLE:WS-CALC",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-CALC",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 184
+      }
+    },
+    {
+      "id": "COLUMN:WS-RISK-VALUE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-RISK-VALUE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(12)V99",
+        "parent": "WS-CALC",
+        "line_number": 186
+      }
+    },
+    {
+      "id": "COLUMN:WS-COV-LIMIT-TOTAL",
+      "label": "Column",
+      "properties": {
+        "name": "WS-COV-LIMIT-TOTAL",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(12)V99",
+        "parent": "WS-CALC",
+        "line_number": 187
+      }
+    },
+    {
+      "id": "COLUMN:WS-DEDUCT-TOTAL",
+      "label": "Column",
+      "properties": {
+        "name": "WS-DEDUCT-TOTAL",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(12)V99",
+        "parent": "WS-CALC",
+        "line_number": 188
+      }
+    },
+    {
+      "id": "COLUMN:WS-DISCOUNT",
+      "label": "Column",
+      "properties": {
+        "name": "WS-DISCOUNT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "WS-CALC",
+        "line_number": 189
+      }
+    },
+    {
+      "id": "COLUMN:WS-PREMIUM",
+      "label": "Column",
+      "properties": {
+        "name": "WS-PREMIUM",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)V99",
+        "parent": "WS-CALC",
+        "line_number": 190
+      }
+    },
+    {
+      "id": "COLUMN:WS-CURRENT-DATE",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CURRENT-DATE",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(8)",
+        "parent": "WS-CALC",
+        "line_number": 191
+      }
+    },
+    {
+      "id": "COLUMN:WS-COVERAGE-COUNT",
+      "label": "Column",
+      "properties": {
+        "name": "WS-COVERAGE-COUNT",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(5)",
+        "parent": "WS-CALC",
+        "line_number": 192
+      }
+    },
+    {
+      "id": "VARIABLE:WS-COUNTERS",
+      "label": "Variable",
+      "properties": {
+        "name": "WS-COUNTERS",
+        "entity_type": "VARIABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 195
+      }
+    },
+    {
+      "id": "COLUMN:WS-READ",
+      "label": "Column",
+      "properties": {
+        "name": "WS-READ",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 197
+      }
+    },
+    {
+      "id": "COLUMN:WS-CALCULATED",
+      "label": "Column",
+      "properties": {
+        "name": "WS-CALCULATED",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 198
+      }
+    },
+    {
+      "id": "COLUMN:WS-ERRORS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-ERRORS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 199
+      }
+    },
+    {
+      "id": "COLUMN:WS-IO-ERRORS",
+      "label": "Column",
+      "properties": {
+        "name": "WS-IO-ERRORS",
+        "entity_type": "COLUMN",
+        "data_type": "PIC 9(9)",
+        "parent": "WS-COUNTERS",
+        "line_number": 200
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PREMCALC.CBL:T001",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T001",
+        "rule_type": "CALCULATION",
+        "description": "Set current processing date from system date.",
+        "expression": "MOVE FUNCTION CURRENT-DATE(1:8) TO WS-CURRENT-DATE",
+        "line_number": 168
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PREMCALC.CBL:T002",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T002",
+        "rule_type": "CALCULATION",
+        "description": "Initialize calculation work variables to zero at start of each policy.",
+        "expression": "MOVE ZERO TO WS-RISK-VALUE WS-COV-LIMIT-TOTAL WS-DEDUCT-TOTAL WS-DISCOUNT WS-PREMIUM WS-COVERAGE-COUNT",
+        "line_number": 283
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PREMCALC.CBL:T003",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T003",
+        "rule_type": "AGGREGATION",
+        "description": "Count each policy record read.",
+        "expression": "ADD 1 TO WS-READ",
+        "line_number": 179
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PREMCALC.CBL:T004",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T004",
+        "rule_type": "CONDITIONAL",
+        "description": "Validate product type; only HO (homeowners) or AU (auto) are allowed.",
+        "expression": "IF PI-PRODUCT-TYPE NOT = 'HO' AND PI-PRODUCT-TYPE NOT = 'AU' THEN SET error P004",
+        "line_number": 306
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PREMCALC.CBL:T005",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T005",
+        "rule_type": "MAPPING",
+        "description": "Generate premium identifier by concatenating first 6 characters of policy number with calculation date (YYMMDD).",
+        "expression": "PO-PREMIUM-ID = PI-POLICY-NO(1:6) & WS-CURRENT-DATE(3:8)",
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "PROGRAM:PREMCALC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:POLICY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:PROPERTY-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:VEHICLE-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:COVERAGE-IN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:PREMIUM-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "FILE:ERROR-OUT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:PI-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-POLICY-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-CREATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PI-UPDATE-DT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:PR-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-PROPERTY-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-PROPERTY-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-ADDRESS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-CONSTRUCTION-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-YEAR-BUILT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PR-PROPERTY-VALUE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:VE-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-VEHICLE-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-VIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-MAKE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-MODEL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-YEAR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:VE-VEHICLE-VALUE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:CO-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-COVERAGE-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-COVERAGE-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-COVERAGE-LIMIT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-DEDUCTIBLE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-EFFECTIVE-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:CO-EXPIRY-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:PO-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-PREMIUM-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-WRITTEN-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-EARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-UNEARNED-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:PO-CALCULATION-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "TABLE:ER-REC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:ER-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:ER-CODE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:ER-MESSAGE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:WS-FILE-STATUS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PI-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PR-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-VE-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-CO-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PO-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-ER-ST",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:WS-SWITCHES",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-POL-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:POL-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PR-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:PR-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-VE-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:VE-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-CO-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:CO-EOF",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PR-FOUND",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-VE-FOUND",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-CO-FOUND",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-FATAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:FATAL-ERROR",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:WS-RATING-CONSTANTS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-BASE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-RISK-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-COV-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-DED-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-MIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-HO-MAX-DISC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-BASE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-RISK-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-COV-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-DED-RATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-MIN",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-AU-MAX-DISC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:WS-CALC",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-RISK-VALUE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-COV-LIMIT-TOTAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-DEDUCT-TOTAL",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-DISCOUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-PREMIUM",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-CURRENT-DATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-COVERAGE-COUNT",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "VARIABLE:WS-COUNTERS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-READ",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-CALCULATED",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PREMCALC.CBL",
+      "target_id": "COLUMN:WS-IO-ERRORS",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "cobol"
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:POLICY-IN",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads policy records from POLICY-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:PROPERTY-IN",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads property records from PROPERTY-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:VEHICLE-IN",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads vehicle records from VEHICLE-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:COVERAGE-IN",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Main program reads coverage records from COVERAGE-IN."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:PREMIUM-OUT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Calculated premiums are written to PREMIUM-OUT."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:ERROR-OUT",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.99,
+        "evidence_line": 1,
+        "description": "Processing errors are logged to ERROR-OUT."
+      }
+    },
+    {
+      "source_id": "TABLE:POLICY-IN",
+      "target_id": "TABLE:PI-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 32,
+        "description": "File POLICY-IN is defined with record layout PI-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 57,
+        "description": "Column PI-POLICY-NO stores the policy number."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-CUSTOMER-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 58,
+        "description": "Column PI-CUSTOMER-ID stores the customer identifier."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-AGENT-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 59,
+        "description": "Column PI-AGENT-ID stores the agent identifier."
+      }
+    },
+    {
+      "source_id": "TABLE:PI-REC",
+      "target_id": "TABLE:PI-PRODUCT-TYPE",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 60,
+        "description": "Column PI-PRODUCT-TYPE indicates HO or AU."
+      }
+    },
+    {
+      "source_id": "TABLE:PROPERTY-IN",
+      "target_id": "TABLE:PR-REC",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.98,
+        "evidence_line": 35,
+        "description": "File PROPERTY-IN is defined with record layout PR-REC."
+      }
+    },
+    {
+      "source_id": "TABLE:PR-REC",
+      "target_id": "TABLE:PR-PROPERTY-ID",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": 73,
+        "description": "Column PR-PROPERTY-ID stores the property identifier."
+      }
+    },
+    {
+      "source_id": "TABLE:PR-REC",
+      "target_id": "TABLE:PR-POLICY-NO",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Column PR-POLICY-NO links property to a policy."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:CALC-HO",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Homeowner premium calculation routine."
+      }
+    },
+    {
+      "source_id": "TABLE:PREMCALC",
+      "target_id": "TABLE:CALC-AU",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Auto premium calculation routine."
+      }
+    }
+  ]
+}

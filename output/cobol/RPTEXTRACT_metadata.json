@@ -1,0 +1,683 @@
+{
+    "metadata_version": "2.0",
+    "source_type": "cobol",
+    "file": "RPTEXTRACT.CBL",
+    "root": "start",
+    "has_errors": true,
+    "divisions": [
+        {
+            "type": "identification_division",
+            "text": "IDENTIFICATION DIVISION.",
+            "start_line": 1,
+            "start_byte": 7
+        },
+        {
+            "type": "environment_division",
+            "text": "ENVIRONMENT DIVISION.",
+            "start_line": 4,
+            "start_byte": 74
+        },
+        {
+            "type": "data_division",
+            "text": "DATA DIVISION.",
+            "start_line": 22,
+            "start_byte": 530
+        },
+        {
+            "type": "procedure_division",
+            "text": "PROCEDURE DIVISION.",
+            "start_line": 62,
+            "start_byte": 1655
+        }
+    ],
+    "paragraphs": [
+        {
+            "name": "MAIN-PARA",
+            "text": "MAIN-PARA.",
+            "start_line": 64,
+            "end_line": 126,
+            "start_byte": 1678,
+            "end_byte": 3321
+        },
+        {
+            "name": "WRITE-KPI-SUMMARY",
+            "text": "WRITE-KPI-SUMMARY.",
+            "start_line": 127,
+            "end_line": 172,
+            "start_byte": 3321,
+            "end_byte": 4538
+        }
+    ],
+    "records": [
+        {
+            "record_name": "POLICY-REC",
+            "level": 1,
+            "start_line": 28,
+            "start_byte": 597,
+            "fields": [
+                {
+                    "name": "POL-POLICY-NO",
+                    "level": 5,
+                    "picture": "X(12)",
+                    "start_line": 29
+                },
+                {
+                    "name": "POL-CUSTOMER-ID",
+                    "level": 5,
+                    "picture": "X(10)",
+                    "start_line": 30
+                },
+                {
+                    "name": "POL-AGENT-ID",
+                    "level": 5,
+                    "picture": "X(10)",
+                    "start_line": 31
+                },
+                {
+                    "name": "POL-PRODUCT",
+                    "level": 5,
+                    "picture": "X(02)",
+                    "start_line": 32
+                },
+                {
+                    "name": "POL-STATUS",
+                    "level": 5,
+                    "picture": "X(02)",
+                    "start_line": 33
+                }
+            ]
+        },
+        {
+            "record_name": "PREMIUM-REC",
+            "level": 1,
+            "start_line": 37,
+            "start_byte": 893,
+            "fields": [
+                {
+                    "name": "PREM-POLICY-NO",
+                    "level": 5,
+                    "picture": "X(12)",
+                    "start_line": 38
+                },
+                {
+                    "name": "WRITTEN-PREMIUM",
+                    "level": 5,
+                    "picture": "9(9)V99",
+                    "start_line": 39
+                },
+                {
+                    "name": "EARNED-PREMIUM",
+                    "level": 5,
+                    "picture": "9(9)V99",
+                    "start_line": 40
+                }
+            ]
+        }
+    ],
+    "files": [
+        {
+            "type": "SELECT",
+            "name": "POLICY-IN",
+            "text": "SELECT POLICY-IN ASSIGN TO 'POLICY.",
+            "start_line": 10,
+            "start_byte": 166
+        },
+        {
+            "type": "SELECT",
+            "name": "PREMIUM-IN",
+            "text": "SELECT PREMIUM-IN ASSIGN TO 'PREMIUM.",
+            "start_line": 14,
+            "start_byte": 285
+        },
+        {
+            "type": "SELECT",
+            "name": "REPORT-OUT",
+            "text": "SELECT REPORT-OUT ASSIGN TO 'MONTHLY_REPORT.",
+            "start_line": 18,
+            "start_byte": 406
+        }
+    ],
+    "variables": [
+        {
+            "name": "POL-POLICY-NO",
+            "level": 5,
+            "picture": "X(12)",
+            "start_line": 29
+        },
+        {
+            "name": "POL-CUSTOMER-ID",
+            "level": 5,
+            "picture": "X(10)",
+            "start_line": 30
+        },
+        {
+            "name": "POL-AGENT-ID",
+            "level": 5,
+            "picture": "X(10)",
+            "start_line": 31
+        },
+        {
+            "name": "POL-PRODUCT",
+            "level": 5,
+            "picture": "X(02)",
+            "start_line": 32
+        },
+        {
+            "name": "POL-STATUS",
+            "level": 5,
+            "picture": "X(02)",
+            "start_line": 33
+        },
+        {
+            "name": "PREM-POLICY-NO",
+            "level": 5,
+            "picture": "X(12)",
+            "start_line": 38
+        },
+        {
+            "name": "WRITTEN-PREMIUM",
+            "level": 5,
+            "picture": "9(9)V99",
+            "start_line": 39
+        },
+        {
+            "name": "EARNED-PREMIUM",
+            "level": 5,
+            "picture": "9(9)V99",
+            "start_line": 40
+        },
+        {
+            "name": "REPORT-OUT-REC",
+            "level": 1,
+            "picture": "X(120)",
+            "start_line": 44
+        },
+        {
+            "name": "EOF-POLICY",
+            "level": 77,
+            "picture": "X",
+            "start_line": 50,
+            "value": "'N'"
+        },
+        {
+            "name": "WS-UNEARNED",
+            "level": 77,
+            "picture": "9(9)V99",
+            "start_line": 53
+        },
+        {
+            "name": "WS-REPORT-MONTH",
+            "level": 77,
+            "picture": "X(06)",
+            "start_line": 55,
+            "value": "'202607'"
+        },
+        {
+            "name": "WS-HEADER",
+            "level": 77,
+            "picture": "X(120)",
+            "start_line": 58,
+            "value": "'REPORT_MONTH|POLICY_NO|CUSTOMER_ID|AGENT_ID|PRODUCT|STATUS|WRITTEN_PREMIUM|EARNED_PREMIUM|UNEARNED_PREMIUM'"
+        }
+    ],
+    "copybooks": [
+        {
+            "name": "RPTEXTRACT",
+            "start_line": 48,
+            "start_byte": 1182
+        }
+    ],
+    "operations": {
+        "perform": [
+            {
+                "text": "PERFORM UNTIL END-OF-POLICY",
+                "start_byte": 1864,
+                "end_byte": 1891,
+                "start_line": 72,
+                "end_line": 72
+            },
+            {
+                "text": "PERFORM WRITE-KPI-SUMMARY",
+                "start_byte": 3180,
+                "end_byte": 3205,
+                "start_line": 119,
+                "end_line": 119
+            }
+        ],
+        "read": [
+            {
+                "text": "READ POLICY-IN",
+                "start_byte": 1910,
+                "end_byte": 1924,
+                "start_line": 74,
+                "end_line": 74
+            },
+            {
+                "text": "READ PREMIUM-IN",
+                "start_byte": 2057,
+                "end_byte": 2072,
+                "start_line": 79,
+                "end_line": 79
+            }
+        ],
+        "write": [
+            {
+                "text": "WRITE REPORT-OUT-REC FROM WS-HEADER",
+                "start_byte": 1814,
+                "end_byte": 1849,
+                "start_line": 70,
+                "end_line": 70
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 3046,
+                "end_byte": 3066,
+                "start_line": 112,
+                "end_line": 112
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 3485,
+                "end_byte": 3505,
+                "start_line": 132,
+                "end_line": 132
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 3601,
+                "end_byte": 3621,
+                "start_line": 137,
+                "end_line": 137
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 3760,
+                "end_byte": 3780,
+                "start_line": 142,
+                "end_line": 142
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 3886,
+                "end_byte": 3906,
+                "start_line": 147,
+                "end_line": 147
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 4012,
+                "end_byte": 4032,
+                "start_line": 152,
+                "end_line": 152
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 4136,
+                "end_byte": 4156,
+                "start_line": 157,
+                "end_line": 157
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 4260,
+                "end_byte": 4280,
+                "start_line": 162,
+                "end_line": 162
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC",
+                "start_byte": 4384,
+                "end_byte": 4404,
+                "start_line": 167,
+                "end_line": 167
+            },
+            {
+                "text": "WRITE REPORT-OUT-REC.",
+                "start_byte": 4517,
+                "end_byte": 4538,
+                "start_line": 172,
+                "end_line": 172
+            }
+        ],
+        "move": [
+            {
+                "text": "MOVE WS-REPORT-MONTH",
+                "start_byte": 2238,
+                "end_byte": 2258,
+                "start_line": 85,
+                "end_line": 85
+            },
+            {
+                "text": "MOVE POL-POLICY-NO",
+                "start_byte": 2332,
+                "end_byte": 2350,
+                "start_line": 88,
+                "end_line": 88
+            },
+            {
+                "text": "MOVE POL-CUSTOMER-ID",
+                "start_byte": 2421,
+                "end_byte": 2441,
+                "start_line": 91,
+                "end_line": 91
+            },
+            {
+                "text": "MOVE POL-AGENT-ID",
+                "start_byte": 2514,
+                "end_byte": 2531,
+                "start_line": 94,
+                "end_line": 94
+            },
+            {
+                "text": "MOVE POL-PRODUCT",
+                "start_byte": 2601,
+                "end_byte": 2617,
+                "start_line": 97,
+                "end_line": 97
+            },
+            {
+                "text": "MOVE POL-STATUS",
+                "start_byte": 2686,
+                "end_byte": 2701,
+                "start_line": 100,
+                "end_line": 100
+            },
+            {
+                "text": "MOVE WRITTEN-PREMIUM",
+                "start_byte": 2769,
+                "end_byte": 2789,
+                "start_line": 103,
+                "end_line": 103
+            },
+            {
+                "text": "MOVE EARNED-PREMIUM",
+                "start_byte": 2863,
+                "end_byte": 2882,
+                "start_line": 106,
+                "end_line": 106
+            },
+            {
+                "text": "MOVE WS-UNEARNED",
+                "start_byte": 2955,
+                "end_byte": 2971,
+                "start_line": 109,
+                "end_line": 109
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 3361,
+                "end_byte": 3365,
+                "start_line": 129,
+                "end_line": 129
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 3520,
+                "end_byte": 3524,
+                "start_line": 134,
+                "end_line": 134
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 3636,
+                "end_byte": 3640,
+                "start_line": 139,
+                "end_line": 139
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 3795,
+                "end_byte": 3799,
+                "start_line": 144,
+                "end_line": 144
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 3921,
+                "end_byte": 3925,
+                "start_line": 149,
+                "end_line": 149
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 4047,
+                "end_byte": 4051,
+                "start_line": 154,
+                "end_line": 154
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 4171,
+                "end_byte": 4175,
+                "start_line": 159,
+                "end_line": 159
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 4295,
+                "end_byte": 4299,
+                "start_line": 164,
+                "end_line": 164
+            },
+            {
+                "text": "MOVE",
+                "start_byte": 4419,
+                "end_byte": 4423,
+                "start_line": 169,
+                "end_line": 169
+            }
+        ],
+        "open": [
+            {
+                "text": "OPEN INPUT POLICY-IN INPUT PREMIUM-IN OUTPUT REPORT-OUT",
+                "start_byte": 1710,
+                "end_byte": 1799,
+                "start_line": 66,
+                "end_line": 68
+            }
+        ],
+        "close": [
+            {
+                "text": "CLOSE POLICY-IN PREMIUM-IN REPORT-OUT STOP RUN.",
+                "start_byte": 3220,
+                "end_byte": 3317,
+                "start_line": 121,
+                "end_line": 125
+            }
+        ],
+        "display": [],
+        "if": [],
+        "goto": [],
+        "add": []
+    },
+    "relationships": [
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "READS",
+            "target": "POLICY-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "READS",
+            "target": "PREMIUM-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "WRITES",
+            "target": "REPORT-OUT-REC"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "USES_COPYBOOK",
+            "target": "RPTEXTRACT"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CONTAINS_RECORD",
+            "target": "POLICY-REC"
+        },
+        {
+            "source": "POLICY-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "POL-POLICY-NO"
+        },
+        {
+            "source": "POLICY-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "POL-CUSTOMER-ID"
+        },
+        {
+            "source": "POLICY-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "POL-AGENT-ID"
+        },
+        {
+            "source": "POLICY-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "POL-PRODUCT"
+        },
+        {
+            "source": "POLICY-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "POL-STATUS"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CONTAINS_RECORD",
+            "target": "PREMIUM-REC"
+        },
+        {
+            "source": "PREMIUM-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "PREM-POLICY-NO"
+        },
+        {
+            "source": "PREMIUM-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "WRITTEN-PREMIUM"
+        },
+        {
+            "source": "PREMIUM-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "EARNED-PREMIUM"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CONTAINS_PARAGRAPH",
+            "target": "MAIN-PARA"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CONTAINS_PARAGRAPH",
+            "target": "WRITE-KPI-SUMMARY"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "PERFORMS",
+            "target": "WRITE-KPI-SUMMARY"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "OPENS",
+            "target": "POLICY-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "OPENS",
+            "target": "PREMIUM-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "OPENS",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CLOSES",
+            "target": "POLICY-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CLOSES",
+            "target": "PREMIUM-IN"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CLOSES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CLOSES",
+            "target": "STOP"
+        },
+        {
+            "source": "RPTEXTRACT.CBL",
+            "relationship": "CLOSES",
+            "target": "RUN"
+        }
+    ],
+    "parse_errors": [],
+    "operation_counts": {
+        "perform": 2,
+        "read": 2,
+        "write": 11,
+        "move": 18,
+        "open": 1,
+        "close": 1,
+        "display": 0,
+        "if": 0,
+        "goto": 0,
+        "add": 0
+    }
+}
