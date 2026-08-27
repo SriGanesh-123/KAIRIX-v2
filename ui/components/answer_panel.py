@@ -14,12 +14,12 @@ in enterprise light theme without emojis.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import streamlit as st
 from ui.components.icons import get_icon
 
 
-def render_answer_panel(result: Dict[str, Any]) -> None:
+def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) -> None:
     """
     Renders structured answer container with all legacy reverse engineering sections in light mode.
     """

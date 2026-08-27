@@ -56,16 +56,13 @@ class Neo4jClient:
             self._driver.verify_connectivity()
             if not self.silent:
                 print(f"[Neo4j] Connected to {self.uri} (db: {self.database})")
-        except ServiceUnavailable as e:
-            raise ConnectionError(
-                f"[Neo4j] Cannot connect to {self.uri}. "
-                f"Is Neo4j running? Error: {e}"
-            ) from e
-        except AuthError as e:
-            raise PermissionError(
-                f"[Neo4j] Authentication failed for user '{self.username}'. "
-                f"Check NEO4J_PASSWORD in .env. Error: {e}"
-            ) from e
+        except Exception as e:
+            self._driver = None
+            if not self.silent:
+                raise ConnectionError(
+                    f"[Neo4j] Cannot connect to {self.uri}. "
+                    f"Is Neo4j running? Error: {e}"
+                ) from e
 
     def run_query(
         self,
@@ -73,17 +70,10 @@ class Neo4jClient:
         params: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Execute a Cypher query and return all records as dicts.
-
-        Args:
-            cypher: The Cypher query string.
-            params: Optional parameter dict for the query.
-
-        Returns:
-            List of record dicts.
+        Execute a read query and return records as a list of dicts.
         """
         if self._driver is None:
-            raise RuntimeError("[Neo4j] Driver not initialized. Call _connect() first.")
+            return []
         params = params or {}
         with self._driver.session(database=self.database) as session:
             result = session.run(cypher, params)

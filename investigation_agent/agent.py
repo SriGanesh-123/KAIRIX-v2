@@ -301,6 +301,23 @@ class InvestigationAgent:
             summaries = []
         return chunks, summaries
 
+    def _get_local_fallback_evidence(self, question: str) -> List[str]:
+        """Fallback to retrieve context from local summaries and knowledge packages."""
+        evidence: List[str] = []
+        words = [w.lower() for w in re.findall(r"[A-Za-z0-9_]{3,}", question) if w.lower() not in {"what", "which", "where", "how", "does", "the", "and", "is", "calculated", "show"}]
+        sum_dir = Path("output/summaries")
+        if sum_dir.exists():
+            for s_file in sum_dir.glob("*.md"):
+                try:
+                    content = s_file.read_text(encoding="utf-8")
+                    if any(w in content.lower() for w in words):
+                        evidence.append(f"Source Summary ({s_file.name}):\n{content[:1200]}")
+                        if len(evidence) >= 5:
+                            break
+                except Exception:
+                    pass
+        return evidence
+
     def _synthesise(
         self,
         question: str,
@@ -308,6 +325,11 @@ class InvestigationAgent:
         vector_evidence: List[str],
     ) -> Tuple[str, float]:
         """Call LLM to synthesise answer from all evidence."""
+        if not graph_evidence and not vector_evidence:
+            fallback_docs = self._get_local_fallback_evidence(question)
+            if fallback_docs:
+                vector_evidence.extend(fallback_docs)
+
         graph_text = (
             "\n".join(graph_evidence[:15]) if graph_evidence else "No graph evidence found."
         )
