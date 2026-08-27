@@ -46,9 +46,9 @@ def render_source_explorer() -> None:
         with st.container():
             st.markdown(
                 """
-                <div style="background: #FFFFFF; border: 1px solid #BFDBFE; border-left: 4px solid #0284C7; border-radius: 8px; padding: 1.25rem; margin: 0.75rem 0; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.06);">
-                    <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A; margin-bottom: 0.25rem;">Register New Legacy Source</div>
-                    <div style="font-size: 0.85rem; color: #64748B; margin-bottom: 1rem;">Upload or paste legacy code (COBOL, SQL, or SSIS DTSX) for deterministic parsing and knowledge extraction.</div>
+                <div class="neo-panel" style="border-left: 4px solid #0284C7; padding: 1.25rem; margin: 0.75rem 0;">
+                    <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">Register New Legacy Source</div>
+                    <div style="font-size: 0.85rem; color: #64748B; margin-bottom: 0.75rem;">Upload or paste legacy code (COBOL, SQL, or SSIS DTSX) for deterministic parsing and knowledge extraction.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -290,14 +290,14 @@ def render_source_explorer() -> None:
                 st.markdown(f"#### Business Rules ({format_metric(len(rules))})")
                 if rules:
                     rules_html = "".join([
-                        f'<div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 3px solid #0284C7; border-radius: 6px; padding: 0.65rem 0.85rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: #1E293B; line-height: 1.45;">'
+                        f'<div style="background: #FFFFFF; border: 1px solid #D5DFEB; border-left: 3px solid #0284C7; border-radius: 7px; padding: 0.65rem 0.85rem; margin-bottom: 0.45rem; font-size: 0.85rem; color: #1E293B; line-height: 1.45; box-shadow: 1px 1px 3px rgba(166, 180, 200, 0.25);">'
                         f'<span style="font-weight: 700; color: #0369A1; font-family: monospace;">Rule {i+1}:</span> {r}'
                         f'</div>'
                         for i, r in enumerate(rules)
                     ])
                     st.markdown(
                         f"""
-                        <div style="height: 420px; max-height: 420px; overflow-y: auto; padding: 0.6rem; border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);">
+                        <div class="neo-inset" style="height: 420px; max-height: 420px; overflow-y: auto; padding: 0.75rem; border-radius: 10px;">
                             {rules_html}
                         </div>
                         """,

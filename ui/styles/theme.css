@@ -1,186 +1,698 @@
-/* KAIRIX Enterprise Light Theme */
+/* KAIRIX Modern Enterprise Neumorphism Visual Design System */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
+/* ==========================================================================
+   1. Centralized Design Tokens (Modern Enterprise Neumorphism)
+   ========================================================================== */
 :root {
-  --bg-primary: #F8FAFC;
-  --bg-secondary: #FFFFFF;
-  --bg-card: #FFFFFF;
-  --bg-card-hover: #F8FAFC;
-  --bg-subtle: #F1F5F9;
+  /* Neutral Canvas & Surfaces */
+  --neo-bg: #EBEEF4;
+  --neo-surface: #F1F4F9;
+  --neo-surface-card: #F4F7FB;
+  --neo-surface-soft: #E5EBF3;
+  --neo-surface-inset: #E6ECF4;
+  --neo-surface-white: #FFFFFF;
   
-  --border-color: #E2E8F0;
-  --border-light: #CBD5E1;
-  --border-dark: #94A3B8;
+  /* Legacy alias mappings for seamless component compatibility */
+  --bg-primary: var(--neo-bg);
+  --bg-secondary: var(--neo-surface);
+  --bg-card: var(--neo-surface-card);
+  --bg-card-hover: #F8FAFD;
+  --bg-subtle: var(--neo-surface-soft);
   
-  --text-primary: #0F172A;
-  --text-secondary: #334155;
-  --text-muted: #64748B;
-  --text-light: #94A3B8;
+  /* High-Contrast Enterprise Typography (WCAG AA/AAA Compliant) */
+  --neo-text-primary: #0F172A;
+  --neo-text-secondary: #334155;
+  --neo-text-muted: #64748B;
+  --neo-text-light: #94A3B8;
   
-  --accent-primary: #0284C7;
-  --accent-indigo: #4F46E5;
-  --accent-emerald: #059669;
-  --accent-amber: #D97706;
-  --accent-rose: #DC2626;
-  --accent-purple: #7C3AED;
+  --text-primary: var(--neo-text-primary);
+  --text-secondary: var(--neo-text-secondary);
+  --text-muted: var(--neo-text-muted);
+  --text-light: var(--neo-text-light);
   
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  /* Defining Structural Borders */
+  --neo-border: #D5DFEB;
+  --neo-border-light: #E4ECF6;
+  --neo-border-dark: #B0C0D4;
+  --neo-border-focus: #0284C7;
+  
+  --border-color: var(--neo-border);
+  --border-light: var(--neo-border-light);
+  --border-dark: var(--neo-border-dark);
+  
+  /* Precision Neumorphic Shadow Matrices */
+  --neo-shadow-light: -4px -4px 9px rgba(255, 255, 255, 0.95);
+  --neo-shadow-dark: 4px 4px 10px rgba(166, 180, 200, 0.45);
+  
+  --neo-shadow-raised: 4px 4px 10px rgba(166, 180, 200, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95);
+  --neo-shadow-raised-hover: 6px 6px 14px rgba(166, 180, 200, 0.5), -6px -6px 14px rgba(255, 255, 255, 1);
+  --neo-shadow-panel: 6px 6px 16px rgba(166, 180, 200, 0.38), -6px -6px 16px rgba(255, 255, 255, 0.92);
+  --neo-shadow-button: 3px 3px 7px rgba(166, 180, 200, 0.42), -3px -3px 7px rgba(255, 255, 255, 0.9);
+  --neo-shadow-button-hover: 4px 4px 10px rgba(166, 180, 200, 0.52), -4px -4px 10px rgba(255, 255, 255, 0.98);
+  
+  --neo-shadow-inset: inset 2px 2px 5px rgba(166, 180, 200, 0.45), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+  --neo-shadow-inset-deep: inset 3px 3px 6px rgba(166, 180, 200, 0.52), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+  --neo-shadow-pressed: inset 2px 2px 4px rgba(166, 180, 200, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+  
+  --shadow-sm: var(--neo-shadow-button);
+  --shadow-md: var(--neo-shadow-raised);
+  --shadow-lg: var(--neo-shadow-panel);
+  
+  /* Restrained Enterprise Accents */
+  --neo-accent: #0284C7;
+  --neo-accent-hover: #0369A1;
+  --neo-accent-soft: rgba(2, 132, 199, 0.12);
+  --neo-accent-indigo: #4F46E5;
+  --neo-accent-emerald: #059669;
+  --neo-accent-amber: #D97706;
+  --neo-accent-danger: #DC2626;
+  --neo-accent-purple: #7C3AED;
+  
+  --accent-primary: var(--neo-accent);
+  --accent-indigo: var(--neo-accent-indigo);
+  --accent-emerald: var(--neo-accent-emerald);
+  --accent-amber: var(--neo-accent-amber);
+  --accent-rose: var(--neo-accent-danger);
+  --accent-purple: var(--neo-accent-purple);
 }
 
-/* Global Container & Typography */
+/* ==========================================================================
+   2. Global Typography & Neumorphic Application Canvas
+   ========================================================================== */
 html, body, [class*="css"] {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  color: var(--neo-text-primary);
+  background-color: var(--neo-bg);
 }
 
-/* Main Content Container Padding & Header Clearance */
+div[data-testid="stAppViewContainer"],
+section.main {
+  background-color: var(--neo-bg) !important;
+}
+
+/* Main Content Container Padding & Responsive Clearance */
 .main .block-container,
 section.main .block-container,
 div[data-testid="stAppViewBlockContainer"] {
-  padding-top: 3.5rem !important;
+  padding-top: 3.2rem !important;
   padding-bottom: 3rem !important;
-  padding-left: 2rem !important;
-  padding-right: 2rem !important;
+  padding-left: 2.2rem !important;
+  padding-right: 2.2rem !important;
   max-width: 96% !important;
 }
 
-/* Sidebar Top Alignment & Stacking */
-section[data-testid="stSidebar"] {
-  background-color: #FFFFFF !important;
-  z-index: 99 !important;
-}
-
-section[data-testid="stSidebar"] .block-container {
-  padding-top: 0.5rem !important;
-  padding-left: 1.1rem !important;
-  padding-right: 1.1rem !important;
-}
-
-/* Streamlit Header Bar */
+/* Transparent Header Clearance */
 header[data-testid="stHeader"] {
   background: transparent !important;
   z-index: 10 !important;
 }
 
-
-
 /* Headers */
 h1, h2, h3, h4, h5, h6 {
-  color: var(--text-primary) !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
-}
-
-/* KAIRIX Custom Hero Banner */
-.kairix-hero {
-  background: linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%);
-  border: 1px solid #BFDBFE;
-  border-left: 5px solid #0284C7;
-  border-radius: 12px;
-  padding: 1.5rem 2rem;
-  margin-bottom: 1.5rem;
-  box-shadow: var(--shadow-md);
-}
-
-.kairix-hero h1 {
-  font-size: 2rem !important;
+  color: var(--neo-text-primary) !important;
   font-weight: 800 !important;
-  color: #0F172A !important;
+  letter-spacing: -0.025em !important;
+}
+
+/* ==========================================================================
+   3. Neumorphic Design System Utility Classes
+   ========================================================================== */
+.neo-raised {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+  border-radius: 12px !important;
+}
+
+.neo-raised-hover {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.neo-raised-hover:hover {
+  background: var(--neo-surface-card) !important;
+  border-color: #93C5FD !important;
+  box-shadow: var(--neo-shadow-raised-hover) !important;
+  transform: translateY(-2px) !important;
+}
+
+.neo-pressed {
+  background: var(--neo-surface-soft) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-pressed) !important;
+  border-radius: 10px !important;
+}
+
+.neo-inset {
+  background: var(--neo-surface-inset) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-inset) !important;
+  border-radius: 8px !important;
+}
+
+.neo-flat {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  border-radius: 10px !important;
+}
+
+.neo-panel {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-panel) !important;
+  border-radius: 14px !important;
+}
+
+.neo-control {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-button) !important;
+  border-radius: 8px !important;
+}
+
+.neo-button {
+  background: var(--neo-surface) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-button) !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  color: var(--neo-text-primary) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+.neo-button:hover {
+  background: var(--neo-surface-card) !important;
+  box-shadow: var(--neo-shadow-button-hover) !important;
+  transform: translateY(-1px) !important;
+}
+
+.neo-button:active {
+  box-shadow: var(--neo-shadow-pressed) !important;
+  transform: translateY(0) !important;
+}
+
+.neo-card {
+  background: var(--neo-surface-card) !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+  border-radius: 12px !important;
+  padding: 1.25rem !important;
+}
+
+/* ==========================================================================
+   4. Sidebar: Modern Neumorphic Navigation Panel
+   ========================================================================== */
+section[data-testid="stSidebar"] {
+  background-color: #E8EDF4 !important;
+  border-right: 1px solid var(--neo-border) !important;
+  box-shadow: 4px 0 16px rgba(166, 180, 200, 0.22) !important;
+  z-index: 99 !important;
+}
+
+section[data-testid="stSidebar"] .block-container {
+  padding-top: 0.8rem !important;
+  padding-left: 1.15rem !important;
+  padding-right: 1.15rem !important;
+}
+
+/* Hide the outer "Navigation" group label box completely */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] > label,
+section[data-testid="stSidebar"] div[data-testid="stRadio"] label[data-testid="stWidgetLabel"],
+section[data-testid="stSidebar"] div[data-testid="stRadio"] > div:first-child:not([role="radiogroup"]) {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Navigation Radios transformed into Equal-Sized Tactile Neumorphic Tiles */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.55rem !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  width: 100% !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label {
+  background: #EFF4FA !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: 2px 2px 6px rgba(166, 180, 200, 0.35), -2px -2px 6px rgba(255, 255, 255, 0.9) !important;
+  border-radius: 10px !important;
+  padding: 0 0.9rem !important;
+  min-height: 48px !important;
+  height: 48px !important;
+  max-height: 48px !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  cursor: pointer !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover {
+  background: #F6F9FD !important;
+  border-color: #93C5FD !important;
+  box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.45), -4px -4px 10px rgba(255, 255, 255, 1) !important;
+  transform: translateY(-1px) !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:hover p {
+  color: var(--neo-accent) !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
+  background: #E1E8F2 !important;
+  border: 1px solid #93C5FD !important;
+  border-left: 4px solid var(--neo-accent) !important;
+  box-shadow: inset 2px 2px 5px rgba(166, 180, 200, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.9) !important;
+  transform: translateY(0) !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) p {
+  color: var(--neo-accent) !important;
+  font-weight: 700 !important;
+}
+
+/* Hide native circular radio dot completely across all Streamlit DOM structures */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])),
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div[data-baseweb="radio"],
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label input,
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label svg,
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label span {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  pointer-events: none !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  text-align: center !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: static !important;
+  padding: 0 0.5rem !important;
+}
+
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+  color: var(--neo-text-secondary) !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  width: 100% !important;
+}
+
+/* Status Indicator Dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-green {
+  background-color: var(--neo-accent-emerald);
+  box-shadow: 0 0 6px rgba(5, 150, 105, 0.4);
+}
+
+.dot-red {
+  background-color: var(--neo-accent-danger);
+  box-shadow: 0 0 6px rgba(220, 38, 38, 0.4);
+}
+
+.dot-amber {
+  background-color: var(--neo-accent-amber);
+  box-shadow: 0 0 6px rgba(217, 119, 6, 0.4);
+}
+
+/* ==========================================================================
+   5. Buttons: Neumorphic Tactile States
+   ========================================================================== */
+div[data-testid="stButton"] > button,
+div[data-testid="stFormSubmitButton"] > button {
+  min-height: 38px !important;
+  height: auto !important;
+  border-radius: 9px !important;
+  font-size: 0.86rem !important;
+  font-weight: 600 !important;
+  padding: 0.45rem 1rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid var(--neo-border) !important;
+  background: var(--neo-surface) !important;
+  color: var(--neo-text-primary) !important;
+  box-shadow: var(--neo-shadow-button) !important;
+  transition: all 0.16s ease-in-out !important;
+}
+
+div[data-testid="stButton"] > button:hover,
+div[data-testid="stFormSubmitButton"] > button:hover {
+  border-color: #93C5FD !important;
+  background: var(--neo-surface-card) !important;
+  color: var(--neo-accent) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: var(--neo-shadow-button-hover) !important;
+}
+
+div[data-testid="stButton"] > button:active,
+div[data-testid="stFormSubmitButton"] > button:active {
+  box-shadow: var(--neo-shadow-pressed) !important;
+  transform: translateY(0) !important;
+  background: var(--neo-surface-soft) !important;
+}
+
+div[data-testid="stButton"] > button:disabled,
+div[data-testid="stFormSubmitButton"] > button:disabled {
+  opacity: 0.55 !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* Primary Neumorphic Button */
+div[data-testid="stButton"] > button[kind="primary"],
+div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
+  background: linear-gradient(135deg, #0284C7 0%, #0369A1 100%) !important;
+  border: 1px solid #0284C7 !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  box-shadow: 3px 3px 8px rgba(2, 132, 199, 0.32), -2px -2px 6px rgba(255, 255, 255, 0.7) !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
+  background: linear-gradient(135deg, #0369A1 0%, #075985 100%) !important;
+  border-color: #0369A1 !important;
+  color: #FFFFFF !important;
+  box-shadow: 4px 4px 12px rgba(2, 132, 199, 0.42), -3px -3px 8px rgba(255, 255, 255, 0.85) !important;
+  transform: translateY(-1px) !important;
+}
+
+div[data-testid="stButton"] > button[kind="primary"]:active,
+div[data-testid="stFormSubmitButton"] > button[kind="primary"]:active {
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(0) !important;
+}
+
+/* ==========================================================================
+   6. Inputs, Forms & Selectboxes: Inset Neumorphic Recesses
+   ========================================================================== */
+/* Inset Forms */
+div[data-testid="stForm"] {
+  border: 1px solid var(--neo-border) !important;
+  border-radius: 14px !important;
+  background: var(--neo-surface) !important;
+  padding: 1.35rem 1.6rem !important;
+  box-shadow: var(--neo-shadow-panel) !important;
+  transition: all 0.2s ease-in-out;
+}
+
+div[data-testid="stForm"]:focus-within {
+  border-color: #93C5FD !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12), var(--neo-shadow-panel) !important;
+}
+
+/* Inset Text Inputs & Textareas */
+div[data-testid="stTextInput"] input,
+div[data-testid="stTextArea"] textarea {
+  border-radius: 8px !important;
+  font-size: 0.9rem !important;
+  padding: 0.55rem 0.85rem !important;
+  border: 1px solid var(--neo-border) !important;
+  background: var(--neo-surface-inset) !important;
+  color: var(--neo-text-primary) !important;
+  box-shadow: var(--neo-shadow-inset) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stTextArea"] textarea:focus {
+  border-color: var(--neo-accent) !important;
+  box-shadow: inset 2px 2px 4px rgba(166, 180, 200, 0.35), inset -2px -2px 4px rgba(255, 255, 255, 0.85), 0 0 0 2px rgba(2, 132, 199, 0.18) !important;
+  background: #EFF4FA !important;
+}
+
+/* Selectboxes */
+div[data-testid="stSelectbox"] label p {
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  color: var(--neo-text-muted) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
   margin-bottom: 0.25rem !important;
 }
 
-.kairix-hero p {
-  color: var(--text-secondary);
-  font-size: 1rem;
-  line-height: 1.5;
-  margin: 0;
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+  background: var(--neo-surface-inset) !important;
+  border: 1px solid var(--neo-border) !important;
+  border-radius: 8px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  box-shadow: var(--neo-shadow-inset) !important;
+  font-size: 0.88rem !important;
+  font-weight: 500 !important;
+  color: var(--neo-text-primary) !important;
+  transition: all 0.15s ease-in-out !important;
 }
 
-/* Metric KPI Cards */
-.kairix-metric-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
+  border-color: var(--neo-accent) !important;
+  box-shadow: inset 2px 2px 4px rgba(166, 180, 200, 0.35), inset -2px -2px 4px rgba(255, 255, 255, 0.85), 0 0 0 1px var(--neo-accent) !important;
+}
+
+/* Horizontal Radio Filter Bar (Inset Track with Raised Selected Pill) */
+div[data-testid="stRadio"] > div[role="radiogroup"] {
+  display: inline-flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.4rem !important;
+  background: var(--neo-surface-inset) !important;
+  border: 1px solid var(--neo-border) !important;
+  border-radius: 10px !important;
+  padding: 0.35rem 0.6rem !important;
+  box-shadow: var(--neo-shadow-inset) !important;
+}
+
+div[data-testid="stRadio"] > div[role="radiogroup"] label {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 7px !important;
+  font-size: 0.84rem !important;
+  font-weight: 600 !important;
+  color: var(--neo-text-secondary) !important;
+  cursor: pointer !important;
+  margin-right: 0 !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+div[data-testid="stRadio"] > div[role="radiogroup"] label:hover {
+  color: var(--neo-accent) !important;
+  background: #E8F0FA !important;
+}
+
+div[data-testid="stRadio"] > div[role="radiogroup"] label:has(input:checked) {
+  background: #FFFFFF !important;
+  border: 1px solid var(--neo-border) !important;
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.35), -2px -2px 5px rgba(255, 255, 255, 0.85) !important;
+  color: var(--neo-accent) !important;
+  font-weight: 700 !important;
+}
+
+/* ==========================================================================
+   7. Investigation Agent: Prompt Chips & Answer Panel System
+   ========================================================================== */
+/* Suggested Question Chips (Equal Height Raised Neumorphic Cards) */
+div[class*="st-key-inv_chip_"],
+div.st-key-inv_chip_0,
+div.st-key-inv_chip_1,
+div.st-key-inv_chip_2,
+div.st-key-inv_chip_3,
+div.st-key-inv_chip_4 {
+  height: 100% !important;
+  display: flex !important;
+}
+
+div[class*="st-key-inv_chip_"] > button,
+div.st-key-inv_chip_0 > button,
+div.st-key-inv_chip_1 > button,
+div.st-key-inv_chip_2 > button,
+div.st-key-inv_chip_3 > button,
+div.st-key-inv_chip_4 > button,
+.suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button {
+  min-height: 94px !important;
+  height: 94px !important;
+  max-height: 94px !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 0.65rem 0.6rem !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--neo-border) !important;
+  background: var(--neo-surface-card) !important;
+  color: var(--neo-text-primary) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+}
+
+div[class*="st-key-inv_chip_"] > button:hover,
+div.st-key-inv_chip_0 > button:hover,
+div.st-key-inv_chip_1 > button:hover,
+div.st-key-inv_chip_2 > button:hover,
+div.st-key-inv_chip_3 > button:hover,
+div.st-key-inv_chip_4 > button:hover,
+.suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button:hover {
+  border-color: #93C5FD !important;
+  background: #FFFFFF !important;
+  color: var(--neo-accent) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: var(--neo-shadow-raised-hover) !important;
+}
+
+div[class*="st-key-inv_chip_"] > button:active,
+div.st-key-inv_chip_0 > button:active,
+div.st-key-inv_chip_1 > button:active,
+div.st-key-inv_chip_2 > button:active,
+div.st-key-inv_chip_3 > button:active,
+div.st-key-inv_chip_4 > button:active,
+.suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button:active {
+  transform: translateY(0) !important;
+  background: var(--neo-surface-soft) !important;
+  box-shadow: var(--neo-shadow-pressed) !important;
+}
+
+div[class*="st-key-inv_chip_"] > button div[data-testid="stMarkdownContainer"],
+div.st-key-inv_chip_0 > button div[data-testid="stMarkdownContainer"],
+div.st-key-inv_chip_1 > button div[data-testid="stMarkdownContainer"],
+div.st-key-inv_chip_2 > button div[data-testid="stMarkdownContainer"],
+div.st-key-inv_chip_3 > button div[data-testid="stMarkdownContainer"],
+div.st-key-inv_chip_4 > button div[data-testid="stMarkdownContainer"],
+.suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button div[data-testid="stMarkdownContainer"] {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  overflow: hidden !important;
+}
+
+div[class*="st-key-inv_chip_"] > button p,
+div.st-key-inv_chip_0 > button p,
+div.st-key-inv_chip_1 > button p,
+div.st-key-inv_chip_2 > button p,
+div.st-key-inv_chip_3 > button p,
+div.st-key-inv_chip_4 > button p,
+.suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button p {
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+  color: var(--neo-text-primary) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 4 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+}
+
+div[class*="st-key-inv_chip_"] > button:hover p,
+div.st-key-inv_chip_0 > button:hover p,
+div.st-key-inv_chip_1 > button:hover p,
+div.st-key-inv_chip_2 > button:hover p,
+div.st-key-inv_chip_3 > button:hover p,
+div.st-key-inv_chip_4 > button:hover p {
+  color: var(--neo-accent) !important;
+}
+
+/* Investigation Answer Panels */
+.question-banner-card {
+  background: var(--neo-surface-card);
+  border: 1px solid var(--neo-border);
+  border-left: 5px solid var(--neo-accent);
   border-radius: 12px;
-  padding: 1.25rem;
-  transition: all 0.2s ease-in-out;
-  box-shadow: var(--shadow-sm);
+  padding: 1.1rem 1.4rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--neo-shadow-raised);
 }
 
-.kairix-metric-card:hover {
-  border-color: #93C5FD;
-  background: var(--bg-card-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.metric-label {
-  font-size: 0.8rem;
-  font-weight: 600;
+.question-banner-card .question-badge {
+  font-size: 0.74rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  margin-bottom: 0.4rem;
+  letter-spacing: 0.06em;
+  color: var(--neo-accent);
+  margin-bottom: 0.35rem;
+}
+
+.question-banner-card .question-text {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--neo-text-primary);
+  line-height: 1.35;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.metric-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #0F172A;
-  line-height: 1.1;
-  font-family: 'JetBrains Mono', monospace;
+.question-banner-card .question-prefix {
+  color: var(--neo-accent);
+  font-size: 1.35rem;
+  font-weight: 900;
 }
 
-.metric-subtext {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-top: 0.35rem;
-}
-
-/* Technology Badges */
-.badge-tech {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0.2rem 0.6rem;
-  border-radius: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.badge-cobol {
-  background: #E0F2FE;
-  color: #0369A1;
-  border: 1px solid #BAE6FD;
-}
-
-.badge-sql {
-  background: #D1FAE5;
-  color: #047857;
-  border: 1px solid #A7F3D0;
-}
-
-.badge-ssis {
-  background: #F3E8FF;
-  color: #7E22CE;
-  border: 1px solid #E9D5FF;
-}
-
-/* Investigation Answer Panels */
 .answer-container {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
+  background: var(--neo-surface-card);
+  border: 1px solid var(--neo-border);
   border-radius: 14px;
   padding: 1.75rem;
   margin-top: 1rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--neo-shadow-panel);
 }
 
 .section-title {
@@ -188,35 +700,36 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #0284C7;
+  color: var(--neo-accent);
   margin-bottom: 0.85rem;
   padding-bottom: 0.35rem;
-  border-bottom: 2px solid #E0F2FE;
+  border-bottom: 2px solid #BAE6FD;
   display: flex;
   align-items: center;
   gap: 0.6rem;
 }
 
 .section-title-emerald {
-  color: #059669 !important;
-  border-color: #DCFCE7 !important;
+  color: var(--neo-accent-emerald) !important;
+  border-color: #A7F3D0 !important;
 }
 
 .section-title-amber {
-  color: #D97706 !important;
-  border-color: #FEF3C7 !important;
+  color: var(--neo-accent-amber) !important;
+  border-color: #FDE68A !important;
 }
 
 .answer-body-card {
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   line-height: 1.7;
-  color: #0F172A;
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-left: 4px solid #0284C7;
+  color: var(--neo-text-primary);
+  background: #EBF1F8;
+  border: 1px solid var(--neo-border);
+  border-left: 4px solid var(--neo-accent);
   border-radius: 0 10px 10px 0;
   padding: 1.1rem 1.4rem;
   margin-bottom: 1.25rem;
+  box-shadow: var(--neo-shadow-inset);
 }
 
 .answer-body-card strong {
@@ -226,23 +739,23 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Key Points Cards */
 .keypoint-item {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-left: 4px solid #0284C7;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
+  border-left: 4px solid var(--neo-accent);
   border-radius: 0 8px 8px 0;
   padding: 0.75rem 1.1rem;
   margin-bottom: 0.55rem;
-  font-size: 0.95rem;
-  color: #334155;
+  font-size: 0.94rem;
+  color: var(--neo-text-secondary);
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.25), -2px -2px 5px rgba(255, 255, 255, 0.8);
   transition: all 0.15s ease-in-out;
 }
 
 .keypoint-item:hover {
-  background: #F8FAFC;
+  background: var(--neo-surface-card);
   border-color: #93C5FD;
   transform: translateX(2px);
 }
@@ -253,12 +766,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .kp-code {
-  background: #EFF6FF;
+  background: #E0EBF7;
   color: #1D4ED8;
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   font-size: 0.88rem;
   font-family: 'JetBrains Mono', monospace;
+  border: 1px solid #BFDBFE;
 }
 
 /* Visual Data Flow Pipeline */
@@ -267,22 +781,23 @@ h1, h2, h3, h4, h5, h6 {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  background: #F8FAFC;
-  border: 1px solid #CBD5E1;
+  background: var(--neo-surface-inset);
+  border: 1px solid var(--neo-border);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
+  box-shadow: var(--neo-shadow-inset);
 }
 
 .flow-step {
-  background: #FFFFFF;
-  border: 1px solid #94A3B8;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
   border-radius: 8px;
   padding: 0.45rem 0.85rem;
   font-size: 0.88rem;
   font-weight: 600;
-  color: #1E293B;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  color: var(--neo-text-primary);
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.35), -2px -2px 5px rgba(255, 255, 255, 0.8);
 }
 
 .flow-step-file {
@@ -293,7 +808,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .flow-arrow {
-  color: #0284C7;
+  color: var(--neo-accent);
   font-size: 1.1rem;
   font-weight: 800;
   user-select: none;
@@ -304,12 +819,13 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  background: #F0FDF4;
-  border: 1px solid #BBF7D0;
-  border-left: 4px solid #059669;
+  background: #EAF7F0;
+  border: 1px solid #A7F3D0;
+  border-left: 4px solid var(--neo-accent-emerald);
   border-radius: 0 10px 10px 0;
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
+  box-shadow: inset 2px 2px 5px rgba(5, 150, 105, 0.12), inset -2px -2px 5px rgba(255, 255, 255, 0.85);
 }
 
 .formula-line {
@@ -345,15 +861,15 @@ h1, h2, h3, h4, h5, h6 {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  background: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  border-radius: 6px;
+  background: var(--neo-surface);
+  border: 1px solid var(--neo-border);
+  border-radius: 7px;
   padding: 0.35rem 0.8rem;
   font-size: 0.85rem;
   font-family: 'JetBrains Mono', monospace;
-  color: #1E293B;
+  color: var(--neo-text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.3), -2px -2px 5px rgba(255, 255, 255, 0.8);
 }
 
 .tech-tag {
@@ -397,360 +913,138 @@ h1, h2, h3, h4, h5, h6 {
   color: #FFFFFF;
 }
 
-/* Intent & Perf Badges */
-.intent-badge {
-  background: #F0F9FF;
-  border: 1px solid #BAE6FD;
-  border-radius: 6px;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.85rem;
-  text-align: center;
-  color: #0369A1;
-  font-weight: 600;
-}
-
-.perf-badge {
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 6px;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.85rem;
-  text-align: center;
-  color: #475569;
-}
-
-/* Knowledge Gaps */
-.gaps-box {
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-left: 4px solid #D97706;
-  border-radius: 0 10px 10px 0;
-  padding: 1rem 1.25rem;
-  color: #92400E;
-  font-size: 0.92rem;
-  line-height: 1.6;
-  margin-bottom: 1.25rem;
-}
-
-.gap-item {
-  margin-bottom: 0.35rem;
-}
-
-.gap-item:last-child {
-  margin-bottom: 0;
-}
-
-/* Sidebar Custom Styling */
-section[data-testid="stSidebar"] {
-  background-color: #F8FAFC !important;
-  border-right: 1px solid var(--border-color) !important;
-}
-
-section[data-testid="stSidebar"] .stRadio > div {
-  gap: 0.25rem !important;
-}
-
-/* Status Indicator Dot */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.dot-green {
-  background-color: #059669;
-  box-shadow: 0 0 6px rgba(5, 150, 105, 0.4);
-}
-
-.dot-red {
-  background-color: #DC2626;
-  box-shadow: 0 0 6px rgba(220, 38, 38, 0.4);
-}
-
-.dot-amber {
-  background-color: #D97706;
-  box-shadow: 0 0 6px rgba(217, 119, 6, 0.4);
-}
-
-/* System Health Card in Status Page */
-.service-health-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
+/* ==========================================================================
+   8. Metric KPI Cards & Technology Badges
+   ========================================================================== */
+.kairix-metric-card {
+  background: var(--neo-surface-card);
+  border: 1px solid var(--neo-border);
+  border-radius: 12px;
   padding: 1.25rem;
-  margin-bottom: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease-in-out;
+  box-shadow: var(--neo-shadow-raised);
 }
 
-.service-health-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.85rem;
+.kairix-metric-card:hover {
+  border-color: #93C5FD;
+  background: #F8FAFD;
+  transform: translateY(-2px);
+  box-shadow: var(--neo-shadow-raised-hover);
 }
 
-.service-health-title {
-  font-size: 1.02rem;
+.metric-label {
+  font-size: 0.8rem;
   font-weight: 700;
-  color: #0F172A;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--neo-text-muted);
+  margin-bottom: 0.4rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.service-health-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
+.metric-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--neo-text-primary);
+  line-height: 1.1;
+  font-family: 'JetBrains Mono', monospace;
 }
 
-.service-health-badge.online {
-  color: #059669;
-  background: #ECFDF5;
+.metric-subtext {
+  font-size: 0.8rem;
+  color: var(--neo-text-muted);
+  margin-top: 0.35rem;
+}
+
+/* Technology Badges */
+.badge-tech {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-cobol {
+  background: #E0F2FE;
+  color: #0369A1;
+  border: 1px solid #BAE6FD;
+}
+
+.badge-sql {
+  background: #D1FAE5;
+  color: #047857;
   border: 1px solid #A7F3D0;
 }
 
-.service-health-badge.offline {
-  color: #DC2626;
-  background: #FEF2F2;
-  border: 1px solid #FECACA;
-}
-
-.service-health-details {
-  font-size: 0.85rem;
-  color: #334155;
-  line-height: 1.7;
-}
-
-.service-health-footer {
-  margin-top: 0.85rem;
-  font-size: 0.8rem;
-  color: #64748B;
-  padding-top: 0.6rem;
-  border-top: 1px solid #F1F5F9;
+.badge-ssis {
+  background: #F3E8FF;
+  color: #7E22CE;
+  border: 1px solid #E9D5FF;
 }
 
 /* Code Viewer */
 .source-code-view {
-  background: #F8FAFC;
-  border: 1px solid var(--border-color);
+  background: #EBF0F7;
+  border: 1px solid var(--neo-border);
   border-radius: 8px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.85rem;
   line-height: 1.4;
   padding: 1rem;
+  box-shadow: var(--neo-shadow-inset);
 }
 
 /* Dataframe & Tables */
 div[data-testid="stDataFrame"] {
-  border: 1px solid var(--border-color) !important;
+  border: 1px solid var(--neo-border) !important;
+  border-radius: 10px !important;
+  background-color: var(--neo-surface-card) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+}
+
+/* Tabs */
+div[data-baseweb="tab-list"] {
+  background-color: var(--neo-surface-inset) !important;
   border-radius: 8px !important;
+  padding: 0.25rem !important;
+  box-shadow: var(--neo-shadow-inset) !important;
+  gap: 0.35rem !important;
+}
+
+button[data-baseweb="tab"] {
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  color: var(--neo-text-secondary) !important;
+  padding: 0.35rem 0.85rem !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] {
   background-color: #FFFFFF !important;
+  color: var(--neo-accent) !important;
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.35), -2px -2px 5px rgba(255, 255, 255, 0.9) !important;
 }
 
-/* Form Styling */
-div[data-testid="stForm"] {
-  border: 1px solid var(--border-color) !important;
+/* Expanders */
+div[data-testid="stExpander"] {
+  border: 1px solid var(--neo-border) !important;
   border-radius: 10px !important;
-  background: #FFFFFF !important;
-  padding: 1.25rem !important;
-  box-shadow: var(--shadow-sm) !important;
+  background: var(--neo-surface) !important;
+  box-shadow: var(--neo-shadow-raised) !important;
+  margin-bottom: 0.85rem !important;
 }
 
-/* Responsive Grid / Cards */
-@media (max-width: 768px) {
-  .kairix-hero {
-    padding: 1rem;
-  }
-  .metric-value {
-    font-size: 1.6rem;
-  }
-}
-
-/* Horizontal Radio Filter Bar (Pills Style) */
-div[data-testid="stRadio"] > div[role="radiogroup"] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  background: #F1F5F9;
-  padding: 0.3rem 0.4rem;
-  border-radius: 8px;
-  display: inline-flex !important;
-  flex-wrap: wrap !important;
-  gap: 0.4rem !important;
-  background: #F1F5F9 !important;
-  border: 1px solid #CBD5E1 !important;
-  border-radius: 10px !important;
-  padding: 0.35rem 0.6rem !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
-}
-
-div[data-testid="stRadio"] > div[role="radiogroup"] label {
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  padding: 0.35rem 0.75rem !important;
-  border-radius: 7px !important;
-  font-size: 0.84rem !important;
-  font-weight: 600 !important;
-  color: #334155 !important;
-  cursor: pointer !important;
-  margin-right: 0 !important;
-  transition: all 0.15s ease-in-out !important;
-}
-
-div[data-testid="stRadio"] > div[role="radiogroup"] label:hover {
-  color: #0284C7 !important;
-  background: #E0F2FE !important;
-  border-color: #BAE6FD !important;
-}
-
-/* Form & Input Fields */
-div[data-testid="stForm"] {
-  border: 1px solid #CBD5E1 !important;
-  border-radius: 14px !important;
-  background: #FFFFFF !important;
-  padding: 1.25rem 1.5rem !important;
-  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease-in-out;
-}
-
-div[data-testid="stForm"]:focus-within {
-  border-color: #0284C7 !important;
-  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15) !important;
-}
-
-div[data-testid="stTextInput"] input {
-  border-radius: 8px !important;
-  font-size: 0.9rem !important;
-  padding: 0.55rem 0.85rem !important;
-  border: 1px solid #94A3B8 !important;
-  background: #FFFFFF !important;
-}
-
-div[data-testid="stTextInput"] input:focus {
-  border-color: #0284C7 !important;
-  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
-}
-
-/* Selectbox Dropdown Box Styling */
-div[data-testid="stSelectbox"] label p {
-  font-size: 0.82rem !important;
-  font-weight: 700 !important;
-  color: #475569 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.04em !important;
-  margin-bottom: 0.25rem !important;
-}
-
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-  background: #FFFFFF !important;
-  border: 1px solid #94A3B8 !important;
-  border-radius: 8px !important;
-  min-height: 38px !important;
-  height: 38px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-  font-size: 0.88rem !important;
-  font-weight: 500 !important;
-  color: #0F172A !important;
-  transition: all 0.15s ease-in-out !important;
-}
-
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {
-  border-color: #0284C7 !important;
-  box-shadow: 0 0 0 1px #0284C7 !important;
-}
-
-/* Standard Sleek Compact Button Styling */
-div[data-testid="stButton"] > button {
-  min-height: 36px !important;
-  height: 36px !important;
-  border-radius: 8px !important;
-  font-size: 0.85rem !important;
-  font-weight: 600 !important;
-  padding: 0.35rem 0.9rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border: 1px solid #CBD5E1 !important;
-  background: #FFFFFF !important;
-  color: #1E293B !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.15s ease-in-out !important;
-}
-
-div[data-testid="stButton"] > button:hover {
-  border-color: #0284C7 !important;
-  background: #F0F9FF !important;
-  color: #0284C7 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12) !important;
-}
-
-/* Primary Button Styling */
-div[data-testid="stButton"] > button[kind="primary"],
-div[data-testid="stFormSubmitButton"] > button[kind="primary"] {
-  background: #0284C7 !important;
-  border-color: #0284C7 !important;
-  color: #FFFFFF !important;
-  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25) !important;
-}
-
-div[data-testid="stButton"] > button[kind="primary"]:hover,
-div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
-  background: #0369A1 !important;
-  border-color: #0369A1 !important;
-  color: #FFFFFF !important;
-  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.35) !important;
-}
-
-/* Suggested Question Chips (Only applied inside investigation chips container) */
-.suggested-chips-container div[data-testid="stButton"] > button {
-  min-height: 98px !important;
-  height: 98px !important;
-  max-height: 98px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-  padding: 0.75rem 0.6rem !important;
-  font-size: 0.84rem !important;
-  font-weight: 500 !important;
-  line-height: 1.35 !important;
-  border-radius: 10px !important;
-  border: 1px solid #CBD5E1 !important;
-  background: #FFFFFF !important;
-  color: #1E293B !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  overflow: hidden !important;
-}
-
-.suggested-chips-container div[data-testid="stButton"] > button:hover {
-  border-color: #0284C7 !important;
-  background: #F0F9FF !important;
-  color: #0369A1 !important;
-  transform: translateY(-2px) !important;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
-}
-
-/* Live Pipeline Progress Animations */
+/* ==========================================================================
+   9. Pipeline Animations & Progress Bars
+   ========================================================================== */
 @keyframes pulse-glow {
   0% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.05); opacity: 0.75; }
   100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes progress-shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: 200px 0; }
 }
 
 .badge-running-pulse {
@@ -779,7 +1073,8 @@ div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
 .pipeline-progress-bar-bg {
   width: 100%;
   height: 6px;
-  background-color: #E2E8F0;
+  background-color: #DDE5EE;
+  box-shadow: inset 1px 1px 3px rgba(166, 180, 200, 0.5);
   border-radius: 4px;
   overflow: hidden;
   margin: 0.35rem 0;
@@ -803,7 +1098,9 @@ div[data-testid="stFormSubmitButton"] > button[kind="primary"]:hover {
   background: linear-gradient(90deg, #059669, #34D399);
 }
 
-/* Node Inspector Action Buttons (Trace Lineage & Ask Agent) */
+/* ==========================================================================
+   10. Knowledge Graph Node Inspector Action Buttons
+   ========================================================================== */
 div.st-key-btn_trace_lineage > button,
 div[data-testid="stButton"] > button:has(div:contains("Trace Lineage")),
 div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")) {
@@ -811,7 +1108,7 @@ div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")) {
   color: #FFFFFF !important;
   border: 1px solid #4338CA !important;
   font-weight: 700 !important;
-  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25) !important;
+  box-shadow: 3px 3px 8px rgba(79, 70, 229, 0.32), -2px -2px 6px rgba(255, 255, 255, 0.7) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
@@ -821,8 +1118,15 @@ div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")):hover {
   background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
   color: #FFFFFF !important;
   border-color: #3730A3 !important;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35) !important;
+  box-shadow: 4px 4px 12px rgba(79, 70, 229, 0.42), -3px -3px 8px rgba(255, 255, 255, 0.85) !important;
   transform: translateY(-1px) !important;
+}
+
+div.st-key-btn_trace_lineage > button:active,
+div[data-testid="stButton"] > button:has(div:contains("Trace Lineage")):active,
+div[data-testid="stButton"] > button:has(p:contains("Trace Lineage")):active {
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(0) !important;
 }
 
 div.st-key-btn_ask_agent > button,
@@ -832,7 +1136,7 @@ div[data-testid="stButton"] > button:has(p:contains("Ask Agent")) {
   color: #FFFFFF !important;
   border: 1px solid #047857 !important;
   font-weight: 700 !important;
-  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25) !important;
+  box-shadow: 3px 3px 8px rgba(5, 150, 105, 0.32), -2px -2px 6px rgba(255, 255, 255, 0.7) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
@@ -842,8 +1146,13 @@ div[data-testid="stButton"] > button:has(p:contains("Ask Agent")):hover {
   background: linear-gradient(135deg, #047857 0%, #065F46 100%) !important;
   color: #FFFFFF !important;
   border-color: #065F46 !important;
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35) !important;
+  box-shadow: 4px 4px 12px rgba(5, 150, 105, 0.42), -3px -3px 8px rgba(255, 255, 255, 0.85) !important;
   transform: translateY(-1px) !important;
 }
 
-
+div.st-key-btn_ask_agent > button:active,
+div[data-testid="stButton"] > button:has(div:contains("Ask Agent")):active,
+div[data-testid="stButton"] > button:has(p:contains("Ask Agent")):active {
+  box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(0) !important;
+}

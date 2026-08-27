@@ -249,41 +249,109 @@ class InvestigationAgent:
     def _graph_retrieve(
         self, question: str
     ) -> Tuple[str, List[Dict[str, Any]]]:
-        """Generate and execute Cypher query, with error recovery."""
-        prompt = CYPHER_GENERATION_PROMPT.format(question=question)
+        """
+        Retrieves graph evidence from Neo4j using hybrid semantic Cypher execution
+        and comprehensive multi-entity/rule/transformation graph extraction.
+        """
+        stop_words = {
+            "what", "when", "where", "which", "who", "whom", "this", "that", "these", "those",
+            "from", "with", "into", "each", "show", "tell", "explain", "trace", "does", "done",
+            "will", "have", "been", "about", "how", "is", "the", "are", "for", "and", "why",
+        }
+        raw_words = re.findall(r"[A-Za-z0-9_\-]+", question.lower())
+        terms = [w for w in raw_words if len(w) >= 3 and w not in stop_words]
+
+        records: List[Dict[str, Any]] = []
         cypher = ""
+        seen = set()
+
+        # Strategy 1: Attempt LLM-generated Cypher query
         try:
-            cypher = self.llm.complete(prompt, temperature=0.1).strip()
-            # Strip markdown if present
-            cypher = re.sub(r"```(?:cypher)?", "", cypher).strip().strip("`")
-            records = self.neo4j.run_query(cypher)
-            return cypher, records[: self.max_graph_results]
+            prompt = CYPHER_GENERATION_PROMPT.format(question=question)
+            raw_cypher = self.llm.complete(prompt, temperature=0.1, max_tokens=150).strip()
+            clean_cypher = re.sub(r"```(?:cypher)?", "", raw_cypher).strip().strip("`")
+            if clean_cypher and ("MATCH" in clean_cypher.upper() or "RETURN" in clean_cypher.upper()):
+                cypher = clean_cypher
+                llm_records = self.neo4j.run_query(cypher)
+                for r in llm_records:
+                    k = tuple(sorted(str(v) for v in r.values()))
+                    if k not in seen:
+                        seen.add(k)
+                        records.append(r)
         except Exception as e:
-            # Try to repair the Cypher
-            if cypher:
+            logger.debug("LLM Cypher generation note: %s", e)
+
+        # Strategy 2: If LLM Cypher returned 0 or few records, run deterministic multi-label graph extraction
+        if len(records) < 5 and terms:
+            for t in terms[:5]:
+                # 2a. Business Rules
+                q_rules = (
+                    "MATCH (r:BusinessRule) "
+                    "WHERE toLower(r.description) CONTAINS toLower($term) "
+                    "RETURN labels(r)[0] AS node_type, r.source_file AS file, r.description AS rule "
+                    "LIMIT 10"
+                )
                 try:
-                    repair_prompt = CYPHER_REPAIR_PROMPT.format(cypher=cypher, error=str(e))
-                    fixed = self.llm.complete(repair_prompt, temperature=0.0).strip()
-                    fixed = re.sub(r"```(?:cypher)?", "", fixed).strip().strip("`")
-                    records = self.neo4j.run_query(fixed)
-                    return fixed, records[: self.max_graph_results]
+                    for row in self.neo4j.run_query(q_rules, {"term": t}):
+                        k = ("rule", row.get("file"), row.get("rule"))
+                        if k not in seen:
+                            seen.add(k)
+                            records.append(row)
                 except Exception:
                     pass
-            # Final fallback: broad entity search
-            fallback = (
-                "MATCH (e:Entity) "
-                "WHERE toLower(e.name) CONTAINS toLower($term) "
-                "RETURN e.name AS name, e.entity_type AS type, "
-                "e.source_file AS source_file, e.description AS description "
-                "LIMIT 20"
-            )
-            words = re.findall(r"[A-Za-z][A-Za-z0-9_]{3,}", question)
-            term = words[0] if words else ""
-            try:
-                records = self.neo4j.run_query(fallback, {"term": term})
-                return fallback, records
-            except Exception:
-                return cypher, []
+
+                # 2b. Transformations & Formulas
+                q_trans = (
+                    "MATCH (t:Transformation) "
+                    "WHERE toLower(t.description) CONTAINS toLower($term) OR toLower(coalesce(t.expression, '')) CONTAINS toLower($term) "
+                    "RETURN labels(t)[0] AS node_type, t.source_file AS file, t.rule_id AS id, t.description AS description, t.expression AS expression "
+                    "LIMIT 10"
+                )
+                try:
+                    for row in self.neo4j.run_query(q_trans, {"term": t}):
+                        k = ("trans", row.get("file"), row.get("id"), row.get("expression"))
+                        if k not in seen:
+                            seen.add(k)
+                            records.append(row)
+                except Exception:
+                    pass
+
+                # 2c. Entities & Data Items
+                q_ent = (
+                    "MATCH (e:Entity) "
+                    "WHERE toLower(e.name) CONTAINS toLower($term) OR toLower(coalesce(e.description, '')) CONTAINS toLower($term) "
+                    "RETURN labels(e)[0] AS node_type, e.source_file AS file, e.name AS name, e.entity_type AS entity_type, e.description AS description "
+                    "LIMIT 10"
+                )
+                try:
+                    for row in self.neo4j.run_query(q_ent, {"term": t}):
+                        k = ("ent", row.get("file"), row.get("name"))
+                        if k not in seen:
+                            seen.add(k)
+                            records.append(row)
+                except Exception:
+                    pass
+
+                # 2d. Connected Lineage Relationships
+                q_rel = (
+                    "MATCH (src:Entity)-[r]->(tgt:Entity) "
+                    "WHERE toLower(src.name) CONTAINS toLower($term) OR toLower(tgt.name) CONTAINS toLower($term) "
+                    "RETURN type(r) AS relationship, src.name AS source, tgt.name AS target, r.source_file AS file "
+                    "LIMIT 10"
+                )
+                try:
+                    for row in self.neo4j.run_query(q_rel, {"term": t}):
+                        k = ("rel", row.get("source"), row.get("relationship"), row.get("target"))
+                        if k not in seen:
+                            seen.add(k)
+                            records.append(row)
+                except Exception:
+                    pass
+
+            if not cypher:
+                cypher = f"MATCH (n) WHERE toLower(n.name/description) IN {terms[:3]} RETURN n"
+
+        return cypher, records[: self.max_graph_results]
 
     def _vector_retrieve(
         self, question: str

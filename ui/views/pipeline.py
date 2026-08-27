@@ -94,7 +94,7 @@ def render_pipeline() -> None:
 
         st.markdown(
             f"""
-            <div style="background:#FFFFFF; border:1px solid #BAE6FD; border-top:4px solid #0284C7; border-radius:12px; padding:1.25rem; box-shadow:0 2px 6px rgba(2,132,199,0.06); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div style="background:#F4F7FB; border:1px solid #D5DFEB; border-top:4px solid #0284C7; border-radius:12px; padding:1.25rem; box-shadow:4px 4px 10px rgba(166, 180, 200, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
                 <div>
                     <div style="display:flex; justify-content:space-between; align-items:center; height:24px; margin-bottom:0.5rem;">
                         <span style="font-size:0.75rem; font-weight:800; color:#0284C7; text-transform:uppercase; letter-spacing:0.06em;">Pipeline 1 • Layer 2</span>
@@ -163,14 +163,14 @@ def render_pipeline() -> None:
         else:
             badge_html2 = f'<span style="background:#EEF2FF; color:#4338CA; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">READY</span>'
             status_box2 = """
-            <div style="background:#EEF2FF; border:1px solid #C7D2FE; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#4338CA; height:50px; display:flex; align-items:center; gap:0.45rem;">
+            <div style="background:#ECEFF8; border:1px solid #C7D2FE; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#4338CA; height:50px; display:flex; align-items:center; gap:0.45rem; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.35);">
                 <span style="font-size:0.95rem;">🕸️</span><span>Builds Neo4j schema nodes, call graphs & cross-file links</span>
             </div>
             """
 
         st.markdown(
             f"""
-            <div style="background:#FFFFFF; border:1px solid #C7D2FE; border-top:4px solid #4F46E5; border-radius:12px; padding:1.25rem; box-shadow:0 2px 6px rgba(79,70,229,0.06); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div style="background:#F4F7FB; border:1px solid #D5DFEB; border-top:4px solid #4F46E5; border-radius:12px; padding:1.25rem; box-shadow:4px 4px 10px rgba(166, 180, 200, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
                 <div>
                     <div style="display:flex; justify-content:space-between; align-items:center; height:24px; margin-bottom:0.5rem;">
                         <span style="font-size:0.75rem; font-weight:800; color:#4F46E5; text-transform:uppercase; letter-spacing:0.06em;">Pipeline 2 • Layer 3</span>
@@ -239,14 +239,14 @@ def render_pipeline() -> None:
         else:
             badge_html3 = f'<span style="background:#ECFDF5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">READY</span>'
             status_box3 = """
-            <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#047857; height:50px; display:flex; align-items:center; gap:0.45rem;">
+            <div style="background:#E8F5EF; border:1px solid #A7F3D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#047857; height:50px; display:flex; align-items:center; gap:0.45rem; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.35);">
                 <span style="font-size:0.95rem;">🧠</span><span>Generates dense neural vector embeddings in Qdrant</span>
             </div>
             """
 
         st.markdown(
             f"""
-            <div style="background:#FFFFFF; border:1px solid #A7F3D0; border-top:4px solid #059669; border-radius:12px; padding:1.25rem; box-shadow:0 2px 6px rgba(5,150,105,0.06); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div style="background:#F4F7FB; border:1px solid #D5DFEB; border-top:4px solid #059669; border-radius:12px; padding:1.25rem; box-shadow:4px 4px 10px rgba(166, 180, 200, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95); height:260px; display:flex; flex-direction:column; justify-content:space-between;">
                 <div>
                     <div style="display:flex; justify-content:space-between; align-items:center; height:24px; margin-bottom:0.5rem;">
                         <span style="font-size:0.75rem; font-weight:800; color:#059669; text-transform:uppercase; letter-spacing:0.06em;">Pipeline 3 • Layer 3</span>

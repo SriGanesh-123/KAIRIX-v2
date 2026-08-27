@@ -82,52 +82,9 @@ def render_investigation() -> None:
         # 4. Suggested Questions Grid (Equal width & height cards)
         st.markdown(
             """
-            <style>
-            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button {
-                min-height: 98px !important;
-                height: 98px !important;
-                max-height: 98px !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-                text-align: center !important;
-                padding: 0.75rem 0.6rem !important;
-                font-size: 0.84rem !important;
-                font-weight: 500 !important;
-                line-height: 1.35 !important;
-                border-radius: 10px !important;
-                border: 1px solid #CBD5E1 !important;
-                background: #FFFFFF !important;
-                color: #1E293B !important;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                white-space: normal !important;
-                word-wrap: break-word !important;
-                overflow: hidden !important;
-            }
-            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button:hover {
-                border-color: #0284C7 !important;
-                background: #F0F9FF !important;
-                color: #0369A1 !important;
-                transform: translateY(-2px) !important;
-                box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12) !important;
-            }
-            .suggested-chips-container div[data-testid="stColumn"] div[data-testid="stButton"] > button p {
-                font-size: 0.84rem !important;
-                line-height: 1.35 !important;
-                text-align: center !important;
-                margin: 0 !important;
-                display: -webkit-box !important;
-                -webkit-line-clamp: 4 !important;
-                -webkit-box-orient: vertical !important;
-                overflow: hidden !important;
-            }
-            </style>
-            <div class="suggested-chips-container">
-                <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
-                    Suggested Questions:
-                </div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
+                Suggested Questions:
+            </div>
             """,
             unsafe_allow_html=True,
         )

@@ -16,10 +16,10 @@ import streamlit as st
 from ui.services.backend_service import BackendService
 
 PAGES = [
-    ("🔍 Investigation Agent", "Investigation Agent"),
-    ("📂 Source Explorer", "Source Explorer"),
-    ("⚙️ Pipeline", "Pipeline"),
-    ("🕸️ Knowledge Graph", "Knowledge Graph"),
+    ("Investigation Agent", "Investigation Agent"),
+    ("Source Explorer", "Source Explorer"),
+    ("Pipeline", "Pipeline"),
+    ("Knowledge Graph", "Knowledge Graph"),
 ]
 
 
@@ -30,7 +30,7 @@ def _get_logo_html() -> str:
         try:
             b64 = base64.b64encode(logo_png.read_bytes()).decode("utf-8")
             return f"""
-            <div style="display: flex; align-items: center; gap: 0.65rem; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.85rem; border-bottom: 1px solid #E2E8F0; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 0.65rem; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.85rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
                 <img src="data:image/png;base64,{b64}" style="height: 48px; width: auto; object-fit: contain; border-radius: 6px;" alt="KAIRIX Logo" />
                 <div>
                     <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em; line-height: 1.1;">KAIRIX</div>
@@ -42,7 +42,7 @@ def _get_logo_html() -> str:
             pass
 
     return """
-    <div style="margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #E2E8F0;">
+    <div style="margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB;">
         <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em;">KAIRIX</div>
     </div>
     """
@@ -101,34 +101,29 @@ def render_sidebar() -> str:
 
         st.markdown(
             f"""
-            <div style="font-size: 0.8rem; color: #334155; display: flex; flex-direction: column; gap: 0.4rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span class="status-dot {neo4j_dot}"></span> Neo4j Graph
-                    </span>
-                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{neo4j_info.get('latency_ms', 0)}ms</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span class="status-dot {qdrant_dot}"></span> Qdrant Vector
-                    </span>
-                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{qdrant_info.get('latency_ms', 0)}ms</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="display: flex; align-items: center; gap: 0.4rem;">
-                        <span class="status-dot {llm_dot}"></span> LLM Provider
-                    </span>
-                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{llm_info.get('provider', 'NIM')}</span>
+            <div class="neo-inset" style="padding: 0.75rem 0.85rem; border-radius: 9px; margin-bottom: 0.75rem;">
+                <div style="font-size: 0.8rem; color: #334155; display: flex; flex-direction: column; gap: 0.45rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span class="status-dot {neo4j_dot}"></span> Neo4j Graph
+                        </span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{neo4j_info.get('latency_ms', 0)}ms</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span class="status-dot {qdrant_dot}"></span> Qdrant Vector
+                        </span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{qdrant_info.get('latency_ms', 0)}ms</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span class="status-dot {llm_dot}"></span> LLM Provider
+                        </span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{llm_info.get('provider', 'NIM')}</span>
+                    </div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-        st.markdown(
-            f"""
-            <div style="font-size: 0.7rem; color: #94A3B8; text-align: center;">
+            <div style="font-size: 0.7rem; color: #94A3B8; text-align: center; margin-top: 0.5rem;">
                 KAIRIX Legacy Workbench v2.0
             </div>
             """,

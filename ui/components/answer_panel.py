@@ -13,6 +13,7 @@ Renders structured Investigation Agent answers into distinct, high-clarity visua
 """
 from __future__ import annotations
 
+import html
 import re
 from typing import Any, Dict, List, Optional
 import streamlit as st
@@ -23,12 +24,12 @@ def _get_tech_badge(source_name: str) -> str:
     """Returns colored HTML badge based on source file extension."""
     name_lower = source_name.lower().strip()
     if any(ext in name_lower for ext in [".cbl", ".cob", ".cpy"]):
-        return f"<span class='source-pill pill-cobol'><span class='tech-tag'>COBOL</span> {source_name}</span>"
+        return f"<span class='source-pill pill-cobol'><span class='tech-tag'>COBOL</span> {html.escape(source_name)}</span>"
     elif any(ext in name_lower for ext in [".sql"]):
-        return f"<span class='source-pill pill-sql'><span class='tech-tag'>SQL</span> {source_name}</span>"
+        return f"<span class='source-pill pill-sql'><span class='tech-tag'>SQL</span> {html.escape(source_name)}</span>"
     elif any(ext in name_lower for ext in [".dtsx"]):
-        return f"<span class='source-pill pill-ssis'><span class='tech-tag'>SSIS</span> {source_name}</span>"
-    return f"<span class='source-pill'>{source_name}</span>"
+        return f"<span class='source-pill pill-ssis'><span class='tech-tag'>SSIS</span> {html.escape(source_name)}</span>"
+    return f"<span class='source-pill'>{html.escape(source_name)}</span>"
 
 
 def _render_data_flow(flow_text: str) -> str:
@@ -36,7 +37,7 @@ def _render_data_flow(flow_text: str) -> str:
     # Split by arrow characters
     steps = [s.strip() for s in re.split(r"\s*(?:→|->|-->)\s*", flow_text) if s.strip()]
     if len(steps) <= 1:
-        return f"<div class='dataflow-container'><div class='flow-step'>{flow_text}</div></div>"
+        return f"<div class='dataflow-container'><div class='flow-step'>{html.escape(flow_text)}</div></div>"
 
     html_parts = ["<div class='dataflow-container'>"]
     for i, step in enumerate(steps):
@@ -59,7 +60,7 @@ def _render_formulas(formula_text: str) -> str:
     """Formats formula / calculation section with styled formula cards."""
     lines = [l.strip() for l in formula_text.splitlines() if l.strip()]
     if not lines:
-        return f"<div class='formula-card'>{formula_text}</div>"
+        return f"<div class='formula-card'>{html.escape(formula_text)}</div>"
 
     html_parts = ["<div class='formula-container'>"]
     for line in lines:
@@ -83,6 +84,7 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
     """
     Renders structured answer container with enhanced styling, cards, and audit evidence.
     """
+    question = result.get("question", "")
     answer = result.get("answer", "")
     key_points = result.get("key_points", [])
     data_flow = result.get("data_flow", "")
@@ -96,7 +98,17 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
     trace_path = result.get("trace_path", [])
     exec_time = result.get("execution_time_sec")
 
-    st.markdown("<div class='answer-container'>", unsafe_allow_html=True)
+    # 0. QUESTION HEADER CARD
+    if question:
+        st.markdown(
+            f"""
+            <div class="question-banner-card">
+                <div class="question-badge">Investigation Question</div>
+                <div class="question-text"><span class="question-prefix">Q:</span> {html.escape(question)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # 1. ANSWER (Executive Summary)
     if answer:
@@ -218,6 +230,4 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
                     st.markdown(f"- `{step}`")
             else:
                 st.text("Trace not available.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
