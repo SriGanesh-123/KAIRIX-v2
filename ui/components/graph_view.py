@@ -1,42 +1,43 @@
 """
 Graph View component for KAIRIX UI.
 
-Renders the interactive vis.js HTML graph canvas and node details drawer.
+Renders authentic Neo4j Bloom-style light theme graph legend, responsive vis.js network canvas,
+and interactive Node Inspector panel.
 """
 from __future__ import annotations
 
+import html
+from typing import Any, Dict, List, Optional
 import streamlit as st
 import streamlit.components.v1 as components
-from typing import Any, Dict, List, Optional
-from ui.services.graph_service import GraphService, NODE_COLORS
+from ui.services.graph_service import GraphService
 
 
 def render_graph_legend() -> None:
     """
-    Renders visual color legend for node entity types.
+    Renders visual color legend for node entity types in light theme.
     """
     legend_items = [
-        ("Artifact", "#818CF8"),
-        ("Program", "#38BDF8"),
-        ("Package", "#2DD4BF"),
-        ("Table", "#34D399"),
-        ("Column", "#22D3EE"),
-        ("BusinessRule", "#FBBF24"),
-        ("Transformation", "#FB923C"),
+        ("Program (COBOL)", "#1D4ED8", "#DBEAFE"),
+        ("Package (SSIS)", "#047857", "#D1FAE5"),
+        ("Table / View (SQL)", "#6D28D9", "#EDE9FE"),
+        ("Column / Field", "#0891B2", "#CFFAFE"),
+        ("Business Rule", "#D97706", "#FEF3C7"),
+        ("Transformation", "#EA580C", "#FFEDD5"),
     ]
 
     pills = "".join([
-        f"<span style='display:inline-flex; align-items:center; gap:0.4rem; margin-right:1rem; font-size:0.78rem; color:#E2E8F0;'>"
-        f"<span style='width:10px; height:10px; border-radius:50%; background:{color}; display:inline-block;'></span>"
+        f"<span style='display:inline-flex; align-items:center; gap:0.4rem; font-size:0.8rem; color:#334155; font-weight:600; background:{bg}; border:1px solid {border}; border-radius:16px; padding:0.25rem 0.65rem;'>"
+        f"<span style='width:9px; height:9px; border-radius:50%; background:{border}; display:inline-block;'></span>"
         f"{name}</span>"
-        for name, color in legend_items
+        for name, border, bg in legend_items
     ])
 
     st.markdown(
         f"""
-        <div style="background:#111827; border:1px solid #1F2937; border-radius:8px; padding:0.6rem 1rem; margin-bottom:1rem;">
-            <div style="font-size:0.75rem; text-transform:uppercase; color:#64748B; margin-bottom:0.35rem; font-weight:600;">Graph Node Types</div>
-            <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1rem;">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:0.75rem 1rem; margin-bottom:1rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+            <div style="font-size:0.72rem; text-transform:uppercase; color:#64748B; margin-bottom:0.45rem; font-weight:700; letter-spacing:0.05em;">Neo4j Node Entity Schema</div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
                 {pills}
             </div>
         </div>
@@ -48,11 +49,11 @@ def render_graph_legend() -> None:
 def render_graph_canvas(
     nodes: List[Dict[str, Any]],
     edges: List[Dict[str, Any]],
-    height: int = 650,
+    height: int = 680,
     selected_node_id: Optional[str] = None,
 ) -> None:
     """
-    Renders the interactive network canvas using Pyvis.
+    Renders the interactive network canvas using Pyvis with light mode.
     """
     if not nodes:
         st.info("No graph nodes to display for the current selection.")
@@ -65,47 +66,68 @@ def render_graph_canvas(
         selected_node_id=selected_node_id,
     )
 
-    components.html(html_content, height=height + 20, scrolling=False)
+    # Frame canvas in clean container
+    components.html(html_content, height=height + 15, scrolling=False)
 
 
 def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[List[Dict[str, Any]]] = None) -> None:
     """
-    Renders details and properties of a selected node.
+    Renders details and properties of a selected node in light theme.
     """
     if not node:
         st.markdown(
             """
-            <div style="background:#111827; border:1px dashed #334155; border-radius:8px; padding:1.5rem; text-align:center; color:#64748B;">
-                Select a node in the graph or search dropdown to inspect properties.
+            <div style="background:#FFFFFF; border:1px dashed #CBD5E1; border-radius:10px; padding:2rem 1rem; text-align:center; color:#64748B;">
+                <div style="font-weight:600; font-size:0.9rem; color:#475569; margin-bottom:0.3rem;">No Node Selected</div>
+                <div style="font-size:0.8rem;">Select a node in the dropdown above to inspect its Neo4j properties and relationships.</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
         return
 
-    node_id = node.get("id") or node.get("file_name") or node.get("name") or "Unknown"
-    name = node.get("name") or node.get("file_name") or node.get("rule_id") or node_id
-    node_type = node.get("entity_type") or node.get("source_type") or "Entity"
-    source_file = node.get("source_file", "N/A")
-    data_type = node.get("data_type", "N/A")
-    description = node.get("description") or node.get("purpose") or "No description available."
+    node_id = str(node.get("id") or node.get("file_name") or node.get("name") or "Unknown")
+    raw_name = str(node.get("name") or node.get("file_name") or node.get("rule_id") or node_id)
+    node_type = str(node.get("entity_type") or node.get("source_type") or "Entity")
+    source_file = str(node.get("source_file") or "Enterprise System")
+    data_type = str(node.get("data_type") or "—")
+    description = str(node.get("description") or node.get("purpose") or "No detailed description recorded.")
+
+    # Select badge styling
+    badge_bg = "#DBEAFE" if "program" in node_type.lower() or "cobol" in node_type.lower() else (
+        "#D1FAE5" if "package" in node_type.lower() or "ssis" in node_type.lower() else (
+            "#EDE9FE" if "table" in node_type.lower() or "sql" in node_type.lower() else (
+                "#FEF3C7" if "rule" in node_type.lower() else "#F1F5F9"
+            )
+        )
+    )
+    badge_color = "#1E4ED8" if "program" in node_type.lower() or "cobol" in node_type.lower() else (
+        "#047857" if "package" in node_type.lower() or "ssis" in node_type.lower() else (
+            "#6D28D9" if "table" in node_type.lower() or "sql" in node_type.lower() else (
+                "#D97706" if "rule" in node_type.lower() else "#475569"
+            )
+        )
+    )
 
     st.markdown(
         f"""
-        <div style="background:#161F30; border:1px solid #334155; border-radius:10px; padding:1.25rem;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
-                <div>
-                    <span class="badge-tech badge-cobol" style="font-size:0.7rem;">{node_type}</span>
-                    <h4 style="margin:0.4rem 0 0 0; color:#FFFFFF;">{name}</h4>
-                </div>
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:1.1rem; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                <span style="background:{badge_bg}; color:{badge_color}; font-size:0.75rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:6px; text-transform:uppercase;">
+                    {html.escape(node_type)}
+                </span>
             </div>
-            <div style="font-size:0.85rem; color:#94A3B8; margin-bottom:1rem;">
-                <div><b>ID:</b> <code style="color:#38BDF8;">{node_id}</code></div>
-                <div><b>Source File:</b> <code style="color:#A78BFA;">{source_file}</code></div>
-                {f'<div><b>Data Type:</b> <code>{data_type}</code></div>' if data_type != 'N/A' else ''}
+            <h4 style="margin:0 0 0.6rem 0; color:#0F172A; font-size:1.1rem; word-break:break-word;">
+                {html.escape(raw_name)}
+            </h4>
+            <div style="font-size:0.82rem; color:#334155; line-height:1.6; margin-bottom:0.8rem;">
+                <div><b style="color:#64748B;">ID:</b> <code style="color:#0284C7; font-size:0.78rem;">{html.escape(node_id)}</code></div>
+                <div><b style="color:#64748B;">Source File:</b> <span style="font-weight:600; color:#0F172A;">{html.escape(source_file)}</span></div>
+                {f'<div><b style="color:#64748B;">Data Type:</b> <code>{html.escape(data_type)}</code></div>' if data_type != '—' else ''}
             </div>
-            <div style="background:#0D111A; border:1px solid #1E293B; border-radius:6px; padding:0.75rem; font-size:0.85rem; color:#CBD5E1; line-height:1.5;">
-                {description}
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:0.75rem; font-size:0.82rem; color:#334155; line-height:1.45;">
+                <div style="font-weight:600; color:#475569; font-size:0.75rem; text-transform:uppercase; margin-bottom:0.25rem;">Description / Purpose</div>
+                {html.escape(description)}
             </div>
         </div>
         """,
@@ -113,9 +135,18 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
     )
 
     if connected_edges:
-        st.markdown("<div style='margin-top:1rem; font-size:0.8rem; font-weight:600; color:#94A3B8;'>Connected Relationships:</div>", unsafe_allow_html=True)
-        for e in connected_edges[:10]:
-            rel = e.get("type", "RELATES_TO")
-            src = e.get("source", "")
-            tgt = e.get("target", "")
-            st.markdown(f"- `<{src}>` — **{rel}** ➔ `<{tgt}>`")
+        st.markdown(f"<div style='margin-top:0.9rem; font-size:0.8rem; font-weight:700; color:#334155; text-transform:uppercase;'>Connected Edges ({len(connected_edges)})</div>", unsafe_allow_html=True)
+        for e in connected_edges[:8]:
+            rel = str(e.get("type", "RELATES_TO"))
+            src = str(e.get("source", "")).split(":")[-1]
+            tgt = str(e.get("target", "")).split(":")[-1]
+            st.markdown(
+                f"""
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:0.35rem 0.6rem; margin-bottom:0.35rem; font-size:0.78rem; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-family:monospace; color:#334155; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{html.escape(src)}</span>
+                    <span style="background:#EEF2FF; color:#4F46E5; font-weight:700; font-size:0.7rem; padding:0.1rem 0.4rem; border-radius:4px;">{html.escape(rel)}</span>
+                    <span style="font-family:monospace; color:#334155; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{html.escape(tgt)}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )

@@ -3,39 +3,68 @@ Investigation Service for KAIRIX UI.
 
 Wraps the existing InvestigationAgent, parses structured response sections
 (ANSWER, KEY POINTS, DATA FLOW, FORMULA, SOURCES, CONFIDENCE, GAPS),
-and manages session conversation state.
+and caches the agent instance (@st.cache_resource) so embeddings & connections stay warm.
 """
 from __future__ import annotations
 
+import logging
 import re
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Callable, Dict, List, Optional
+import streamlit as st
+
+logger = logging.getLogger("kairix.ui.investigation_service")
+
+
+@st.cache_resource(show_spinner=False)
+def _get_cached_investigation_agent():
+    """
+    Cached singleton InvestigationAgent to keep SentenceTransformer and DB clients warm.
+    """
+    from investigation_agent.agent import InvestigationAgent
+    from ui.services.backend_service import BackendService
+
+    neo4j_client = BackendService.get_neo4j_client()
+    qdrant_wrapper = BackendService.get_qdrant_client()
+    embedder = BackendService.get_embedder()
+    llm_client = BackendService.get_llm_client()
+
+    return InvestigationAgent(
+        neo4j_client=neo4j_client,
+        qdrant=qdrant_wrapper,
+        embedder=embedder,
+        llm=llm_client,
+        debug=False,
+    )
 
 
 class InvestigationService:
     """
-    Service wrapper around InvestigationAgent.
+    Service wrapper around InvestigationAgent with caching and structured parsing.
     """
 
     @classmethod
-    def query(cls, question: str) -> Dict[str, Any]:
+    def query(
+        cls,
+        question: str,
+        on_progress: Optional[Callable[[str, str], None]] = None,
+    ) -> Dict[str, Any]:
         """
         Execute an investigation query using the existing InvestigationAgent.
         Parses all sections into a clean dictionary structure.
         """
-        if not question or not question.strip():
+        clean_q = (question or "").strip()
+        if not clean_q:
             return {
                 "success": False,
                 "error": "Question cannot be empty.",
                 "question": question,
             }
 
+        start_time = time.perf_counter()
         try:
-            from investigation_agent.agent import InvestigationAgent
-
-            # Instantiate existing InvestigationAgent
-            agent = InvestigationAgent(debug=False)
-            result = agent.ask(question.strip())
-            agent.close()
+            agent = _get_cached_investigation_agent()
+            result = agent.ask(clean_q, on_progress=on_progress)
 
             # Parse structured sections from the LLM answer
             raw_answer = result.answer
@@ -51,11 +80,13 @@ class InvestigationService:
             if isinstance(conf_val, float):
                 conf_pct = round(conf_val * 100, 1) if conf_val <= 1.0 else round(conf_val, 1)
             else:
-                conf_pct = 80.0
+                conf_pct = 85.0
+
+            elapsed = round(time.perf_counter() - start_time, 2)
 
             return {
                 "success": True,
-                "question": question,
+                "question": clean_q,
                 "raw_answer": raw_answer,
                 "answer": sections.get("answer", raw_answer),
                 "key_points": sections.get("key_points", []),
@@ -69,15 +100,18 @@ class InvestigationService:
                 "graph_evidence": result.graph_evidence,
                 "vector_evidence": result.vector_evidence,
                 "trace_path": result.trace_path,
+                "execution_time_sec": elapsed,
                 "error": None,
             }
 
         except Exception as e:
+            elapsed = round(time.perf_counter() - start_time, 2)
+            logger.error("Investigation failed for question '%s': %s", clean_q, e, exc_info=True)
             return {
                 "success": False,
-                "question": question,
+                "question": clean_q,
                 "error": f"Investigation failed: {str(e)}",
-                "answer": f"An error occurred while investigating your question: {str(e)}. Please check backend service connectivity.",
+                "answer": f"An error occurred while investigating your question: {str(e)}. Please verify backend services are reachable.",
                 "key_points": [],
                 "data_flow": "",
                 "formula": "",
@@ -89,6 +123,7 @@ class InvestigationService:
                 "graph_evidence": [],
                 "vector_evidence": [],
                 "trace_path": [f"Error: {e}"],
+                "execution_time_sec": elapsed,
             }
 
     @staticmethod
@@ -107,7 +142,6 @@ class InvestigationService:
             "gaps": "",
         }
 
-        # Header patterns
         header_patterns = [
             ("ANSWER", r"(?:^|\n)\s*(?:###\s*)?ANSWER\s*:?\s*\n"),
             ("KEY POINTS", r"(?:^|\n)\s*(?:###\s*)?KEY POINTS\s*:?\s*\n"),
@@ -118,7 +152,6 @@ class InvestigationService:
             ("GAPS", r"(?:^|\n)\s*(?:###\s*)?GAPS\s*:?\s*\n"),
         ]
 
-        # Find match indices
         matches = []
         for name, pattern in header_patterns:
             m = re.search(pattern, raw_text, re.IGNORECASE)
@@ -131,7 +164,6 @@ class InvestigationService:
             sections["answer"] = raw_text.strip()
             return sections
 
-        # Extract content between headers
         for i, (start_idx, end_idx, name) in enumerate(matches):
             next_start = matches[i + 1][0] if i + 1 < len(matches) else len(raw_text)
             content = raw_text[end_idx:next_start].strip()
@@ -163,7 +195,6 @@ class InvestigationService:
             elif name == "GAPS":
                 sections["gaps"] = content
 
-        # If answer section was missing before first header, grab prefix
         if matches[0][0] > 0 and not sections["answer"]:
             prefix = raw_text[: matches[0][0]].strip()
             if prefix:

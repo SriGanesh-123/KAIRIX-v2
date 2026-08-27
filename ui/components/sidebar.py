@@ -1,23 +1,51 @@
 """
-Sidebar Component for KAIRIX UI.
+Sidebar Navigation Component for KAIRIX UI.
 
-Provides main navigation and live backend status indicators.
+Renders modern collapsed-by-default left navigation bar with the official
+ValueMomentum / KAIRIX Owl logo pinned to the top-left corner and the 4 core application pages:
+1. 🔍 Investigation Agent (Home Page)
+2. 📂 Source Explorer
+3. ⚙️ Pipeline
+4. 🕸️ Knowledge Graph
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 import streamlit as st
 from ui.services.backend_service import BackendService
 
-
 PAGES = [
-    ("🏠 Dashboard", "Dashboard"),
-    ("📁 Source Explorer", "Source Explorer"),
-    ("🔍 Analyze", "Analyze"),
-    ("💬 Investigation", "Investigation"),
+    ("🔍 Investigation Agent", "Investigation Agent"),
+    ("📂 Source Explorer", "Source Explorer"),
+    ("⚙️ Pipeline", "Pipeline"),
     ("🕸️ Knowledge Graph", "Knowledge Graph"),
-    ("📊 Evidence", "Evidence"),
-    ("⚙️ System Status", "System Status"),
 ]
+
+
+def _get_logo_html() -> str:
+    """Loads and encodes the official KAIRIX logo in base64."""
+    logo_png = Path(__file__).resolve().parent.parent / "assets" / "kairix_logo.png"
+    if logo_png.exists():
+        try:
+            b64 = base64.b64encode(logo_png.read_bytes()).decode("utf-8")
+            return f"""
+            <div style="display: flex; align-items: center; gap: 0.65rem; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.85rem; border-bottom: 1px solid #E2E8F0; width: 100%;">
+                <img src="data:image/png;base64,{b64}" style="height: 48px; width: auto; object-fit: contain; border-radius: 6px;" alt="KAIRIX Logo" />
+                <div>
+                    <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em; line-height: 1.1;">KAIRIX</div>
+                    <div style="font-size: 0.68rem; color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Legacy Workbench</div>
+                </div>
+            </div>
+            """
+        except Exception:
+            pass
+
+    return """
+    <div style="margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #E2E8F0;">
+        <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em;">KAIRIX</div>
+    </div>
+    """
 
 
 def render_sidebar() -> str:
@@ -25,54 +53,38 @@ def render_sidebar() -> str:
     Renders standard left navigation sidebar and returns selected page name.
     """
     with st.sidebar:
-        # Brand Header
-        st.markdown(
-            """
-            <div style="padding: 0.5rem 0 1.25rem 0; border-bottom: 1px solid #1F2937; margin-bottom: 1rem;">
-                <div style="display: flex; align-items: center; gap: 0.6rem;">
-                    <div style="background: linear-gradient(135deg, #0284C7, #6366F1); width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; color: white;">
-                        ⚡
-                    </div>
-                    <div>
-                        <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; letter-spacing: 0.02em;">KAIRIX</div>
-                        <div style="font-size: 0.72rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Legacy Workbench</div>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Brand Header with Official KAIRIX Logo & Team Name pinned to top-left
+        logo_html = _get_logo_html()
+        st.markdown(logo_html, unsafe_allow_html=True)
 
-        # Main Navigation
+        # Main Navigation (4 Options Only)
         page_labels = [label for label, _ in PAGES]
         page_keys = {label: key for label, key in PAGES}
 
-        # Sync with session state if set externally
-        default_index = 0
-        current_page = st.session_state.get("current_page", "Dashboard")
-        for i, (_, key) in enumerate(PAGES):
-            if key == current_page:
-                default_index = i
-                break
+        # Resolve current selection
+        current_page = st.session_state.get("current_page", "Investigation Agent")
+        default_label = next((lbl for lbl, k in PAGES if k == current_page), page_labels[0])
+
+        if "sidebar_navigation_radio" not in st.session_state:
+            st.session_state["sidebar_navigation_radio"] = default_label
 
         selected_label = st.radio(
             "Navigation",
             options=page_labels,
-            index=default_index,
             label_visibility="collapsed",
             key="sidebar_navigation_radio",
         )
 
-        selected_page = page_keys.get(selected_label, "Dashboard")
+        selected_page = page_keys.get(selected_label, "Investigation Agent")
         st.session_state["current_page"] = selected_page
 
-        st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # Backend Health Summary at sidebar bottom
         st.markdown(
             """
-            <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: #64748B; margin-bottom: 0.6rem; letter-spacing: 0.05em;">
+            <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; color: #64748B; margin-bottom: 0.6rem; letter-spacing: 0.05em;">
                 Backend Services
             </div>
             """,
@@ -83,37 +95,44 @@ def render_sidebar() -> str:
         qdrant_info = BackendService.check_qdrant_connection()
         llm_info = BackendService.check_llm_status()
 
-        neo4j_icon = "🟢" if neo4j_info["connected"] else "🔴"
-        qdrant_icon = "🟢" if qdrant_info["connected"] else "🔴"
-        llm_icon = "🟢" if llm_info["configured"] else "🔴"
+        neo4j_dot = "dot-green" if neo4j_info.get("connected") else "dot-red"
+        qdrant_dot = "dot-green" if qdrant_info.get("connected") else "dot-red"
+        llm_dot = "dot-green" if llm_info.get("configured") else "dot-amber"
 
         st.markdown(
             f"""
-            <div style="background: #111827; border: 1px solid #1F2937; border-radius: 8px; padding: 0.75rem; font-size: 0.8rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                    <span style="color: #94A3B8;">Neo4j (7687)</span>
-                    <span>{neo4j_icon}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                    <span style="color: #94A3B8;">Qdrant (6335)</span>
-                    <span>{qdrant_icon}</span>
+            <div style="font-size: 0.8rem; color: #334155; display: flex; flex-direction: column; gap: 0.4rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span class="status-dot {neo4j_dot}"></span> Neo4j Graph
+                    </span>
+                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{neo4j_info.get('latency_ms', 0)}ms</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #94A3B8;">LLM ({llm_info['provider']})</span>
-                    <span>{llm_icon}</span>
+                    <span style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span class="status-dot {qdrant_dot}"></span> Qdrant Vector
+                    </span>
+                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{qdrant_info.get('latency_ms', 0)}ms</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="display: flex; align-items: center; gap: 0.4rem;">
+                        <span class="status-dot {llm_dot}"></span> LLM Provider
+                    </span>
+                    <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{llm_info.get('provider', 'NIM')}</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
         st.markdown(
-            """
-            <div style="margin-top: 1rem; font-size: 0.7rem; color: #475569; text-align: center;">
-                KAIRIX Platform v1.0.0<br>COBOL • SQL • SSIS RAG
+            f"""
+            <div style="font-size: 0.7rem; color: #94A3B8; text-align: center;">
+                KAIRIX Legacy Workbench v2.0
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    return selected_page
+        return selected_page

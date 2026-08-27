@@ -1,8 +1,9 @@
 """
 Knowledge Graph Page for KAIRIX UI.
 
-Provides an interactive Neo4j knowledge graph visualization with search, neighborhood exploration,
-lineage tracing, zoom, pan, and real-time node property inspection.
+Provides an authentic Neo4j Bloom-styled interactive knowledge graph visualization
+with full source graph display by default, compact single-line scope dropdown (no UI expansion),
+entity search, lineage tracing, zoom, pan, and interactive Node Inspector in light theme.
 """
 from __future__ import annotations
 
@@ -18,97 +19,160 @@ from ui.services.source_service import SourceService
 
 def render_knowledge_graph() -> None:
     """
-    Renders the interactive Knowledge Graph explorer page.
+    Renders the complete interactive Knowledge Graph explorer page in light theme.
     """
-    st.markdown("## 🕸️ Knowledge Graph Explorer")
+    st.markdown("## Knowledge Graph Explorer")
     st.markdown(
-        "<p style='color: #94A3B8; margin-top: -0.5rem;'>Interactive Neo4j graph representing entities, business rules, transformations, and cross-file dependencies.</p>",
+        "<p style='color: #64748B; margin-top: -0.5rem;'>Interactive Neo4j graph mapping COBOL programs, SSIS ETL pipelines, SQL schemas, business rules, and cross-system data lineage.</p>",
         unsafe_allow_html=True,
     )
 
-    # Render Legend
+    # 1. Node Schema Legend
     render_graph_legend()
 
-    # Search & Filter Controls
-    col_search, col_file, col_depth, col_limit = st.columns([3, 2, 1, 1])
+    all_files = SourceService.get_all_source_files()
+    all_file_names = [f["file_name"] for f in all_files]
+
+    # Build clean single-select options list
+    scope_options = [
+        "🌐 Full System Graph (All 22 Files)",
+        "🏛️ COBOL Mainframe (All Programs)",
+        "📦 SSIS ETL Pipeline (All Packages)",
+        "🗄️ SQL PolicyCenter & ClaimCenter (All Scripts)",
+    ]
+    scope_options.extend([f"📄 {fn}" for fn in all_file_names])
+
+    # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Limit + Refresh)
+    col_search, col_scope, col_type, col_limit, col_reset = st.columns([3.6, 2.8, 1.8, 1.0, 0.8])
 
     with col_search:
+        pre_search = st.session_state.pop("graph_search_term", None)
+        if pre_search is not None:
+            st.session_state["graph_search_input"] = pre_search
+
         search_query = st.text_input(
-            "Search Node / Entity:",
-            value=st.session_state.pop("graph_search_term", ""),
-            placeholder="e.g. EARNPREM, PREMCALC, PREMIUM-OUT",
+            "Search Node / Entity / File:",
+            placeholder="e.g. EARNPREM, PolicyCenter, Extract_Account",
             key="graph_search_input",
+            label_visibility="collapsed",
         )
 
-    with col_file:
-        all_files = SourceService.get_all_source_files()
-        file_options = ["(All Files)"] + [f["file_name"] for f in all_files]
-        selected_file_filter = st.selectbox(
-            "Filter by Source File:",
-            options=file_options,
+    with col_scope:
+        selected_scope = st.selectbox(
+            "Graph Scope / Source File:",
+            options=scope_options,
             index=0,
-            key="graph_file_filter_select",
+            key="kg_single_scope_select",
+            label_visibility="collapsed",
         )
 
-    with col_depth:
-        hops = st.selectbox("Hops", options=[1, 2], index=0, key="graph_hops_select")
+    with col_type:
+        type_options = ["(All Types)", "Program", "Package", "Table", "Column", "BusinessRule", "Transformation", "Artifact", "File"]
+        selected_type_filter = st.selectbox(
+            "Node Type:",
+            options=type_options,
+            index=0,
+            key="graph_type_filter_select",
+            label_visibility="collapsed",
+        )
 
     with col_limit:
-        max_nodes = st.selectbox("Limit", options=[30, 50, 80], index=1, key="graph_limit_select")
+        max_nodes = st.selectbox("Limit", options=[30, 50, 80, 150], index=2, key="graph_limit_select", label_visibility="collapsed")
 
-    # Fetch Graph Data dynamically from Neo4j based on filters
+    with col_reset:
+        if st.button("🔄", use_container_width=True, help="Refresh Graph"):
+            st.session_state.pop("graph_override_subgraph", None)
+            st.rerun()
+
+    # 3. Fetch Graph Data
     nodes: list = []
     edges: list = []
     selected_node = None
     connected_edges = []
 
+    # Check for active lineage trace override
+    override_subgraph = st.session_state.get("graph_override_subgraph")
+    if override_subgraph and not search_query:
+        nodes = override_subgraph.get("nodes", [])
+        edges = override_subgraph.get("edges", [])
+        st.info(f"Showing active lineage trace subgraph ({len(nodes)} nodes, {len(edges)} edges). Click '🔄' to return to overview.")
+
     # 1. Search Query active
-    if search_query and search_query.strip():
+    elif search_query and search_query.strip():
         search_results = GraphService.search_nodes(search_query.strip(), max_results=10)
         if search_results:
-            st.markdown(f"<div style='font-size:0.85rem; color:#38BDF8;'>Found {len(search_results)} matching node(s):</div>", unsafe_allow_html=True)
             node_names = [r.get("display_name") or r.get("id") for r in search_results]
-            sel_node_name = st.selectbox("Select Node from Results:", options=node_names, key="search_res_select")
+            sel_node_name = st.selectbox(
+                f"Found {len(search_results)} matching node(s):",
+                options=node_names,
+                key="search_res_select",
+            )
 
-            # Find matching node record
             chosen = next((r for r in search_results if (r.get("display_name") == sel_node_name or r.get("id") == sel_node_name)), search_results[0])
             node_id = chosen.get("id")
 
-            # Load neighborhood of selected node
-            subgraph = GraphService.get_node_neighborhood(node_id, hops=hops, max_nodes=max_nodes)
+            subgraph = GraphService.get_node_neighborhood(node_id, hops=1, max_nodes=max_nodes)
             nodes = subgraph.get("nodes", [])
             edges = subgraph.get("edges", [])
             selected_node = chosen
         else:
-            st.warning(f"No nodes found matching '{search_query}'. Showing overview graph.")
+            st.warning(f"No nodes found matching '{search_query}'. Showing full system graph.")
             subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes)
             nodes = subgraph.get("nodes", [])
             edges = subgraph.get("edges", [])
 
-    # 2. File Filter active
-    elif selected_file_filter != "(All Files)":
-        subgraph = GraphService.get_file_subgraph(selected_file_filter, max_nodes=max_nodes)
+    # 2. Preset: COBOL
+    elif "COBOL Mainframe" in selected_scope:
+        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="cobol")
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
-    # 3. Default Overview Subgraph
+    # 3. Preset: SSIS
+    elif "SSIS ETL Pipeline" in selected_scope:
+        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="ssis")
+        nodes = subgraph.get("nodes", [])
+        edges = subgraph.get("edges", [])
+
+    # 4. Preset: SQL
+    elif "SQL PolicyCenter" in selected_scope:
+        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="sql")
+        nodes = subgraph.get("nodes", [])
+        edges = subgraph.get("edges", [])
+
+    # 5. Specific File Selected
+    elif selected_scope.startswith("📄 "):
+        target_fn = selected_scope.replace("📄 ", "").strip()
+        subgraph = GraphService.get_file_subgraph(target_fn, max_nodes=max_nodes)
+        nodes = subgraph.get("nodes", [])
+        edges = subgraph.get("edges", [])
+
+    # 6. Default Full System Graph
     else:
         subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes)
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
-    if subgraph.get("error"):
-        st.error(f"Neo4j Query Error: {subgraph['error']}. Is Neo4j running at neo4j://127.0.0.1:7687?")
+    # Apply client-side node type filter if specified
+    if selected_type_filter != "(All Types)" and nodes:
+        filtered_nodes = [
+            n for n in nodes
+            if str(n.get("entity_type", "")).lower() == selected_type_filter.lower()
+            or selected_type_filter.lower() in [l.lower() for l in n.get("_labels", [])]
+        ]
+        if filtered_nodes:
+            filtered_node_ids = {str(n.get("id") or n.get("file_name") or n.get("name")) for n in filtered_nodes}
+            nodes = filtered_nodes
+            edges = [e for e in edges if str(e.get("source")) in filtered_node_ids and str(e.get("target")) in filtered_node_ids]
 
-    # Layout: Graph Canvas on Left (70%), Node Details on Right (30%)
-    col_canvas, col_details = st.columns([7, 3])
+    # Layout: Graph Canvas on Left (68%), Node Details on Right (32%)
+    col_canvas, col_details = st.columns([68, 32])
 
     with col_canvas:
         st.markdown(
             f"""
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-                <span style="font-size:0.85rem; color:#94A3B8;">Canvas: <b>{len(nodes)}</b> Nodes • <b>{len(edges)}</b> Edges</span>
-                <span style="font-size:0.75rem; color:#64748B;">Scroll to zoom • Drag to pan • Drag nodes to reposition</span>
+                <span style="font-size:0.85rem; color:#334155; font-weight:600;">Canvas: <b style="color:#0284C7;">{len(nodes)}</b> Nodes • <b style="color:#7C3AED;">{len(edges)}</b> Edges</span>
+                <span style="font-size:0.75rem; color:#64748B;">Scroll to zoom • Drag to pan • Drag circular nodes to reposition</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -117,20 +181,28 @@ def render_knowledge_graph() -> None:
         render_graph_canvas(
             nodes=nodes,
             edges=edges,
-            height=620,
+            height=660,
             selected_node_id=selected_node.get("id") if selected_node else None,
         )
 
     with col_details:
-        st.markdown("#### 🔍 Node Inspector")
-        
-        # Dropdown to pick node from canvas
+        st.markdown("#### Node Inspector")
+
         if nodes:
-            node_id_options = [str(n.get("id") or n.get("file_name") or n.get("name")) for n in nodes]
-            chosen_id = st.selectbox("Inspect Canvas Node:", options=node_id_options, key="canvas_node_inspect_select")
+            node_labels_dict = {}
+            for n in nodes:
+                nid = str(n.get("id") or n.get("file_name") or n.get("name"))
+                lbl = str(n.get("name") or n.get("file_name") or nid).split(":")[-1]
+                node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
+
+            chosen_label = st.selectbox(
+                "Select Canvas Node to Inspect:",
+                options=list(node_labels_dict.keys()),
+                key="canvas_node_inspect_select",
+            )
+            chosen_id = node_labels_dict.get(chosen_label, nodes[0].get("id"))
             selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
 
-            # Connected edges for inspector
             connected_edges = [
                 e for e in edges
                 if str(e.get("source")) == chosen_id or str(e.get("target")) == chosen_id
@@ -142,12 +214,17 @@ def render_knowledge_graph() -> None:
         if selected_node:
             node_name = selected_node.get("name") or selected_node.get("file_name") or ""
             if node_name:
-                if st.button(f"⚡ Trace Lineage for {node_name}", use_container_width=True):
-                    lineage_graph = GraphService.trace_lineage(node_name)
-                    if lineage_graph.get("nodes"):
-                        nodes = lineage_graph["nodes"]
-                        edges = lineage_graph["edges"]
-                        st.success(f"Loaded lineage path for {node_name} ({len(nodes)} nodes, {len(edges)} edges)!")
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button("Trace Lineage", use_container_width=True):
+                        lineage_graph = GraphService.trace_lineage(node_name)
+                        if lineage_graph.get("nodes"):
+                            st.session_state["graph_override_subgraph"] = lineage_graph
+                            st.rerun()
+                        else:
+                            st.info("No extended lineage edges found.")
+                with col_b2:
+                    if st.button("Ask Agent", use_container_width=True):
+                        st.session_state["pending_investigation_query"] = f"Explain the dependencies and business logic associated with graph node {node_name}"
+                        st.session_state["navigate_to_page"] = "Investigation Agent"
                         st.rerun()
-                    else:
-                        st.info("No extended lineage edges found.")

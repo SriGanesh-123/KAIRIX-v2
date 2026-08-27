@@ -3,16 +3,20 @@ Investigation Agent — orchestrates Neo4j + Qdrant retrieval and LLM synthesis.
 
 Flow for each question:
   1. Classify intent (lineage / semantic / combined)
-  2. If lineage or combined: generate + run a Cypher query against Neo4j
-  3. If semantic or combined: embed question + search Qdrant (chunks + summaries)
-  4. Synthesise answer via LLM using all retrieved evidence
-  5. Return InvestigationResult with full evidence trace
+  2. Concurrent retrieval:
+     - Generate + run Cypher query against Neo4j
+     - Embed question + search Qdrant (chunks + summaries)
+  3. Synthesise answer via LLM using all retrieved evidence
+  4. Return InvestigationResult with full evidence trace and performance timing
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
+import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from graph_layer.neo4j_client import Neo4jClient
 from vector_layer.qdrant_client_wrapper import (
@@ -30,6 +34,8 @@ from .prompts import (
     ANSWER_SYNTHESIS_PROMPT,
     CYPHER_REPAIR_PROMPT,
 )
+
+logger = logging.getLogger("kairix.investigation_agent")
 
 
 class InvestigationAgent:
@@ -63,31 +69,67 @@ class InvestigationAgent:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def ask(self, question: str) -> InvestigationResult:
+    def ask(
+        self,
+        question: str,
+        on_progress: Optional[Callable[[str, str], None]] = None,
+    ) -> InvestigationResult:
         """
         Answer a natural language question about the legacy system.
 
         Args:
             question: Free-form question about code, data, or lineage.
+            on_progress: Optional progress callback receiving (stage_name, message).
 
         Returns:
-            InvestigationResult with answer, confidence, and evidence.
+            InvestigationResult with answer, confidence, evidence, and trace path.
         """
+        t_start = time.perf_counter()
         trace: List[str] = []
         graph_evidence: List[str] = []
         vector_evidence: List[str] = []
         source_files: set = set()
 
         # ── Step 1: Classify intent ───────────────────────────────────────────
+        t0 = time.perf_counter()
+        if on_progress:
+            on_progress("intent", "Classifying inquiry intent...")
         intent = self._classify_intent(question)
-        trace.append(f"Intent classified as: {intent}")
+        t_intent = time.perf_counter() - t0
+        trace.append(f"Intent classified as: {intent} ({t_intent:.2f}s)")
         if self.debug:
-            print(f"[DEBUG] Intent: {intent}", flush=True)
+            print(f"[DEBUG] Intent: {intent} [{t_intent:.2f}s]", flush=True)
 
-        # ── Step 2: Graph retrieval ───────────────────────────────────────────
-        if self.debug:
-            print("[DEBUG] Running Neo4j graph retrieval...", flush=True)
-        cypher, records = self._graph_retrieve(question)
+        # ── Step 2 & 3: Concurrent Graph & Vector retrieval ───────────────────
+        if on_progress:
+            on_progress("retrieval", "Searching Neo4j Knowledge Graph & Qdrant Vector Space...")
+
+        t_ret_start = time.perf_counter()
+        cypher = ""
+        records: List[Dict[str, Any]] = []
+        chunks: List[Dict[str, Any]] = []
+        summaries: List[Dict[str, Any]] = []
+
+        # Run independent Graph retrieval and Vector search concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            future_graph = executor.submit(self._graph_retrieve, question)
+            future_vector = executor.submit(self._vector_retrieve, question)
+
+            try:
+                cypher, records = future_graph.result(timeout=25)
+            except Exception as e:
+                logger.debug("Graph retrieval thread error: %s", e)
+                records = []
+
+            try:
+                chunks, summaries = future_vector.result(timeout=25)
+            except Exception as e:
+                logger.debug("Vector retrieval thread error: %s", e)
+                chunks, summaries = [], []
+
+        t_retrieval = time.perf_counter() - t_ret_start
+
+        # Process graph evidence
         trace.append(f"Cypher: {cypher}")
         for rec in records:
             graph_evidence.append(json.dumps(rec, default=str))
@@ -97,13 +139,8 @@ class InvestigationAgent:
                 ):
                     source_files.add(v)
         trace.append(f"Graph returned {len(records)} records")
-        if self.debug:
-            print(f"[DEBUG] Graph: {len(records)} records (Cypher: {cypher})", flush=True)
 
-        # ── Step 3: Vector retrieval (always runs for combined retrieval) ──────
-        if self.debug:
-            print("[DEBUG] Running Qdrant vector search...", flush=True)
-        chunks, summaries = self._vector_retrieve(question)
+        # Process vector evidence
         for hit in chunks + summaries:
             pay = hit.get("payload", {})
             excerpt = pay.get("text", "")[:500]
@@ -115,18 +152,30 @@ class InvestigationAgent:
             if file_ref:
                 source_files.add(file_ref)
         trace.append(f"Vector search returned {len(chunks)} chunks + {len(summaries)} summaries")
-        if self.debug:
-            print(f"[DEBUG] Vector: {len(chunks)} chunks, {len(summaries)} summaries", flush=True)
+
+        if on_progress:
+            on_progress("retrieval_complete", f"Retrieved {len(records)} graph facts & {len(chunks) + len(summaries)} vector chunks ({t_retrieval:.2f}s)")
 
         # ── Step 4: LLM synthesis ─────────────────────────────────────────────
-        if self.debug:
-            print("[DEBUG] Synthesising answer with LLM...", flush=True)
+        if on_progress:
+            on_progress("synthesis", "Synthesising evidence-backed response via LLM...")
+
+        t_synth_start = time.perf_counter()
         answer, confidence = self._synthesise(
             question,
             graph_evidence=graph_evidence,
             vector_evidence=vector_evidence,
         )
-        trace.append("Answer synthesised by LLM")
+        t_synth = time.perf_counter() - t_synth_start
+        trace.append(f"Answer synthesised by LLM ({t_synth:.2f}s)")
+
+        t_total = time.perf_counter() - t_start
+        perf_summary = f"[PERF] Intent: {t_intent:.2f}s | Retrieval (Graph+Vec parallel): {t_retrieval:.2f}s | LLM Synth: {t_synth:.2f}s | Total: {t_total:.2f}s"
+        trace.append(perf_summary)
+        print(perf_summary, flush=True)
+
+        if on_progress:
+            on_progress("complete", "Investigation complete.")
 
         return InvestigationResult(
             question=question,
