@@ -14,9 +14,12 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+from pathlib import Path
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 from graph_layer.neo4j_client import Neo4jClient
 from vector_layer.qdrant_client_wrapper import (
@@ -305,13 +308,13 @@ class InvestigationAgent:
         """Fallback to retrieve context from local summaries and knowledge packages."""
         evidence: List[str] = []
         words = [w.lower() for w in re.findall(r"[A-Za-z0-9_]{3,}", question) if w.lower() not in {"what", "which", "where", "how", "does", "the", "and", "is", "calculated", "show"}]
-        sum_dir = Path("output/summaries")
+        sum_dir = ROOT_DIR / "output" / "summaries"
         if sum_dir.exists():
             for s_file in sum_dir.glob("*.md"):
                 try:
                     content = s_file.read_text(encoding="utf-8")
                     if any(w in content.lower() for w in words):
-                        evidence.append(f"Source Summary ({s_file.name}):\n{content[:1200]}")
+                        evidence.append(f"Source Summary ({s_file.name}):\n{content[:1500]}")
                         if len(evidence) >= 5:
                             break
                 except Exception:
