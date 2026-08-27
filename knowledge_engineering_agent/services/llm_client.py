@@ -269,17 +269,37 @@ class LLMClient(OpenAICompatibleClient):
     Auto-configured LLM client that reads from environment variables.
 
     Used by the Investigation Agent and Relationship Discovery Agent.
-    Falls back to default NVIDIA NIM configuration.
+    Falls back to default active NVIDIA NIM production model meta/llama-3.3-70b-instruct.
     """
 
     def __init__(self, **kwargs):
         import os
         from dotenv import load_dotenv
         load_dotenv()
+
+        provider = os.getenv("LLM_PROVIDER", "nim").lower().strip()
+        if provider == "groq":
+            api_key = kwargs.get("api_key") or os.getenv("GROQ_API_KEY", "")
+            base_url = kwargs.get("base_url") or "https://api.groq.com/openai/v1"
+            model = kwargs.get("model") or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        else:
+            api_key = (
+                kwargs.get("api_key")
+                or os.getenv("NVIDIA_NIM_API_KEY", "")
+                or os.getenv("NIM_API_KEY", "")
+            )
+            base_url = kwargs.get("base_url") or os.getenv("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+            model = (
+                kwargs.get("model")
+                or os.getenv("NIM_MODEL", "")
+                or os.getenv("LLM_MODEL", "")
+                or "meta/llama-3.3-70b-instruct"
+            )
+
         super().__init__(
-            api_key=kwargs.get("api_key") or os.getenv("NVIDIA_NIM_API_KEY", ""),
-            base_url=kwargs.get("base_url") or os.getenv("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
-            model=kwargs.get("model") or os.getenv("NIM_MODEL", "openai/gpt-oss-120b"),
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
             timeout_seconds=kwargs.get("timeout_seconds", 90),
             max_retries=kwargs.get("max_retries", 3),
             debug=kwargs.get("debug", False),
