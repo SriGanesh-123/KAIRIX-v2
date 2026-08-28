@@ -59,9 +59,10 @@ def _get_client():
 
 def _get_local_packages_subgraph(
     file_name_filter: Optional[str] = None,
-    max_nodes: int = 60,
+    max_nodes: int = 5000,
     preset: Optional[str] = None,
 ) -> Dict[str, Any]:
+
     """
     Extracts high-fidelity interconnected nodes and cross-file data flows
     directly from local canonical knowledge packages.
@@ -124,7 +125,7 @@ def _get_local_packages_subgraph(
 
             # 1. Business Rules
             rules = summary.get("business_rules", []) or profile.get("business_rules", [])
-            for idx, rule in enumerate(rules[:3]):
+            for idx, rule in enumerate(rules):
                 rule_desc = rule if isinstance(rule, str) else str(rule.get("description", ""))
                 rule_id = f"RULE:{raw_fname}:{idx+1}"
                 if rule_id not in nodes_dict and len(nodes_dict) < max_nodes:
@@ -142,16 +143,16 @@ def _get_local_packages_subgraph(
 
             # 2. Key Entities (Tables, Files, Columns)
             entities = profile.get("entities", [])
-            for ent in entities[:6]:
+            for ent in entities:
                 ent_name = ent.get("name", "Unknown")
                 etype = ent.get("entity_type", "Entity")
-                if etype.upper() in ("TABLE", "FILE", "VIEW", "DATASET"):
+                if etype.upper() in ("TABLE", "FILE", "VIEW", "DATASET", "COLUMN", "RECORD"):
                     ent_id = f"ENTITY:{ent_name}"
                     if ent_id not in nodes_dict and len(nodes_dict) < max_nodes:
                         nodes_dict[ent_id] = {
                             "id": ent_id,
                             "name": ent_name,
-                            "entity_type": "Table" if "TABLE" in etype.upper() else "File",
+                            "entity_type": "Table" if "TABLE" in etype.upper() else ("Column" if "COL" in etype.upper() else "File"),
                             "source_file": raw_fname,
                             "data_type": ent.get("data_type", "—"),
                             "description": ent.get("description", ""),
@@ -162,6 +163,7 @@ def _get_local_packages_subgraph(
                     if ek not in seen_edges and ent_id in nodes_dict:
                         seen_edges.add(ek)
                         edges_list.append({"source": art_id, "target": ent_id, "type": rel_type})
+
 
         except Exception as e:
             logger.debug("Error processing pkg %s: %s", ppath, e)
@@ -296,26 +298,59 @@ def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = Non
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _cached_get_overview_subgraph(max_nodes: int = 50, preset: Optional[str] = None) -> Dict[str, Any]:
-    cypher = """
-    MATCH (a:Artifact)
-    OPTIONAL MATCH (a)-[r:CONTAINS|HAS_RULE|READS_FROM|WRITES_TO|TRANSFORMS|FEEDS_INTO]->(e)
-    RETURN a, r, e
-    LIMIT $max_nodes
-    """
+def _cached_get_overview_subgraph(max_nodes: int = 5000, preset: Optional[str] = None) -> Dict[str, Any]:
+    if preset == "cobol":
+        cypher = """
+        MATCH (n)-[r]->(m)
+        WHERE toLower(n.source_file) ENDS WITH '.cbl' 
+           OR toLower(n.source_file) ENDS WITH '.cob' 
+           OR (n:Artifact AND (toLower(n.file_name) ENDS WITH '.cbl' OR toLower(n.file_name) ENDS WITH '.cob' OR n.technology = 'COBOL'))
+           OR toLower(m.source_file) ENDS WITH '.cbl'
+           OR toLower(m.source_file) ENDS WITH '.cob'
+        RETURN n, r, m
+        LIMIT $max_nodes
+        """
+    elif preset == "ssis":
+        cypher = """
+        MATCH (n)-[r]->(m)
+        WHERE toLower(n.source_file) ENDS WITH '.dtsx' 
+           OR (n:Artifact AND (toLower(n.file_name) ENDS WITH '.dtsx' OR n.technology = 'SSIS'))
+           OR toLower(m.source_file) ENDS WITH '.dtsx'
+        RETURN n, r, m
+        LIMIT $max_nodes
+        """
+    elif preset == "sql":
+        cypher = """
+        MATCH (n)-[r]->(m)
+        WHERE toLower(n.source_file) ENDS WITH '.sql' 
+           OR (n:Artifact AND (toLower(n.file_name) ENDS WITH '.sql' OR n.technology = 'SQL'))
+           OR toLower(m.source_file) ENDS WITH '.sql'
+        RETURN n, r, m
+        LIMIT $max_nodes
+        """
+    else:
+        cypher = """
+        MATCH (n)-[r]->(m)
+        RETURN n, r, m
+        LIMIT $max_nodes
+        """
     return _execute_cypher_subgraph(cypher, {"max_nodes": max_nodes})
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _cached_get_file_subgraph(file_name: str, max_nodes: int = 60) -> Dict[str, Any]:
+def _cached_get_file_subgraph(file_name: str, max_nodes: int = 5000) -> Dict[str, Any]:
     cypher = """
-    MATCH (a:Artifact {file_name: $file_name})
-    OPTIONAL MATCH (a)-[r:CONTAINS|HAS_RULE|HAS_TRANSFORMATION]->(n)
-    OPTIONAL MATCH (n)-[re:READS_FROM|WRITES_TO|TRANSFORMS|USES|FEEDS_INTO]-(other:Entity)
-    RETURN a, r, n, re, other
+    MATCH (n)-[r]-(m)
+    WHERE toLower(n.source_file) = toLower($file_name) 
+       OR toLower(n.file_name) = toLower($file_name)
+       OR n.id = $file_name
+       OR n.id = 'ARTIFACT:' + $file_name
+    RETURN n, r, m
     LIMIT $max_nodes
     """
     return _execute_cypher_subgraph(cypher, {"file_name": file_name, "max_nodes": max_nodes})
+
+
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -412,16 +447,15 @@ class GraphService:
     """
 
     @staticmethod
-    def get_overview_subgraph(max_nodes: int = 50, preset: Optional[str] = None) -> Dict[str, Any]:
+    def get_overview_subgraph(max_nodes: int = 5000, preset: Optional[str] = None) -> Dict[str, Any]:
         """Retrieves major artifacts, core entities, and cross-file relationships for overview (cached)."""
-        if preset in ("cobol", "ssis", "sql"):
-            return _get_local_packages_subgraph(max_nodes=max_nodes, preset=preset)
-        return _cached_get_overview_subgraph(max_nodes=max_nodes)
+        return _cached_get_overview_subgraph(max_nodes=max_nodes, preset=preset)
 
     @staticmethod
-    def get_file_subgraph(file_name: str, max_nodes: int = 60) -> Dict[str, Any]:
+    def get_file_subgraph(file_name: str, max_nodes: int = 5000) -> Dict[str, Any]:
         """Retrieves all entities, rules, transformations, and edges connected to a specific file (cached)."""
         return _cached_get_file_subgraph(file_name=file_name, max_nodes=max_nodes)
+
 
     @staticmethod
     def search_nodes(query_term: str, max_results: int = 25) -> List[Dict[str, Any]]:
@@ -588,4 +622,70 @@ class GraphService:
             """
         )
 
-        return net.generate_html()
+        raw_html = net.generate_html()
+
+        custom_graph_css = """
+        <style type="text/css">
+          * {
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+          }
+          html, body {
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden !important;
+            background: transparent !important;
+          }
+          .card, .card-body {
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+          }
+          #mynetwork {
+            width: 100% !important;
+            height: 100% !important;
+            border: 1px solid #D5DFEB !important;
+            border-radius: 12px !important;
+            background: #F8FAFC !important;
+            box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.95) !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+          }
+
+          /* Modern Enterprise Sapphire Blue Styling for Vis.js Navigation Controls */
+          .vis-navigation {
+            position: absolute !important;
+            bottom: 14px !important;
+            left: 14px !important;
+          }
+          .vis-navigation .vis-button {
+            background-color: #FFFFFF !important;
+            border: 1.5px solid #0284C7 !important;
+            border-radius: 50% !important;
+            box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25), 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            cursor: pointer !important;
+            filter: hue-rotate(85deg) brightness(0.65) saturate(2.5) !important;
+          }
+          .vis-navigation .vis-button:hover {
+            background-color: #F0F9FF !important;
+            border-color: #0369A1 !important;
+            box-shadow: 0 0 10px rgba(2, 132, 199, 0.5) !important;
+            transform: scale(1.12) !important;
+          }
+          .vis-navigation .vis-button:active {
+            transform: scale(0.95) !important;
+            background-color: #E0F2FE !important;
+          }
+        </style>
+        """
+
+        if "</head>" in raw_html:
+            return raw_html.replace("</head>", f"{custom_graph_css}\n</head>")
+        return raw_html + custom_graph_css
+

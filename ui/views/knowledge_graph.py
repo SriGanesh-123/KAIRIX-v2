@@ -35,15 +35,33 @@ def render_knowledge_graph() -> None:
 
     # Build clean single-select options list
     scope_options = [
-        "🌐 Full System Graph (All 22 Files)",
-        "🏛️ COBOL Mainframe (All Programs)",
-        "📦 SSIS ETL Pipeline (All Packages)",
-        "🗄️ SQL PolicyCenter & ClaimCenter (All Scripts)",
+        "Full System Graph (All 22 Files)",
+        "COBOL Mainframe (All Programs)",
+        "SSIS ETL Pipeline (All Packages)",
+        "SQL PolicyCenter & ClaimCenter (All Scripts)",
     ]
-    scope_options.extend([f"📄 {fn}" for fn in all_file_names])
+    scope_options.extend([f"File: {fn}" for fn in all_file_names])
 
-    # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Limit + Refresh)
-    col_search, col_scope, col_type, col_limit, col_reset = st.columns([3.5, 2.7, 1.8, 1.0, 1.0])
+    # Auto-sanitize old session state if it contains old emoji prefixes
+    if "kg_single_scope_select" in st.session_state:
+        cur_scope = str(st.session_state["kg_single_scope_select"])
+        if cur_scope not in scope_options:
+            matched = False
+            for opt in scope_options:
+                if any(k in cur_scope and k in opt for k in ["COBOL", "SSIS", "SQL", "Full System"]):
+                    st.session_state["kg_single_scope_select"] = opt
+                    matched = True
+                    break
+                elif "File:" in opt and opt.split("File: ")[-1] in cur_scope:
+                    st.session_state["kg_single_scope_select"] = opt
+                    matched = True
+                    break
+            if not matched:
+                st.session_state["kg_single_scope_select"] = scope_options[0]
+
+    # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Refresh)
+    col_search, col_scope, col_type, col_reset = st.columns([3.8, 3.2, 2.0, 1.0])
+
 
     with col_search:
         pre_search = st.session_state.pop("graph_search_term", None)
@@ -73,12 +91,9 @@ def render_knowledge_graph() -> None:
             key="graph_type_filter_select",
         )
 
-    with col_limit:
-        max_nodes = st.selectbox("Max Nodes:", options=[30, 50, 80, 150], index=2, key="graph_limit_select")
-
     with col_reset:
-        st.markdown("<div style='margin-top: 1.55rem;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Refresh", use_container_width=True, help="Refresh Graph"):
+        st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+        if st.button("Refresh", use_container_width=True, help="Refresh Graph"):
             st.session_state.pop("graph_override_subgraph", None)
             st.rerun()
 
@@ -93,7 +108,7 @@ def render_knowledge_graph() -> None:
     if override_subgraph and not search_query:
         nodes = override_subgraph.get("nodes", [])
         edges = override_subgraph.get("edges", [])
-        st.info(f"Showing active lineage trace subgraph ({len(nodes)} nodes, {len(edges)} edges). Click '🔄' to return to overview.")
+        st.info(f"Showing active lineage trace subgraph ({len(nodes)} nodes, {len(edges)} edges). Click 'Refresh' to return to overview.")
 
     # 1. Search Query active
     elif search_query and search_query.strip():
@@ -109,46 +124,48 @@ def render_knowledge_graph() -> None:
             chosen = next((r for r in search_results if (r.get("display_name") == sel_node_name or r.get("id") == sel_node_name)), search_results[0])
             node_id = chosen.get("id")
 
-            subgraph = GraphService.get_node_neighborhood(node_id, hops=1, max_nodes=max_nodes)
+            subgraph = GraphService.get_node_neighborhood(node_id, hops=1)
             nodes = subgraph.get("nodes", [])
             edges = subgraph.get("edges", [])
             selected_node = chosen
         else:
             st.warning(f"No nodes found matching '{search_query}'. Showing full system graph.")
-            subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes)
+            subgraph = GraphService.get_overview_subgraph()
             nodes = subgraph.get("nodes", [])
             edges = subgraph.get("edges", [])
 
     # 2. Preset: COBOL
     elif "COBOL Mainframe" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="cobol")
+        subgraph = GraphService.get_overview_subgraph(preset="cobol")
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
     # 3. Preset: SSIS
     elif "SSIS ETL Pipeline" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="ssis")
+        subgraph = GraphService.get_overview_subgraph(preset="ssis")
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
     # 4. Preset: SQL
     elif "SQL PolicyCenter" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes, preset="sql")
+        subgraph = GraphService.get_overview_subgraph(preset="sql")
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
     # 5. Specific File Selected
-    elif selected_scope.startswith("📄 "):
-        target_fn = selected_scope.replace("📄 ", "").strip()
-        subgraph = GraphService.get_file_subgraph(target_fn, max_nodes=max_nodes)
+    elif selected_scope.startswith("File: ") or selected_scope.startswith(" "):
+        target_fn = selected_scope.replace("File: ", "").replace(" ", "").strip()
+        subgraph = GraphService.get_file_subgraph(target_fn)
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
 
+
     # 6. Default Full System Graph
     else:
-        subgraph = GraphService.get_overview_subgraph(max_nodes=max_nodes)
+        subgraph = GraphService.get_overview_subgraph()
         nodes = subgraph.get("nodes", [])
         edges = subgraph.get("edges", [])
+
 
     # Apply client-side node type filter if specified
     if selected_type_filter != "(All Types)" and nodes:
@@ -222,7 +239,7 @@ def render_knowledge_graph() -> None:
                 st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
-                    if st.button("🔍 Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
+                    if st.button("Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
                         lineage_graph = GraphService.trace_lineage(node_name)
                         if lineage_graph.get("nodes"):
                             st.session_state["graph_override_subgraph"] = lineage_graph
@@ -230,7 +247,7 @@ def render_knowledge_graph() -> None:
                         else:
                             st.info("No extended lineage edges found.")
                 with col_b2:
-                    if st.button("💬 Ask Agent", use_container_width=True, key="btn_ask_agent"):
+                    if st.button("Ask Agent", use_container_width=True, key="btn_ask_agent"):
                         st.session_state["pending_investigation_query"] = f"Explain the dependencies and business logic associated with graph node {node_name}"
                         st.session_state["navigate_to_page"] = "Investigation Agent"
                         st.rerun()

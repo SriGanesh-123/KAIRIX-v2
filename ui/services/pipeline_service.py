@@ -130,7 +130,7 @@ class PipelineService:
                     layer["duration"] = round(layer["end_time"] - layer["start_time"], 2)
                 layer["current_step"] = "Stopped by user"
                 layer["logs"].append(
-                    f"[{time.strftime('%H:%M:%S')}] 🛑 Execution cancelled by user."
+                    f"[{time.strftime('%H:%M:%S')}]  Execution cancelled by user."
                 )
             logger.info("Successfully terminated pipeline process for %s", layer_key)
             return True
@@ -211,7 +211,7 @@ class PipelineService:
 
         with _LOCK:
             _PIPELINE_STATES[layer_key]["logs"].append(
-                f"[{time.strftime('%H:%M:%S')}] 🚀 Initialized {human_name} pipeline."
+                f"[{time.strftime('%H:%M:%S')}]  Initialized {human_name} pipeline."
             )
 
         start_time = time.time()

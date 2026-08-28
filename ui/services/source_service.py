@@ -159,7 +159,7 @@ def _build_file_info_fast(fpath: Path, tech: str) -> Dict[str, Any]:
     relationships_count = 0
     rules_count = 0
     transformations_count = 0
-    confidence = 0.90
+    confidence = None
     domain = "General"
     purpose = ""
     narrative = ""
@@ -172,7 +172,8 @@ def _build_file_info_fast(fpath: Path, tech: str) -> Dict[str, Any]:
         domain = summary.get("business_domain", "General")
         purpose = summary.get("purpose", "")
         narrative = summary.get("high_level_narrative", "")
-        confidence = recon.get("overall_confidence", summary.get("confidence", 0.90))
+        raw_conf = recon.get("overall_confidence", summary.get("confidence", 0.90))
+        confidence = round(raw_conf * 100, 1) if raw_conf <= 1.0 else round(raw_conf, 1)
 
         entities_count = len(profile.get("entities", [])) or len(pkg.get("graph_nodes", []))
         relationships_count = len(profile.get("relationships", [])) or len(pkg.get("graph_edges", []))
@@ -192,11 +193,12 @@ def _build_file_info_fast(fpath: Path, tech: str) -> Dict[str, Any]:
         "relationship_count": relationships_count,
         "rule_count": rules_count,
         "transformation_count": transformations_count,
-        "confidence": round(confidence * 100, 1) if confidence <= 1.0 else round(confidence, 1),
+        "confidence": confidence,
         "domain": domain,
         "purpose": purpose,
         "narrative": narrative,
     }
+
 
 
 class SourceService:

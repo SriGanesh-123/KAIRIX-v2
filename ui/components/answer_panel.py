@@ -51,7 +51,7 @@ def _render_data_flow(flow_text: str) -> str:
         
         html_parts.append(f"<div class='{step_class}'>{formatted_step}</div>")
         if i < len(steps) - 1:
-            html_parts.append("<div class='flow-arrow'>➔</div>")
+            html_parts.append("<div class='flow-arrow'></div>")
     html_parts.append("</div>")
     return "".join(html_parts)
 
@@ -74,7 +74,7 @@ def _render_formulas(formula_text: str) -> str:
         fmt_line = re.sub(r"`([^`]+)`", r"<code class='eq-code'>\1</code>", fmt_line)
         
         # Highlight equal signs and math operators
-        html_parts.append(f"<div class='formula-line'><span class='formula-bullet'>⚡</span> {fmt_line}</div>")
+        html_parts.append(f"<div class='formula-line'><span class='formula-bullet'></span> {fmt_line}</div>")
     
     html_parts.append("</div>")
     return "".join(html_parts)
@@ -124,7 +124,7 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
         for point in key_points:
             fmt_point = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", point)
             fmt_point = re.sub(r"`([^`]+)`", r"<code class='kp-code'>\1</code>", fmt_point)
-            st.markdown(f"<div class='keypoint-item'><span class='kp-icon'>🔹</span> <div>{fmt_point}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='keypoint-item'><span class='kp-icon'></span> <div>{fmt_point}</div></div>", unsafe_allow_html=True)
         st.markdown("<div style='margin-bottom: 1.2rem;'></div>", unsafe_allow_html=True)
 
     # 3. DATA FLOW (Visual Pipeline)
@@ -175,7 +175,7 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
             st.markdown(
                 f"""
                 <div class="perf-badge">
-                    ⏱️ <strong>{exec_time}s</strong>
+                    <strong>{exec_time}s</strong>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -194,14 +194,14 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
             for gl in gap_lines:
                 c_gl = re.sub(r"^[\s*•\-]+", "", gl).strip()
                 if c_gl:
-                    gap_items.append(f"<div class='gap-item'>⚠️ {c_gl}</div>")
+                    gap_items.append(f"<div class='gap-item'>{c_gl}</div>")
             st.markdown(f"<div class='gaps-box'>{''.join(gap_items)}</div>", unsafe_allow_html=True)
         else:
-            st.markdown(f"<div class='gaps-box'>⚠️ {gaps}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='gaps-box'>{gaps}</div>", unsafe_allow_html=True)
         st.markdown("<div style='margin-bottom: 1.2rem;'></div>", unsafe_allow_html=True)
 
     # 8. AUDIT EVIDENCE ACCORDIONS
-    with st.expander(f"🔍 Inspect Underlying Audit Evidence ({len(graph_evidence)} Graph Records, {len(vector_evidence)} Vector Chunks)", expanded=False):
+    with st.expander(f" Inspect Underlying Audit Evidence ({len(graph_evidence)} Graph Records, {len(vector_evidence)} Vector Chunks)", expanded=False):
         tab_graph, tab_vec, tab_trace = st.tabs([
             f"Neo4j Cypher Evidence ({len(graph_evidence)})",
             f"Qdrant Semantic Evidence ({len(vector_evidence)})",

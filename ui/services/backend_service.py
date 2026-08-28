@@ -94,13 +94,15 @@ def _cached_check_neo4j() -> Dict[str, Any]:
     """
     Ultra-fast Neo4j connectivity check with 50ms socket pre-check and 300s TTL.
     """
+    from urllib.parse import urlparse
     uri = os.getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
-    host = "127.0.0.1"
-    port = 7687
+    parsed = urlparse(uri.replace("neo4j://", "http://").replace("bolt://", "http://"))
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 7687
 
     # Quick socket probe
     start = time.perf_counter()
-    is_open = _fast_socket_check(host, port, timeout=0.05)
+    is_open = _fast_socket_check(host, port, timeout=0.1)
     if not is_open:
         latency = round((time.perf_counter() - start) * 1000, 1)
         return {
@@ -108,7 +110,7 @@ def _cached_check_neo4j() -> Dict[str, Any]:
             "status": "offline",
             "uri": uri,
             "latency_ms": latency,
-            "message": f"Neo4j service port 7687 is not reachable locally.",
+            "message": f"Neo4j service port {port} is not reachable locally.",
         }
 
     try:
@@ -160,16 +162,14 @@ def _cached_check_qdrant() -> Dict[str, Any]:
     """
     Ultra-fast Qdrant connectivity check with 50ms socket pre-check and 300s TTL.
     """
-    host = os.getenv("QDRANT_HOST", "127.0.0.1")
-    port_str = os.getenv("QDRANT_PORT", "6333")
-    try:
-        port = int(port_str)
-    except ValueError:
-        port = 6333
-    url = os.getenv("QDRANT_URL", f"http://{host}:{port}")
+    from urllib.parse import urlparse
+    url = os.getenv("QDRANT_URL", "http://localhost:6335")
+    parsed = urlparse(url)
+    host = parsed.hostname or os.getenv("QDRANT_HOST", "127.0.0.1")
+    port = parsed.port or int(os.getenv("QDRANT_PORT", "6335"))
 
     start = time.perf_counter()
-    is_open = _fast_socket_check(host, port, timeout=0.05)
+    is_open = _fast_socket_check(host, port, timeout=0.1)
     if not is_open:
         latency = round((time.perf_counter() - start) * 1000, 1)
         return {
@@ -182,6 +182,7 @@ def _cached_check_qdrant() -> Dict[str, Any]:
             "total_points": 0,
             "message": f"Qdrant service port {port} is not reachable locally.",
         }
+
 
     try:
         from vector_layer.qdrant_client_wrapper import (

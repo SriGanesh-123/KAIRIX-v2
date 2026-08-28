@@ -38,15 +38,15 @@ def render_pipeline() -> None:
         if any_running:
             col_ref, col_stop_all = st.columns(2)
             with col_ref:
-                if st.button("🔄 Refresh", use_container_width=True):
+                if st.button("Refresh", use_container_width=True):
                     st.rerun()
             with col_stop_all:
-                if st.button("🛑 Stop All", use_container_width=True, key="btn_stop_all_pipelines"):
+                if st.button("Stop All", use_container_width=True, key="btn_stop_all_pipelines"):
                     for k in ["knowledge_engineering", "graph_layer", "vector_layer"]:
                         PipelineService.stop_layer(k)
                     st.rerun()
         else:
-            if st.button("🔄 Refresh Status", use_container_width=True):
+            if st.button("Refresh Status", use_container_width=True):
                 st.rerun()
 
     # 2. Three Dedicated Pipeline Operation Cards (Equal Height & Symmetric Design)
@@ -67,28 +67,28 @@ def render_pipeline() -> None:
             status_box1 = f"""
             <div style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:6px; padding:0.4rem 0.6rem; height:50px; display:flex; flex-direction:column; justify-content:center;">
                 <div class="pipeline-progress-bar-bg"><div class="pipeline-progress-bar-fill fill-blue" style="width:{max(5, pct1)}%;"></div></div>
-                <div style="font-size:0.73rem; font-weight:700; color:#0369A1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚙️ {cur_step1}</div>
+                <div style="font-size:0.73rem; font-weight:700; color:#0369A1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{cur_step1}</div>
             </div>
             """
         elif stt1 == "COMPLETED":
-            badge_html1 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">✅ COMPLETED{dur1}</span>'
+            badge_html1 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">COMPLETED{dur1}</span>'
             status_box1 = f"""
             <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#15803D; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">✅</span><span>Ready: {len(done_items1) if done_items1 else 6} knowledge packages generated</span>
+                <span style="font-size:0.95rem;"></span><span>Ready: {len(done_items1) if done_items1 else 6} knowledge packages generated</span>
             </div>
             """
         elif stt1 == "STOPPED":
-            badge_html1 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">🛑 STOPPED{dur1}</span>'
+            badge_html1 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;"> STOPPED{dur1}</span>'
             status_box1 = f"""
             <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#DC2626; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">🛑</span><span>Execution stopped by user</span>
+                <span style="font-size:0.95rem;"></span><span>Execution stopped by user</span>
             </div>
             """
         else:
             badge_html1 = f'<span style="background:#E0F2FE; color:#0369A1; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">READY</span>'
             status_box1 = """
             <div style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#0369A1; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">⚡</span><span>Extracts AST symbols, rules & evidence from COBOL, SQL & SSIS</span>
+                <span style="font-size:0.95rem;"></span><span>Extracts AST symbols, rules & evidence from COBOL, SQL & SSIS</span>
             </div>
             """
 
@@ -119,9 +119,9 @@ def render_pipeline() -> None:
         if is_running1:
             col_b1, col_s1 = st.columns([2.3, 1.7])
             with col_b1:
-                st.button("⏳ Extracting...", type="primary", use_container_width=True, disabled=True, key="btn_run_ke")
+                st.button("Extracting...", type="primary", use_container_width=True, disabled=True, key="btn_run_ke")
             with col_s1:
-                if st.button("⏹ Stop", use_container_width=True, key="btn_stop_ke"):
+                if st.button(" Stop", use_container_width=True, key="btn_stop_ke"):
                     PipelineService.stop_layer("knowledge_engineering")
                     st.rerun()
         else:
@@ -143,28 +143,28 @@ def render_pipeline() -> None:
             status_box2 = f"""
             <div style="background:#EEF2FF; border:1px solid #C7D2FE; border-radius:6px; padding:0.4rem 0.6rem; height:50px; display:flex; flex-direction:column; justify-content:center;">
                 <div class="pipeline-progress-bar-bg"><div class="pipeline-progress-bar-fill fill-purple" style="width:{max(5, pct2)}%;"></div></div>
-                <div style="font-size:0.73rem; font-weight:700; color:#4338CA; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚙️ {cur_step2}</div>
+                <div style="font-size:0.73rem; font-weight:700; color:#4338CA; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{cur_step2}</div>
             </div>
             """
         elif stt2 == "COMPLETED":
-            badge_html2 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">✅ COMPLETED{dur2}</span>'
+            badge_html2 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">COMPLETED{dur2}</span>'
             status_box2 = """
             <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#15803D; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">✅</span><span>Neo4j Knowledge Graph connected & fully populated</span>
+                <span style="font-size:0.95rem;"></span><span>Neo4j Knowledge Graph connected & fully populated</span>
             </div>
             """
         elif stt2 == "STOPPED":
-            badge_html2 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">🛑 STOPPED{dur2}</span>'
+            badge_html2 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;"> STOPPED{dur2}</span>'
             status_box2 = f"""
             <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#DC2626; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">🛑</span><span>Execution stopped by user</span>
+                <span style="font-size:0.95rem;"></span><span>Execution stopped by user</span>
             </div>
             """
         else:
             badge_html2 = f'<span style="background:#EEF2FF; color:#4338CA; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">READY</span>'
             status_box2 = """
             <div style="background:#ECEFF8; border:1px solid #C7D2FE; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#4338CA; height:50px; display:flex; align-items:center; gap:0.45rem; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.35);">
-                <span style="font-size:0.95rem;">🕸️</span><span>Builds Neo4j schema nodes, call graphs & cross-file links</span>
+                <span style="font-size:0.95rem;"></span><span>Builds Neo4j schema nodes, call graphs & cross-file links</span>
             </div>
             """
 
@@ -195,9 +195,9 @@ def render_pipeline() -> None:
         if is_running2:
             col_b2, col_s2 = st.columns([2.3, 1.7])
             with col_b2:
-                st.button("⏳ Ingesting...", type="primary", use_container_width=True, disabled=True, key="btn_run_gl")
+                st.button("Ingesting...", type="primary", use_container_width=True, disabled=True, key="btn_run_gl")
             with col_s2:
-                if st.button("⏹ Stop", use_container_width=True, key="btn_stop_gl"):
+                if st.button(" Stop", use_container_width=True, key="btn_stop_gl"):
                     PipelineService.stop_layer("graph_layer")
                     st.rerun()
         else:
@@ -219,28 +219,28 @@ def render_pipeline() -> None:
             status_box3 = f"""
             <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:6px; padding:0.4rem 0.6rem; height:50px; display:flex; flex-direction:column; justify-content:center;">
                 <div class="pipeline-progress-bar-bg"><div class="pipeline-progress-bar-fill fill-green" style="width:{max(5, pct3)}%;"></div></div>
-                <div style="font-size:0.73rem; font-weight:700; color:#047857; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚙️ {cur_step3}</div>
+                <div style="font-size:0.73rem; font-weight:700; color:#047857; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{cur_step3}</div>
             </div>
             """
         elif stt3 == "COMPLETED":
-            badge_html3 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">✅ COMPLETED{dur3}</span>'
+            badge_html3 = f'<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">COMPLETED{dur3}</span>'
             status_box3 = """
             <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#15803D; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">✅</span><span>Qdrant chunks & summary vector collections indexed</span>
+                <span style="font-size:0.95rem;"></span><span>Qdrant chunks & summary vector collections indexed</span>
             </div>
             """
         elif stt3 == "STOPPED":
-            badge_html3 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">🛑 STOPPED{dur3}</span>'
+            badge_html3 = f'<span style="background:#FEE2E2; color:#B91C1C; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;"> STOPPED{dur3}</span>'
             status_box3 = f"""
             <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#DC2626; height:50px; display:flex; align-items:center; gap:0.45rem;">
-                <span style="font-size:0.95rem;">🛑</span><span>Execution stopped by user</span>
+                <span style="font-size:0.95rem;"></span><span>Execution stopped by user</span>
             </div>
             """
         else:
             badge_html3 = f'<span style="background:#ECFDF5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">READY</span>'
             status_box3 = """
             <div style="background:#E8F5EF; border:1px solid #A7F3D0; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.78rem; font-weight:600; color:#047857; height:50px; display:flex; align-items:center; gap:0.45rem; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.35);">
-                <span style="font-size:0.95rem;">🧠</span><span>Generates dense neural vector embeddings in Qdrant</span>
+                <span style="font-size:0.95rem;"></span><span>Generates dense neural vector embeddings in Qdrant</span>
             </div>
             """
 
@@ -271,9 +271,9 @@ def render_pipeline() -> None:
         if is_running3:
             col_b3, col_s3 = st.columns([2.3, 1.7])
             with col_b3:
-                st.button("⏳ Indexing...", type="primary", use_container_width=True, disabled=True, key="btn_run_vl")
+                st.button("Indexing...", type="primary", use_container_width=True, disabled=True, key="btn_run_vl")
             with col_s3:
-                if st.button("⏹ Stop", use_container_width=True, key="btn_stop_vl"):
+                if st.button(" Stop", use_container_width=True, key="btn_stop_vl"):
                     PipelineService.stop_layer("vector_layer")
                     st.rerun()
         else:
@@ -292,8 +292,10 @@ def render_pipeline() -> None:
         table_rows = []
         for f in all_files:
             has_pkg = f.get("has_knowledge_package", False)
-            status_badge = "✅ Completed" if has_pkg else "⏳ Pending"
+            status_badge = "Completed" if has_pkg else "Pending"
             stage_text = "Canonical Package Ready" if has_pkg else "Ready for Ingestion"
+            conf_val = f.get("confidence")
+            conf_display = f"{conf_val}%" if conf_val is not None else "—"
             table_rows.append({
                 "File Name": f.get("file_name", "Unknown"),
                 "Type": f.get("technology", "—"),
@@ -301,8 +303,9 @@ def render_pipeline() -> None:
                 "Processing Stage": stage_text,
                 "Lines": f.get("total_lines", 0),
                 "Entities": f.get("entity_count", 0),
-                "Confidence": f"{f.get('confidence', 90)}%",
+                "Confidence": conf_display,
             })
+
 
         st.dataframe(
             table_rows,
@@ -346,14 +349,14 @@ def _render_styled_log_terminal(logs: list[str], empty_msg: str, header_title: s
             continue
 
         # Color-code key milestones
-        if "Saved:" in clean_line or "completed successfully" in clean_line or "Generated updated" in clean_line or "✅" in clean_line or "[+]" in clean_line:
-            styled_line = f'<div style="color:#4ADE80; font-weight:600;"><span style="color:#22C55E;">✔</span> {clean_line}</div>'
+        if "Saved:" in clean_line or "completed successfully" in clean_line or "Generated updated" in clean_line or "" in clean_line or "[+]" in clean_line:
+            styled_line = f'<div style="color:#4ADE80; font-weight:600;"><span style="color:#22C55E;"></span> {clean_line}</div>'
         elif "Processing" in clean_line or "Parsing" in clean_line or "Analyzing" in clean_line:
-            styled_line = f'<div style="color:#38BDF8; font-weight:500;"><span style="color:#0284C7;">⚙</span> {clean_line}</div>'
-        elif "Found" in clean_line or "Initialized" in clean_line or "🚀" in clean_line:
+            styled_line = f'<div style="color:#38BDF8; font-weight:500;"><span style="color:#0284C7;"></span> {clean_line}</div>'
+        elif "Found" in clean_line or "Initialized" in clean_line or "" in clean_line:
             styled_line = f'<div style="color:#FCD34D; font-weight:600;"><span style="color:#F59E0B;">●</span> {clean_line}</div>'
         elif "Error" in clean_line or "Failed" in clean_line or "Exception" in clean_line or "non-zero" in clean_line or "[-]" in clean_line:
-            styled_line = f'<div style="color:#F87171; font-weight:600;"><span style="color:#EF4444;">✖</span> {clean_line}</div>'
+            styled_line = f'<div style="color:#F87171; font-weight:600;"><span style="color:#EF4444;"></span> {clean_line}</div>'
         elif "[Neo4j]" in clean_line or "Neo4j" in clean_line:
             styled_line = f'<div style="color:#C084FC;"><span style="color:#A855F7;">◆</span> {clean_line}</div>'
         elif "[Qdrant]" in clean_line or "Qdrant" in clean_line:

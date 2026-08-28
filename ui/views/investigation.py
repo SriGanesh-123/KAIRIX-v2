@@ -2,8 +2,8 @@
 Investigation Agent Page for KAIRIX UI — Dual Mode Experience.
 
 Provides:
-1. 🔍 Inquiry & Lineage Investigation (Natural-language Q&A over Neo4j + Qdrant)
-2. 📋 Structured Template Extraction (Deterministic SQL AST mapping to user-defined templates)
+1. Inquiry & Lineage Investigation (Natural-language Q&A over Neo4j + Qdrant)
+2.  Structured Template Extraction (Deterministic SQL AST mapping to user-defined templates)
 """
 from __future__ import annotations
 
@@ -49,8 +49,17 @@ def render_investigation() -> None:
     if "selected_template_preset" not in st.session_state:
         st.session_state["selected_template_preset"] = PRESET_TEMPLATES[0]
 
+    # Auto-sanitize old emoji values from session state
+    if "investigation_mode_selection" in st.session_state:
+        cur_val = str(st.session_state["investigation_mode_selection"])
+        if "Structured" in cur_val:
+            st.session_state["investigation_mode_selection"] = "User-Defined Structured Extraction"
+        else:
+            st.session_state["investigation_mode_selection"] = "Inquiry & Lineage Investigation"
+
     # Check for pre-loaded query from other views
     preloaded_query = st.session_state.pop("pending_investigation_query", None)
+
 
     # 2. Hero Header
     st.markdown(
@@ -67,14 +76,14 @@ def render_investigation() -> None:
         unsafe_allow_html=True,
     )
 
-    # 3. Prominent Mode Switcher Control
+    # 3. Prominent Mode Switcher & Workspace Routing
     mode_options = [
-        "🔍 Inquiry & Lineage Investigation",
-        "📋 User-Defined Structured Extraction",
+        "Inquiry & Lineage Investigation",
+        "User-Defined Structured Extraction",
     ]
-    
-    col_m_l, col_m_mid, col_m_r = st.columns([1, 6, 1])
-    with col_m_mid:
+
+    col_l, col_center, col_r = st.columns([1, 8, 1])
+    with col_center:
         selected_mode = st.radio(
             "Investigation Mode",
             options=mode_options,
@@ -84,130 +93,129 @@ def render_investigation() -> None:
             key="investigation_mode_selection",
         )
 
-    st.markdown("<div style='margin-bottom: 1.2rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom: 1.4rem;'></div>", unsafe_allow_html=True)
 
-    # 4. Mode Routing
-    if selected_mode == "📋 User-Defined Structured Extraction":
-        _render_structured_extraction()
-    else:
-        _render_normal_investigation(preloaded_query)
+        # 4. Mode Routing
+        if selected_mode == "User-Defined Structured Extraction":
+            _render_structured_extraction()
+        else:
+            _render_normal_investigation(preloaded_query)
 
 
 
 def _render_normal_investigation(preloaded_query: str | None) -> None:
     """Renders the standard AI inquiry Q&A flow."""
-    col_l, col_center, col_r = st.columns([1, 8, 1])
+    # Search Form
+    with st.form(key="investigation_search_form", clear_on_submit=False):
+        user_question = st.text_input(
+            "Ask your question...",
+            value=preloaded_query or "",
+            placeholder="Ask any question about code, calculations, or lineage (e.g. How is earned premium calculated?)...",
+            label_visibility="collapsed",
+            key="main_investigation_input",
+            disabled=st.session_state.get("is_investigating", False),
+        )
 
-    with col_center:
-        # Search Form
-        with st.form(key="investigation_search_form", clear_on_submit=False):
-            user_question = st.text_input(
-                "Ask your question...",
-                value=preloaded_query or "",
-                placeholder="e.g., How is earned premium calculated? or Which SSIS packages load PolicyCenter tables?",
-                label_visibility="collapsed",
-                key="main_investigation_input",
+
+        col_sub, col_clr = st.columns([4, 1.2])
+        with col_sub:
+            submit = st.form_submit_button(
+                "Run Investigation",
+                type="primary",
+                use_container_width=True,
                 disabled=st.session_state.get("is_investigating", False),
             )
+        with col_clr:
+            clear = st.form_submit_button("Clear History", use_container_width=True)
 
-            col_sub, col_clr = st.columns([4, 1.2])
-            with col_sub:
-                submit = st.form_submit_button(
-                    "🔍 Run Investigation",
-                    type="primary",
-                    use_container_width=True,
-                    disabled=st.session_state.get("is_investigating", False),
-                )
-            with col_clr:
-                clear = st.form_submit_button("Clear History", use_container_width=True)
+    if clear:
+        st.session_state["investigation_history"] = []
+        st.rerun()
 
-        if clear:
-            st.session_state["investigation_history"] = []
-            st.rerun()
+    # Suggested Questions Grid
+    st.markdown(
+        """
+        <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
+            Suggested Questions:
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        # Suggested Questions Grid
+    with st.container():
+        st.markdown('<div class="suggested-chips-container">', unsafe_allow_html=True)
+        chip_cols = st.columns(len(SAMPLE_QUESTIONS))
+        for i, q in enumerate(SAMPLE_QUESTIONS):
+            with chip_cols[i]:
+                if st.button(q, key=f"inv_chip_{i}", use_container_width=True):
+                    st.session_state["pending_investigation_query"] = q
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
+
+    # Handle Query Submission & Background Execution
+    target_query = (user_question.strip() if (submit and user_question) else (preloaded_query.strip() if preloaded_query else ""))
+
+    if target_query:
+        task_id = InvestigationService.start_background_query(target_query)
+        st.session_state["active_investigation_task_id"] = task_id
+        st.rerun()
+
+    # Check Active Background Task Status
+    active_task_id = st.session_state.get("active_investigation_task_id")
+    if active_task_id:
+        task_info = InvestigationService.get_task_status(active_task_id)
+        if task_info and task_info.get("task_type") != "extraction":
+            status = task_info.get("status")
+            question_text = task_info.get("question", "")
+
+            if status == "running":
+                with st.status(f"Investigating: \"{question_text}\"...", expanded=True) as status_box:
+                    logs = task_info.get("progress_log", [])
+                    for log_msg in logs:
+                        st.write(f"• {log_msg}")
+                    st.info("You can freely navigate between pages — investigation will continue in the background.")
+                
+                time.sleep(1.0)
+                st.rerun()
+
+            elif status == "complete":
+                res = task_info.get("result")
+                if res:
+                    hist = st.session_state["investigation_history"]
+                    if not any(h.get("question") == res.get("question") and h.get("answer") == res.get("answer") for h in hist):
+                        hist.insert(0, res)
+                st.session_state["active_investigation_task_id"] = None
+                InvestigationService.clear_task(active_task_id)
+                st.toast("Investigation complete!", icon="")
+                st.rerun()
+
+            elif status == "error":
+                err_msg = task_info.get("error", "Unknown error")
+                st.error(f"Investigation failed: {err_msg}")
+                res = task_info.get("result")
+                if res:
+                    st.session_state["investigation_history"].insert(0, res)
+                st.session_state["active_investigation_task_id"] = None
+                InvestigationService.clear_task(active_task_id)
+
+    # Render Investigation Results History
+    history = st.session_state.get("investigation_history", [])
+    if history:
         st.markdown(
-            """
-            <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.8rem; margin-bottom: 0.5rem;">
-                Suggested Questions:
+            f"""
+            <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; margin-top: 1.5rem;">
+                Investigation Answers ({len(history)})
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        with st.container():
-            st.markdown('<div class="suggested-chips-container">', unsafe_allow_html=True)
-            chip_cols = st.columns(len(SAMPLE_QUESTIONS))
-            for i, q in enumerate(SAMPLE_QUESTIONS):
-                with chip_cols[i]:
-                    if st.button(q, key=f"inv_chip_{i}", use_container_width=True):
-                        st.session_state["pending_investigation_query"] = q
-                        st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        for idx, res in enumerate(history):
+            render_answer_panel(res, panel_id=f"answer_{idx}")
+            st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top: 1.8rem;'></div>", unsafe_allow_html=True)
-
-        # Handle Query Submission & Background Execution
-        target_query = (user_question.strip() if (submit and user_question) else (preloaded_query.strip() if preloaded_query else ""))
-
-        if target_query:
-            task_id = InvestigationService.start_background_query(target_query)
-            st.session_state["active_investigation_task_id"] = task_id
-            st.rerun()
-
-        # Check Active Background Task Status
-        active_task_id = st.session_state.get("active_investigation_task_id")
-        if active_task_id:
-            task_info = InvestigationService.get_task_status(active_task_id)
-            if task_info and task_info.get("task_type") != "extraction":
-                status = task_info.get("status")
-                question_text = task_info.get("question", "")
-
-                if status == "running":
-                    with st.status(f"⚙️ Investigating: \"{question_text}\"...", expanded=True) as status_box:
-                        logs = task_info.get("progress_log", [])
-                        for log_msg in logs:
-                            st.write(f"• {log_msg}")
-                        st.info("💡 You can freely navigate between pages — investigation will continue in the background.")
-                    
-                    time.sleep(1.0)
-                    st.rerun()
-
-                elif status == "complete":
-                    res = task_info.get("result")
-                    if res:
-                        hist = st.session_state["investigation_history"]
-                        if not any(h.get("question") == res.get("question") and h.get("answer") == res.get("answer") for h in hist):
-                            hist.insert(0, res)
-                    st.session_state["active_investigation_task_id"] = None
-                    InvestigationService.clear_task(active_task_id)
-                    st.toast("✅ Investigation complete!", icon="🎯")
-                    st.rerun()
-
-                elif status == "error":
-                    err_msg = task_info.get("error", "Unknown error")
-                    st.error(f"⚠️ Investigation failed: {err_msg}")
-                    res = task_info.get("result")
-                    if res:
-                        st.session_state["investigation_history"].insert(0, res)
-                    st.session_state["active_investigation_task_id"] = None
-                    InvestigationService.clear_task(active_task_id)
-
-        # Render Investigation Results History
-        history = st.session_state.get("investigation_history", [])
-        if history:
-            st.markdown(
-                f"""
-                <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.8rem; margin-top: 1.5rem;">
-                    Investigation Answers ({len(history)})
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            for idx, res in enumerate(history):
-                render_answer_panel(res, panel_id=f"answer_{idx}")
-                st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
 
 def _render_structured_extraction() -> None:
@@ -245,7 +253,7 @@ def _render_structured_extraction() -> None:
                     available_files.append({"name": p.name, "path": str(p), "lines": 0, "size_kb": 0.0})
 
     if not available_files:
-        st.warning("⚠️ No SQL files found in `source/sql/`. Please add SQL files to run structured extraction.")
+        st.warning("No SQL files found in `source/sql/`. Please add SQL files to run structured extraction.")
         return
 
     file_options = [f["name"] for f in available_files]
@@ -299,7 +307,7 @@ def _render_structured_extraction() -> None:
     col_run, col_clear = st.columns([4, 1.2])
     with col_run:
         run_extract = st.button(
-            "⚡ Extract Structured Metadata",
+            "Extract Structured Metadata",
             type="primary",
             use_container_width=True,
             disabled=not selected_file_names or not template_input.strip(),
@@ -341,7 +349,7 @@ def _render_structured_extraction() -> None:
                 "execution_time_sec": res.execution_time_sec,
             }
             st.session_state["extraction_history"].insert(0, res_dict)
-            st.toast("✅ Structured extraction complete!", icon="📊")
+            st.toast("Structured extraction complete!", icon="")
             st.rerun()
 
 
@@ -352,7 +360,7 @@ def _render_structured_extraction() -> None:
         if task_info:
             status = task_info.get("status")
             if status == "running":
-                with st.status("⚙️ Running deterministic AST extraction & template mapping...", expanded=True):
+                with st.status("Running deterministic AST extraction & template mapping...", expanded=True):
                     logs = task_info.get("progress_log", [])
                     for msg in logs:
                         st.write(f"• {msg}")
@@ -365,12 +373,12 @@ def _render_structured_extraction() -> None:
                     st.session_state["extraction_history"].insert(0, res)
                 st.session_state["active_extraction_task_id"] = None
                 InvestigationService.clear_task(active_ext_id)
-                st.toast("✅ Structured extraction complete!", icon="📊")
+                st.toast("Structured extraction complete!", icon="")
                 st.rerun()
 
             elif status == "error":
                 err_msg = task_info.get("error", "Unknown error")
-                st.error(f"⚠️ Extraction failed: {err_msg}")
+                st.error(f"Extraction failed: {err_msg}")
                 st.session_state["active_extraction_task_id"] = None
                 InvestigationService.clear_task(active_ext_id)
 
@@ -422,7 +430,7 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
                         </span>
                     </div>
                     <div style="display: flex; gap: 0.6rem; align-items: center;">
-                        <span style="font-size: 0.78rem; color: #64748B;">⏱️ {exec_time:.2f}s</span>
+                        <span style="font-size: 0.78rem; color: #64748B;">{exec_time:.2f}s</span>
                         <span style="font-size: 0.78rem; font-weight: 700; color: #047857; background: #D1FAE5; padding: 0.2rem 0.55rem; border-radius: 4px;">
                             Confidence: {int(confidence * 100)}%
                         </span>
@@ -460,7 +468,7 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
         with col_exp1:
             csv_data = df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "📥 Export CSV",
+                "Export CSV",
                 data=csv_data,
                 file_name=f"kairix_extraction_{idx+1}.csv",
                 mime="text/csv",
@@ -470,7 +478,7 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
         with col_exp2:
             json_data = json.dumps(rows, indent=2).encode("utf-8")
             st.download_button(
-                "📥 Export JSON",
+                "Export JSON",
                 data=json_data,
                 file_name=f"kairix_extraction_{idx+1}.json",
                 mime="application/json",
@@ -479,7 +487,7 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
             )
 
         # 4. Expandable Line-Anchored Evidence & Provenance
-        with st.expander("🔍 Inspect Line-Anchored Source Evidence & Provenance", expanded=False):
+        with st.expander("Inspect Line-Anchored Source Evidence & Provenance", expanded=False):
             st.markdown("##### Line-Level AST Evidence & Ownership Trace")
             for r_i, rec in enumerate(records, start=1):
                 t_name = rec.get("table_name") or "Table"
@@ -489,13 +497,13 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
                 amb = rec.get("ambiguous_columns") or []
                 conf = rec.get("confidence", 1.0)
 
-                badge = "✅ Deterministic" if conf >= 0.95 else "⚠️ Ambiguous column(s)"
+                badge = "Deterministic" if conf >= 0.95 else "Ambiguous column(s)"
                 st.markdown(
                     f"""
                     <div style="font-size: 0.82rem; padding: 0.5rem 0.75rem; background: #F8FAFC; border-left: 3px solid #0284C7; margin-bottom: 0.5rem; border-radius: 0 4px 4px 0;">
                         <strong>Row {r_i}: {t_name}</strong> &nbsp;•&nbsp; <span style="font-family: monospace;">{s_file}:L{l_no}</span> &nbsp;•&nbsp; <span>{badge}</span>
                         <div style="color: #475569; margin-top: 0.2rem;">{ev}</div>
-                        {f'<div style="color: #D97706; margin-top: 0.2rem;">⚠️ Ambiguous columns across multi-table scope: {", ".join(amb)}</div>' if amb else ''}
+                        {f'<div style="color: #D97706; margin-top: 0.2rem;">Ambiguous columns across multi-table scope: {", ".join(amb)}</div>' if amb else ''}
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -503,7 +511,7 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
 
         # 5. Warnings if present
         if warnings:
-            with st.expander("⚠️ Extraction Notices & Warnings", expanded=False):
+            with st.expander("Extraction Notices & Warnings", expanded=False):
                 for w in warnings:
                     st.info(f"• {w}")
 

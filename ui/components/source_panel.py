@@ -16,7 +16,8 @@ def render_source_metadata_card(file_info: Dict[str, Any]) -> None:
     """
     tech = file_info.get("technology", "COBOL")
     tech_badge_cls = f"badge-{tech.lower()}"
-    confidence = file_info.get("confidence", 90.0)
+    raw_conf = file_info.get("confidence")
+    conf_str = f"{raw_conf}%" if raw_conf is not None else "—"
 
     total_lines_str = format_metric(file_info.get('total_lines', 0))
     entity_count_str = format_metric(file_info.get('entity_count', 0))
@@ -40,9 +41,10 @@ def render_source_metadata_card(file_info: Dict[str, Any]) -> None:
         '</div>'
         '<div style="text-align:right;">'
         '<div style="font-size:0.72rem; color:#64748B; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">Confidence</div>'
-        f'<div style="font-size:1.45rem; font-weight:800; color:#059669; font-family:\'JetBrains Mono\', monospace;">{confidence}%</div>'
+        f'<div style="font-size:1.45rem; font-weight:800; color:#059669; font-family:\'JetBrains Mono\', monospace;">{conf_str}</div>'
         '</div>'
         '</div>'
+
         '<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:0.75rem; margin-top:1.1rem;">'
         f'<div style="background:#FFFFFF; border:1px solid #D5DFEB; border-radius:8px; padding:0.6rem 0.8rem; box-shadow:2px 2px 5px rgba(166, 180, 200, 0.25), -2px -2px 5px rgba(255, 255, 255, 0.85);"><div style="font-size:0.72rem; color:#64748B; font-weight:600; text-transform:uppercase;">Total Lines</div><div style="font-size:1.15rem; font-weight:800; color:#0F172A; font-family:\'JetBrains Mono\', monospace;">{total_lines_str}</div></div>'
         f'<div style="background:#FFFFFF; border:1px solid #D5DFEB; border-radius:8px; padding:0.6rem 0.8rem; box-shadow:2px 2px 5px rgba(166, 180, 200, 0.25), -2px -2px 5px rgba(255, 255, 255, 0.85);"><div style="font-size:0.72rem; color:#64748B; font-weight:600; text-transform:uppercase;">Entities</div><div style="font-size:1.15rem; font-weight:800; color:#0284C7; font-family:\'JetBrains Mono\', monospace;">{entity_count_str}</div></div>'

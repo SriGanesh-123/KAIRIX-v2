@@ -185,6 +185,15 @@ def render_source_explorer() -> None:
     prev_selected = st.session_state.get("selected_source_file")
     default_idx = file_options.index(prev_selected) if prev_selected in file_options else 0
 
+    st.markdown(
+        """
+        <div style="font-size: 0.76rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem;">
+            Select Source File:
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     col_sel, col_quick = st.columns([3.8, 1.2])
     with col_sel:
         selected_file_name = st.selectbox(
@@ -192,13 +201,14 @@ def render_source_explorer() -> None:
             options=file_options,
             index=default_idx,
             key="source_explorer_file_select",
+            label_visibility="collapsed",
         )
     with col_quick:
-        st.markdown("<div style='margin-top: 1.55rem;'></div>", unsafe_allow_html=True)
-        if st.button("🔍 Investigate File", use_container_width=True):
+        if st.button("Investigate File", use_container_width=True, key="btn_investigate_file"):
             st.session_state["pending_investigation_query"] = f"Explain the business logic and dependencies in {selected_file_name}"
             st.session_state["navigate_to_page"] = "Investigation Agent"
             st.rerun()
+
 
     file_info = SourceService.get_file_details(selected_file_name)
     if not file_info:

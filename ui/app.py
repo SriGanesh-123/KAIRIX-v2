@@ -33,9 +33,10 @@ def load_custom_css() -> None:
     if css_path.exists():
         try:
             css_content = css_path.read_text(encoding="utf-8")
-            st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
-        except Exception:
-            pass
+            st.markdown(f"<style>\n{css_content}\n</style>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Error loading custom styles: {e}")
+
 
 
 def main() -> None:
@@ -65,16 +66,28 @@ def main() -> None:
 
     # 4. Page Routing for 4 Core Views (Investigation Agent is default Home)
     try:
+        import importlib
         if selected_page in ("Investigation Agent", "Investigation"):
-            render_investigation()
+            from ui.views import investigation as inv_view
+            importlib.reload(inv_view)
+            inv_view.render_investigation()
         elif selected_page == "Source Explorer":
-            render_source_explorer()
+            from ui.views import source_explorer as src_view
+            importlib.reload(src_view)
+            src_view.render_source_explorer()
         elif selected_page == "Pipeline":
-            render_pipeline()
+            from ui.views import pipeline as pip_view
+            importlib.reload(pip_view)
+            pip_view.render_pipeline()
         elif selected_page == "Knowledge Graph":
-            render_knowledge_graph()
+            from ui.views import knowledge_graph as kg_view
+            importlib.reload(kg_view)
+            kg_view.render_knowledge_graph()
         else:
-            render_investigation()
+            from ui.views import investigation as inv_view
+            importlib.reload(inv_view)
+            inv_view.render_investigation()
+
 
     except Exception as exc:
         st.error(

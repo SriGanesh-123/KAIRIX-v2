@@ -66,8 +66,9 @@ def render_graph_canvas(
         selected_node_id=selected_node_id,
     )
 
-    # Frame canvas in clean container
-    components.html(html_content, height=height + 15, scrolling=False)
+    # Frame canvas in clean container with zero overflow margins
+    components.html(html_content, height=height, scrolling=False)
+
 
 
 def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[List[Dict[str, Any]]] = None) -> None:

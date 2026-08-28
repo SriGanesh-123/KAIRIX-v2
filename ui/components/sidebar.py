@@ -3,10 +3,10 @@ Sidebar Navigation Component for KAIRIX UI.
 
 Renders modern collapsed-by-default left navigation bar with the official
 ValueMomentum / KAIRIX Owl logo pinned to the top-left corner and the 4 core application pages:
-1. 🔍 Investigation Agent (Home Page)
-2. 📂 Source Explorer
-3. ⚙️ Pipeline
-4. 🕸️ Knowledge Graph
+1.  Investigation Agent (Home Page)
+2.  Source Explorer
+3. Pipeline
+4.  Knowledge Graph
 """
 from __future__ import annotations
 
