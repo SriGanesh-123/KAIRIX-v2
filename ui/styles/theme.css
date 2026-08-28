@@ -1156,3 +1156,78 @@ div[data-testid="stButton"] > button:has(p:contains("Ask Agent")):active {
   box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.2) !important;
   transform: translateY(0) !important;
 }
+
+/* ==========================================================================
+   Tab Navigation & Segmented Mode Switcher
+   ========================================================================== */
+div[data-testid="stTabs"] {
+  margin-top: 0.8rem !important;
+  margin-bottom: 1.5rem !important;
+}
+
+div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+  gap: 0.65rem !important;
+  background-color: #E2E8F0 !important;
+  padding: 0.35rem 0.5rem !important;
+  border-radius: 12px !important;
+  border: 1px solid #CBD5E1 !important;
+  display: flex !important;
+  justify-content: center !important;
+  max-width: 720px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-shadow: inset 2px 2px 5px rgba(166, 180, 200, 0.35) !important;
+}
+
+div[data-testid="stTabs"] [data-baseweb="tab"] {
+  height: 2.6rem !important;
+  padding: 0 1.4rem !important;
+  background-color: transparent !important;
+  border-radius: 8px !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+  border: none !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+div[data-testid="stTabs"] [data-baseweb="tab-border"] {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Horizontal Mode Switcher Segmented Control
+   ========================================================================== */
+div[data-testid="stRadio"] > div[role="radiogroup"] {
+  gap: 0.85rem !important;
+  justify-content: center !important;
+  background-color: #E2E8F0 !important;
+  padding: 0.45rem 0.85rem !important;
+  border-radius: 12px !important;
+  border: 1px solid #CBD5E1 !important;
+  box-shadow: inset 2px 2px 5px rgba(166, 180, 200, 0.35) !important;
+  max-width: 680px !important;
+  margin: 0 auto !important;
+}
+
+div[data-testid="stRadio"] > div[role="radiogroup"] label {
+  background-color: #FFFFFF !important;
+  padding: 0.45rem 1.1rem !important;
+  border-radius: 8px !important;
+  border: 1px solid #D5DFEB !important;
+  cursor: pointer !important;
+  box-shadow: 2px 2px 5px rgba(166, 180, 200, 0.3) !important;
+  transition: all 0.15s ease-in-out !important;
+  font-weight: 600 !important;
+  font-size: 0.92rem !important;
+  color: #0F172A !important;
+}
+
+div[data-testid="stRadio"] > div[role="radiogroup"] label:hover {
+  border-color: #0284C7 !important;
+  color: #0284C7 !important;
+  transform: translateY(-1px) !important;
+}
+
+

@@ -63,6 +63,7 @@ class InvestigationService:
         with _TASKS_LOCK:
             _ACTIVE_TASKS[task_id] = {
                 "task_id": task_id,
+                "task_type": "inquiry",
                 "question": clean_q,
                 "status": "running",
                 "stage": "intent",
@@ -73,6 +74,7 @@ class InvestigationService:
                 "start_time": time.perf_counter(),
                 "execution_time_sec": None,
             }
+
 
         def _worker(tid: str, q: str):
             def _progress_cb(stage: str, msg: str):
@@ -276,3 +278,141 @@ class InvestigationService:
                 sections["answer"] = prefix
 
         return sections
+
+    # ── Structured Template Extraction API ─────────────────────────────────────
+
+    @classmethod
+    def get_available_sql_files(cls) -> List[Dict[str, Any]]:
+        """
+        Returns list of all available SQL files in source/sql with metadata.
+        """
+        from pathlib import Path
+        project_root = Path(__file__).resolve().parents[2]
+        sql_dir = project_root / "source" / "sql"
+        results = []
+
+        if sql_dir.exists():
+            for p in sorted(sql_dir.glob("*.sql")):
+                try:
+                    text = p.read_text(encoding="utf-8-sig", errors="ignore")
+                    lines = len(text.splitlines())
+                    size_kb = round(p.stat().st_size / 1024, 1)
+                    results.append({
+                        "name": p.name,
+                        "path": str(p),
+                        "lines": lines,
+                        "size_kb": size_kb,
+                    })
+                except Exception:
+                    results.append({
+                        "name": p.name,
+                        "path": str(p),
+                        "lines": 0,
+                        "size_kb": 0.0,
+                    })
+
+        return results
+
+    @classmethod
+    def extract_structured_sync(
+        cls,
+        selected_files: List[str],
+        template_str: str,
+        on_progress: Optional[Callable[[str, str], None]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executes deterministic structured extraction synchronously and returns
+        a dictionary ready for UI dataframe rendering.
+        """
+        from investigation_agent.structured_extractor import StructuredExtractionEngine
+        extractor = StructuredExtractionEngine()
+        try:
+            res = extractor.extract(
+                selected_files=selected_files,
+                template=template_str,
+                on_progress=on_progress,
+            )
+            # Serialize to dict
+            records_data = [rec.model_dump() for rec in res.records]
+            return {
+                "success": True,
+                "template_raw": res.template_raw,
+                "template_fields": res.template_fields,
+                "selected_files": res.selected_files,
+                "records": records_data,
+                "warnings": res.warnings,
+                "source_evidence": res.source_evidence,
+                "confidence": res.confidence,
+                "execution_time_sec": res.execution_time_sec,
+            }
+        except Exception as e:
+            logger.error("Structured extraction failed: %s", e, exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "template_raw": template_str,
+                "template_fields": [],
+                "selected_files": selected_files,
+                "records": [],
+                "warnings": [f"Extraction error: {e}"],
+                "source_evidence": {},
+                "confidence": 0.0,
+                "execution_time_sec": 0.0,
+            }
+
+    @classmethod
+    def start_background_extraction(
+        cls,
+        selected_files: List[str],
+        template_str: str,
+    ) -> str:
+        """
+        Starts structured extraction in a background thread. Returns unique task_id.
+        """
+        task_id = f"extract_{abs(hash(str(selected_files) + template_str))}_{int(time.time() * 1000)}"
+
+        with _TASKS_LOCK:
+            _ACTIVE_TASKS[task_id] = {
+                "task_id": task_id,
+                "task_type": "extraction",
+                "selected_files": selected_files,
+                "template_str": template_str,
+                "status": "running",
+                "stage": "init",
+                "stage_message": "Initializing deterministic SQL extraction engine...",
+                "progress_log": ["Initializing deterministic SQL extraction engine..."],
+                "result": None,
+                "error": None,
+                "start_time": time.perf_counter(),
+                "execution_time_sec": None,
+            }
+
+        def _worker(tid: str, files: List[str], tpl: str):
+            def _progress_cb(stage: str, msg: str):
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        _ACTIVE_TASKS[tid]["stage"] = stage
+                        _ACTIVE_TASKS[tid]["stage_message"] = msg
+                        _ACTIVE_TASKS[tid]["progress_log"].append(msg)
+
+            try:
+                res = cls.extract_structured_sync(files, tpl, on_progress=_progress_cb)
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        if res.get("success"):
+                            _ACTIVE_TASKS[tid]["status"] = "complete"
+                            _ACTIVE_TASKS[tid]["result"] = res
+                            _ACTIVE_TASKS[tid]["execution_time_sec"] = res.get("execution_time_sec")
+                        else:
+                            _ACTIVE_TASKS[tid]["status"] = "error"
+                            _ACTIVE_TASKS[tid]["error"] = res.get("error", "Extraction failed")
+                            _ACTIVE_TASKS[tid]["result"] = res
+            except Exception as e:
+                with _TASKS_LOCK:
+                    if tid in _ACTIVE_TASKS:
+                        _ACTIVE_TASKS[tid]["status"] = "error"
+                        _ACTIVE_TASKS[tid]["error"] = str(e)
+
+        _EXECUTOR.submit(_worker, task_id, selected_files, template_str)
+        return task_id
+

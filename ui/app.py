@@ -22,6 +22,9 @@ from ui.views.pipeline import render_pipeline
 from ui.views.knowledge_graph import render_knowledge_graph
 
 
+
+
+
 def load_custom_css() -> None:
     """
     Loads and injects the enterprise light theme CSS.

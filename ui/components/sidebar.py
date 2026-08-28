@@ -31,7 +31,7 @@ def _get_logo_html() -> str:
             b64 = base64.b64encode(logo_png.read_bytes()).decode("utf-8")
             return f"""
             <div style="display: flex; align-items: center; gap: 0.65rem; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.85rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
-                <img src="data:image/png;base64,{b64}" style="height: 48px; width: auto; object-fit: contain; border-radius: 6px;" alt="KAIRIX Logo" />
+                <img src="data:image/png;base64,{b64}" style="height: 48px; width: auto; object-fit: contain; background: transparent; border: none;" alt="KAIRIX Logo" />
                 <div>
                     <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em; line-height: 1.1;">KAIRIX</div>
                     <div style="font-size: 0.68rem; color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Legacy Workbench</div>

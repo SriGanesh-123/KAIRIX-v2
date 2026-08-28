@@ -31,6 +31,8 @@ from vector_layer.embedder import Embedder
 from knowledge_engineering_agent.services.llm_client import LLMClient
 
 from .models import InvestigationResult
+from .structured_models import StructuredExtractionResult
+from .structured_extractor import StructuredExtractionEngine
 from .prompts import (
     INTENT_CLASSIFICATION_PROMPT,
     CYPHER_GENERATION_PROMPT,
@@ -39,6 +41,7 @@ from .prompts import (
 )
 
 logger = logging.getLogger("kairix.investigation_agent")
+
 
 
 class InvestigationAgent:
@@ -69,8 +72,33 @@ class InvestigationAgent:
         self.llm = llm or LLMClient(debug=debug)
         self.top_k_vectors = top_k_vectors
         self.max_graph_results = max_graph_results
+        self.extractor = StructuredExtractionEngine()
 
     # ── Public API ─────────────────────────────────────────────────────────────
+
+    def extract_structured(
+        self,
+        selected_files: Union[str, List[str]],
+        template: Union[str, List[str]],
+        on_progress: Optional[Callable[[str, str], None]] = None,
+    ) -> StructuredExtractionResult:
+        """
+        Execute deterministic structured extraction against selected SQL files.
+
+        Args:
+            selected_files: One or more SQL files to analyze.
+            template: User-defined template string (e.g. '| Schema | Database | Table | Columns |').
+            on_progress: Optional progress callback.
+
+        Returns:
+            StructuredExtractionResult containing mapped records and verified provenance.
+        """
+        return self.extractor.extract(
+            selected_files=selected_files,
+            template=template,
+            on_progress=on_progress,
+        )
+
 
     def ask(
         self,
