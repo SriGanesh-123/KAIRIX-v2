@@ -209,7 +209,13 @@ class SourceService:
     @classmethod
     def get_all_source_files(cls) -> List[Dict[str, Any]]:
         """Discovers all source code files across COBOL, SQL, and SSIS directories (cached)."""
-        return _cached_get_all_source_files()
+        cached_files = _cached_get_all_source_files()
+        # Verify existing on disk to handle any out-of-band deletes immediately
+        valid_files = [f for f in cached_files if Path(f.get("file_path", "")).exists()]
+        if len(valid_files) != len(cached_files):
+            cls.refresh_sources()
+            return _cached_get_all_source_files()
+        return valid_files
 
     @classmethod
     def get_files_by_tech(cls, tech: str) -> List[Dict[str, Any]]:
@@ -349,3 +355,99 @@ class SourceService:
                 "file_name": clean_name,
                 "error": f"Failed to save source file: {str(e)}",
             }
+
+    @classmethod
+    def delete_source_file(cls, file_name: str) -> Dict[str, Any]:
+        """
+        Deletes a legacy source file from disk and cleans up all associated knowledge/cache artifacts.
+        """
+        file_info = cls.get_file_details(file_name)
+        if not file_info:
+            return {"success": False, "error": f"Source file '{file_name}' not found."}
+
+        deleted_paths: List[str] = []
+        try:
+            # 1. Delete source file
+            source_path = Path(file_info["file_path"])
+            if source_path.exists():
+                source_path.unlink()
+                deleted_paths.append(str(source_path))
+
+            # 2. Delete knowledge package
+            pkg_path = KNOWLEDGE_DIR / f"{file_name}_knowledge_package.json"
+            if pkg_path.exists():
+                pkg_path.unlink()
+                deleted_paths.append(str(pkg_path))
+            for p in KNOWLEDGE_DIR.glob(f"*{file_name}*knowledge_package.json"):
+                if p.exists():
+                    p.unlink()
+                    deleted_paths.append(str(p))
+
+            # 3. Delete summary artifacts
+            md_name = file_name.rsplit(".", 1)[0] if "." in file_name else file_name
+            for p in SUMMARIES_DIR.glob(f"*{md_name}*"):
+                if p.exists():
+                    p.unlink()
+                    deleted_paths.append(str(p))
+            for p in SUMMARIES_DIR.glob(f"*{file_name}*"):
+                if p.exists():
+                    p.unlink()
+                    deleted_paths.append(str(p))
+
+            # 4. Delete output/cache matching files
+            cache_dir = BASE_DIR / "output" / "cache"
+            if cache_dir.exists():
+                for p in cache_dir.glob(f"*{md_name}*"):
+                    if p.exists():
+                        p.unlink()
+                        deleted_paths.append(str(p))
+                for p in cache_dir.glob(f"*{file_name}*"):
+                    if p.exists():
+                        p.unlink()
+                        deleted_paths.append(str(p))
+
+            # 5. Purge from Neo4j & Qdrant databases
+            try:
+                from ui.services.backend_service import BackendService
+                neo_client = BackendService.get_neo4j_client()
+                if neo_client:
+                    neo_client.run_query(
+                        "MATCH (n) WHERE n.file_name = $fn OR n.source_file = $fn OR n.id CONTAINS $fn DETACH DELETE n",
+                        {"fn": file_name}
+                    )
+                
+                from vector_layer.qdrant_client_wrapper import QdrantWrapper, COLLECTION_CHUNKS, COLLECTION_SUMMARIES
+                from qdrant_client.http import models
+                qw = QdrantWrapper(silent=True)
+                for cname in [COLLECTION_CHUNKS, COLLECTION_SUMMARIES]:
+                    qw._client.delete(
+                        collection_name=cname,
+                        points_selector=models.FilterSelector(
+                            filter=models.Filter(
+                                should=[
+                                    models.FieldCondition(key="file_name", match=models.MatchValue(value=file_name)),
+                                    models.FieldCondition(key="source_file", match=models.MatchValue(value=file_name)),
+                                ]
+                            )
+                        )
+                    )
+            except Exception as e:
+                logger.debug("Database cleanup note for '%s': %s", file_name, e)
+
+            # 6. Invalidate caches
+            cls.refresh_sources()
+
+            return {
+                "success": True,
+                "file_name": file_name,
+                "deleted_paths": deleted_paths,
+                "message": f"Source '{file_name}' and its associated artifacts have been successfully deleted.",
+            }
+        except Exception as e:
+            logger.error("Failed to delete source file '%s': %s", file_name, e)
+            return {
+                "success": False,
+                "file_name": file_name,
+                "error": f"Failed to delete source file: {str(e)}",
+            }
+

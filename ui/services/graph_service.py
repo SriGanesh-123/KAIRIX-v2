@@ -441,6 +441,35 @@ def _cached_trace_lineage(entity_name: str, max_depth: int = 3) -> Dict[str, Any
     return _execute_cypher_subgraph(cypher, {"name": entity_name.strip()})
 
 
+_VIS_JS_CACHE: Optional[str] = None
+_VIS_CSS_CACHE: Optional[str] = None
+
+
+def _get_vis_assets() -> Tuple[str, str]:
+    """Retrieves bundled vis.js and vis.css from local packages with memory caching and CDN fallback."""
+    global _VIS_JS_CACHE, _VIS_CSS_CACHE
+    if _VIS_JS_CACHE is not None and _VIS_CSS_CACHE is not None:
+        return _VIS_JS_CACHE, _VIS_CSS_CACHE
+
+    try:
+        import pyvis
+        pkg_dir = os.path.dirname(pyvis.__file__)
+        js_p = os.path.join(pkg_dir, "templates", "lib", "vis-9.1.2", "vis-network.min.js")
+        css_p = os.path.join(pkg_dir, "templates", "lib", "vis-9.1.2", "vis-network.css")
+        if os.path.exists(js_p) and os.path.exists(css_p):
+            with open(js_p, "r", encoding="utf-8") as f:
+                _VIS_JS_CACHE = f.read()
+            with open(css_p, "r", encoding="utf-8") as f:
+                _VIS_CSS_CACHE = f.read()
+            return _VIS_JS_CACHE, _VIS_CSS_CACHE
+    except Exception as e:
+        logger.debug("Could not read local vis assets: %s", e)
+
+    _VIS_JS_CACHE = ""
+    _VIS_CSS_CACHE = ""
+    return _VIS_JS_CACHE, _VIS_CSS_CACHE
+
+
 class GraphService:
     """
     Handles graph data retrieval and Pyvis HTML rendering with caching.
@@ -455,7 +484,6 @@ class GraphService:
     def get_file_subgraph(file_name: str, max_nodes: int = 5000) -> Dict[str, Any]:
         """Retrieves all entities, rules, transformations, and edges connected to a specific file (cached)."""
         return _cached_get_file_subgraph(file_name=file_name, max_nodes=max_nodes)
-
 
     @staticmethod
     def search_nodes(query_term: str, max_results: int = 25) -> List[Dict[str, Any]]:
@@ -480,16 +508,13 @@ class GraphService:
         selected_node_id: Optional[str] = None,
     ) -> str:
         """
-        Generates an authentic Neo4j Bloom-styled interactive HTML graph using Pyvis.
+        Generates an authentic Neo4j Bloom-styled interactive HTML graph using vis-network
+        with bundled local assets, clean light theme styling, and resilient auto-fit.
         """
-        try:
-            from pyvis.network import Network
-        except ImportError:
-            return "<div style='color: #DC2626; padding: 1rem;'>Pyvis library is not installed.</div>"
+        vis_js, vis_css = _get_vis_assets()
 
-        net = Network(height=height, width="100%", bgcolor="#F8FAFC", font_color="#0F172A", directed=True)
-
-        added_node_ids = set()
+        nodes_payload: List[Dict[str, Any]] = []
+        added_node_ids: Set[str] = set()
 
         for n in nodes:
             node_id = str(n.get("id") or n.get("file_name") or n.get("name") or "unknown")
@@ -527,18 +552,18 @@ class GraphService:
             is_selected = selected_node_id and str(selected_node_id).lower() == node_id.lower()
 
             tooltip_lines = [
-                f"<div style='font-family: Inter, sans-serif; font-size: 13px; line-height: 1.4; padding: 4px;'>",
-                f"<b style='color: #0F172A; font-size: 14px;'>{html.escape(raw_name)}</b>",
-                f"<div style='color: #0284C7; font-weight: 600; margin: 2px 0;'>Type: {html.escape(str(node_type))}</div>",
+                f"<div style='min-width: 140px;'>",
+                f"<div style='font-weight: 800; color: #0F172A; font-size: 13px; margin-bottom: 2px;'>{html.escape(raw_name)}</div>",
+                f"<div style='color: #0284C7; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;'>{html.escape(str(node_type))}</div>",
             ]
             if n.get("source_file"):
-                tooltip_lines.append(f"<div style='color: #64748B;'>File: {html.escape(str(n.get('source_file')))}</div>")
+                tooltip_lines.append(f"<div style='color: #64748B; font-size: 11px;'><strong>File:</strong> {html.escape(str(n.get('source_file')))}</div>")
             if n.get("data_type") and n.get("data_type") != "—":
-                tooltip_lines.append(f"<div style='color: #64748B;'>Data Type: <code>{html.escape(str(n.get('data_type')))}</code></div>")
+                tooltip_lines.append(f"<div style='color: #64748B; font-size: 11px;'><strong>Type:</strong> <code style='background:#F1F5F9; padding:1px 4px; border-radius:3px;'>{html.escape(str(n.get('data_type')))}</code></div>")
             if n.get("purpose"):
-                tooltip_lines.append(f"<div style='color: #334155; margin-top: 4px;'>{html.escape(str(n.get('purpose'))[:160])}</div>")
+                tooltip_lines.append(f"<div style='color: #334155; margin-top: 4px; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 3px;'>{html.escape(str(n.get('purpose'))[:140])}</div>")
             elif n.get("description"):
-                tooltip_lines.append(f"<div style='color: #334155; margin-top: 4px;'>{html.escape(str(n.get('description'))[:160])}</div>")
+                tooltip_lines.append(f"<div style='color: #334155; margin-top: 4px; font-size: 11px; border-top: 1px solid #E2E8F0; padding-top: 3px;'>{html.escape(str(n.get('description'))[:140])}</div>")
             tooltip_lines.append("</div>")
 
             title = "".join(tooltip_lines)
@@ -550,29 +575,30 @@ class GraphService:
             bg_color = "#FDE047" if is_selected else color_cfg["bg"]
             border_color = "#CA8A04" if is_selected else color_cfg["border"]
 
-            net.add_node(
-                node_id,
-                label=display_label,
-                title=title,
-                size=node_size,
-                shape="dot",
-                color={
+            nodes_payload.append({
+                "id": node_id,
+                "label": display_label,
+                "title": title,
+                "size": node_size,
+                "shape": "dot",
+                "color": {
                     "background": bg_color,
                     "border": border_color,
                     "highlight": {"background": color_cfg["highlight"], "border": "#0284C7"},
                     "hover": {"background": color_cfg["highlight"], "border": "#0284C7"},
                 },
-                font={
+                "font": {
                     "color": "#0F172A",
                     "size": 12,
                     "face": "Inter, -apple-system, sans-serif",
                     "strokeWidth": 3,
                     "strokeColor": "#FFFFFF",
                 },
-                borderWidth=3.5 if is_selected else 2.0,
-            )
+                "borderWidth": 3.5 if is_selected else 2.0,
+            })
             added_node_ids.add(node_id)
 
+        edges_payload: List[Dict[str, Any]] = []
         for e in edges:
             src = str(e.get("source", ""))
             tgt = str(e.get("target", ""))
@@ -580,112 +606,189 @@ class GraphService:
 
             if src in added_node_ids and tgt in added_node_ids:
                 cfg = EDGE_PALETTE.get(rel_type, EDGE_PALETTE["DEFAULT"])
-                net.add_edge(
-                    src,
-                    tgt,
-                    title=f"<b>{rel_type}</b>",
-                    label=rel_type if len(edges) <= 30 else "",
-                    color={"color": cfg["color"], "highlight": "#0284C7", "hover": "#0284C7"},
-                    arrows={"to": {"enabled": True, "scaleFactor": 0.75}},
-                    font={"color": "#475569", "size": 9, "align": "middle", "strokeWidth": 2, "strokeColor": "#FFFFFF"},
-                    width=cfg["width"],
-                    smooth={"enabled": True, "type": "continuous", "roundness": 0.2},
-                )
+                edges_payload.append({
+                    "from": src,
+                    "to": tgt,
+                    "title": f"<b>{html.escape(rel_type)}</b>",
+                    "label": rel_type if len(edges) <= 30 else "",
+                    "color": {"color": cfg["color"], "highlight": "#0284C7", "hover": "#0284C7"},
+                    "arrows": {"to": {"enabled": True, "scaleFactor": 0.75}},
+                    "font": {"color": "#475569", "size": 9, "align": "middle", "strokeWidth": 2, "strokeColor": "#FFFFFF"},
+                    "width": cfg["width"],
+                    "smooth": {"enabled": True, "type": "continuous", "roundness": 0.2},
+                })
 
-        net.set_options(
-            """
-            {
-              "physics": {
+        options = {
+            "physics": {
+                "enabled": True,
                 "forceAtlas2Based": {
-                  "gravitationalConstant": -140,
-                  "centralGravity": 0.015,
-                  "springLength": 140,
-                  "springConstant": 0.05,
-                  "damping": 0.4,
-                  "avoidOverlap": 0.9
+                    "gravitationalConstant": -60,
+                    "centralGravity": 0.03,
+                    "springLength": 85,
+                    "springConstant": 0.08,
+                    "damping": 0.7,
+                    "avoidOverlap": 0.85,
                 },
-                "maxVelocity": 45,
+                "maxVelocity": 25,
+                "minVelocity": 0.75,
                 "solver": "forceAtlas2Based",
-                "stabilization": { "enabled": true, "iterations": 80, "updateInterval": 25 }
-              },
-              "interaction": {
-                "hover": true,
-                "hoverConnectedEdges": true,
-                "selectConnectedEdges": true,
-                "navigationButtons": true,
-                "keyboard": true,
-                "zoomView": true,
-                "dragView": true,
-                "tooltipDelay": 120
-              }
-            }
-            """
-        )
+                "stabilization": {
+                    "enabled": True,
+                    "iterations": 140,
+                    "updateInterval": 25,
+                    "fit": True,
+                },
+            },
+            "interaction": {
+                "hover": True,
+                "hoverConnectedEdges": True,
+                "selectConnectedEdges": True,
+                "navigationButtons": False,
+                "keyboard": False,
+                "zoomView": True,
+                "dragView": True,
+                "dragNodes": True,
+                "tooltipDelay": 100,
+            },
+        }
 
-        raw_html = net.generate_html()
+        # Include local or CDN css/js
+        css_header = f"<style>{vis_css}</style>" if vis_css else '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" />'
+        js_header = f"<script>{vis_js}</script>" if vis_js else '<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"></script>'
 
-        custom_graph_css = """
-        <style type="text/css">
-          * {
-            margin: 0 !important;
-            padding: 0 !important;
-            box-sizing: border-box !important;
-          }
-          html, body {
-            width: 100% !important;
-            height: 100% !important;
-            overflow: hidden !important;
-            background: transparent !important;
-          }
-          .card, .card-body {
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: transparent !important;
-          }
-          #mynetwork {
-            width: 100% !important;
-            height: 100% !important;
-            border: 1px solid #D5DFEB !important;
-            border-radius: 12px !important;
-            background: #F8FAFC !important;
-            box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.95) !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-          }
+        safe_nodes = json.dumps(nodes_payload)
+        safe_edges = json.dumps(edges_payload)
+        safe_options = json.dumps(options)
+        safe_selected = json.dumps(selected_node_id) if selected_node_id else "null"
 
-          /* Modern Enterprise Sapphire Blue Styling for Vis.js Navigation Controls */
-          .vis-navigation {
-            position: absolute !important;
-            bottom: 14px !important;
-            left: 14px !important;
-          }
-          .vis-navigation .vis-button {
-            background-color: #FFFFFF !important;
-            border: 1.5px solid #0284C7 !important;
-            border-radius: 50% !important;
-            box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25), 0 1px 3px rgba(0, 0, 0, 0.08) !important;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            cursor: pointer !important;
-            filter: hue-rotate(85deg) brightness(0.65) saturate(2.5) !important;
-          }
-          .vis-navigation .vis-button:hover {
-            background-color: #F0F9FF !important;
-            border-color: #0369A1 !important;
-            box-shadow: 0 0 10px rgba(2, 132, 199, 0.5) !important;
-            transform: scale(1.12) !important;
-          }
-          .vis-navigation .vis-button:active {
-            transform: scale(0.95) !important;
-            background-color: #E0F2FE !important;
-          }
-        </style>
-        """
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {css_header}
+  <style type="text/css">
+    * {{
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+    }}
+    html, body {{
+      width: 100% !important;
+      height: 100% !important;
+      overflow: hidden !important;
+      background: #F8FAFC !important;
+    }}
+    #mynetwork {{
+      width: 100% !important;
+      height: 100% !important;
+      background: #F8FAFC !important;
+      border: 1px solid #D5DFEB !important;
+      border-radius: 12px !important;
+      box-shadow: 4px 4px 10px rgba(166, 180, 200, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.95) !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+    }}
+    /* Clean Floating Tooltip */
+    div.vis-tooltip {{
+      position: absolute !important;
+      visibility: hidden !important;
+      padding: 8px 12px !important;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      font-size: 12px !important;
+      color: #0F172A !important;
+      background: #FFFFFF !important;
+      border: 1px solid #CBD5E1 !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+      z-index: 1000 !important;
+      pointer-events: none !important;
+      max-width: 320px !important;
+      line-height: 1.45 !important;
+      word-break: break-word !important;
+    }}
+  </style>
+</head>
+<body>
+  <div id="mynetwork"></div>
+  {js_header}
+  <script type="text/javascript">
+    (function() {{
+      var nodesData = {safe_nodes};
+      var edgesData = {safe_edges};
+      var options = {safe_options};
+      var selNodeId = {safe_selected};
 
-        if "</head>" in raw_html:
-            return raw_html.replace("</head>", f"{custom_graph_css}\n</head>")
-        return raw_html + custom_graph_css
+      // Convert HTML title strings into actual DOM elements so vis-network renders rich HTML without raw tags
+      nodesData.forEach(function(node) {{
+        if (node.title && typeof node.title === 'string') {{
+          var el = document.createElement('div');
+          el.innerHTML = node.title;
+          node.title = el;
+        }}
+      }});
+
+      edgesData.forEach(function(edge) {{
+        if (edge.title && typeof edge.title === 'string') {{
+          var el = document.createElement('div');
+          el.innerHTML = edge.title;
+          edge.title = el;
+        }}
+      }});
+
+      var container = document.getElementById('mynetwork');
+      var nodes = new vis.DataSet(nodesData);
+      var edges = new vis.DataSet(edgesData);
+      var data = {{ nodes: nodes, edges: edges }};
+
+      var network = new vis.Network(container, data, options);
+
+      network.on('click', function(params) {{
+        var tooltip = document.querySelector('.vis-tooltip');
+        if (tooltip) {{
+          tooltip.style.visibility = 'hidden';
+        }}
+      }});
+
+      // When stabilization completes, freeze physics so graph stays perfectly stationary
+      function finalizeLayout() {{
+        if (typeof network !== 'undefined' && network !== null) {{
+          network.setOptions({{ physics: {{ enabled: false }} }});
+          if (selNodeId) {{
+            try {{
+              network.focus(selNodeId, {{
+                scale: 1.05,
+                animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }}
+              }});
+              network.selectNodes([selNodeId]);
+            }} catch (err) {{
+              network.fit();
+            }}
+          }} else {{
+            network.fit();
+          }}
+        }}
+      }}
+
+      network.once('stabilizationIterationsDone', finalizeLayout);
+
+      // Fallback timer to guarantee physics freezes and prevents drifting
+      setTimeout(finalizeLayout, 450);
+
+      window.addEventListener('resize', function() {{
+        if (typeof network !== 'undefined' && network !== null) {{
+          network.fit();
+        }}
+      }});
+    }})();
+  </script>
+</body>
+</html>
+"""
+        return html_content
+
+
 

@@ -1,0 +1,1982 @@
+{
+  "package_id": "PKG-SSIS-Extract_Producer.dtsx-f6291b16",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Producer.dtsx",
+    "file_name": "Extract_Producer.dtsx",
+    "source_type": "ssis",
+    "file_extension": ".dtsx",
+    "total_lines": 170,
+    "size_bytes": 10325
+  },
+  "summary": {
+    "purpose": "Extracts, cleanses, validates and loads PRODUCER master data from the Guidewire PolicyCenter PostgreSQL replica into the insurance data warehouse, while logging audit information and quarantining invalid rows.",
+    "high_level_narrative": "When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.producer via the CM_Guidewire_PG_Source connection. Each row passes through a Derived Column component that trims whitespace from producer_name and forces state_code to upper case. A second Derived Column adds an ETL metadata column etl_load_date (current timestamp). The rows are then evaluated by a Conditional Split that enforces three business rules: commission_rate between 0 and 100, producer_type limited to AGENCY, BROKER, AGENT or INDIVIDUAL, and created_date not in the future. Valid rows are bulk‑loaded (fast load, 10,000 rows per batch) into the staging table stg.producer on the CM_DW_PG_Target connection. Invalid rows, source read errors, and any lookup‑no‑match rows are merged by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, an Execute SQL task updates the audit log with end_time, status COMPLETED and the row counts (rows_read, rows_inserted, rows_rejected). If any task raises an error, the OnError event handler inserts a record into etl.etl_error_log with details of the failure.",
+    "business_domain": "Policy / Producer Master Data (Guidewire PolicyCenter)",
+    "inputs": [
+      "public.producer (Guidewire PolicyCenter PostgreSQL source table)",
+      "CM_Guidewire_PG_Source connection (read‑only replica)",
+      "CM_DW_PG_Target connection (target data warehouse)",
+      "etl.etl_audit_log (used for logging start/end, not a source of business data)",
+      "etl.etl_error_log (used for error logging)"
+    ],
+    "outputs": [
+      "stg.producer (staging table in insurance_dw schema)",
+      "stg.error_quarantine (table for rejected/invalid rows)",
+      "etl.etl_audit_log (audit record with start/end timestamps and row counts)",
+      "etl.etl_error_log (error record when package fails)"
+    ],
+    "key_transformations": [
+      "SELECT producer_id, producer_code, producer_name, commission_rate, producer_type, state_code, producer_status, created_date FROM public.producer",
+      "TRIM(producer_name) to remove leading/trailing whitespace",
+      "UPPER(TRIM(state_code)) to standardize state codes",
+      "Add ETL metadata column etl_load_date = GETDATE()",
+      "Conditional split applying business rules (commission_rate range, allowed producer_type values, created_date <= current date)",
+      "Union All to combine source error output, invalid rows, and lookup‑no‑match rows into a single error stream",
+      "Fast bulk load into stg.producer with commit size of 10,000 rows"
+    ],
+    "key_dependencies": [
+      "Connection Manager CM_Guidewire_PG_Source (ADO.NET Npgsql provider)",
+      "Connection Manager CM_DW_PG_Target (ADO.NET Npgsql provider)",
+      "Execute SQL Task – Log Package Start (etl.etl_audit_log)",
+      "Execute SQL Task – Log Package End (etl.etl_audit_log update)",
+      "Execute SQL Task – Log Error (etl.etl_error_log)",
+      "Data Flow components: ADO.NET PGSource, Derived Column (twice), Conditional Split, Union All, OLE DB Destination (stg.producer), OLE DB Destination (stg.error_quarantine)",
+      "Target tables: stg.producer, stg.error_quarantine, etl.etl_audit_log, etl.etl_error_log"
+    ],
+    "business_rules": [
+      "commission_rate must be greater than or equal to 0.00 and less than or equal to 100.00",
+      "producer_type must be one of the allowed values: 'AGENCY', 'BROKER', 'AGENT', 'INDIVIDUAL'",
+      "created_date must not be in the future (created_date <= current system date)",
+      "Whitespace is trimmed from producer_name and state_code is normalized to upper case",
+      "Rows failing any rule are routed to the error quarantine table"
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "Extract_Producer.dtsx",
+    "source_type": "ssis",
+    "purpose": "Extracts producer master data from the Guidewire PolicyCenter PostgreSQL source, cleanses and validates the data, and loads the valid rows into the data warehouse staging table while logging audit information and quarantining invalid rows.",
+    "inputs_outputs": {
+      "inputs": [
+        "CM_Guidewire_PG_Source (PostgreSQL source connection)",
+        "public.producer (source table)",
+        "Package variables: RowsRead, RowsInserted, RowsRejected, PackageName, StartTime"
+      ],
+      "outputs": [
+        "CM_DW_PG_Target (PostgreSQL target connection)",
+        "stg.producer (target staging table)",
+        "stg.error_quarantine (error quarantine table)",
+        "etl.etl_audit_log (audit log table)",
+        "etl.etl_error_log (error log table)",
+        "Package variables updated with row counts"
+      ]
+    },
+    "key_logic": [
+      "1. Log package start by inserting a row into etl.etl_audit_log (status = RUNNING).",
+      "2. Execute a Data Flow Task (DFT_Main) that:",
+      "   a. Reads rows from public.producer using a SELECT statement.",
+      "   b. Trims whitespace from producer_name and upper‑cases state_code (Data Cleansing).",
+      "   c. Adds ETL metadata column etl_load_date with GETDATE() (Derived Columns).",
+      "   d. Applies business rule validation via Conditional Split:",
+      "      - commission_rate must be between 0.00 and 100.00",
+      "      - producer_type must be one of ('AGENCY','BROKER','AGENT','INDIVIDUAL')",
+      "      - created_date must be less than or equal to the current date.",
+      "   e. Routes valid rows to the Load producer destination.",
+      "   f. Routes invalid rows, source read errors, and lookup no‑match rows to a Union All component.",
+      "   g. Writes the unified error stream to stg.error_quarantine.",
+      "3. After the Data Flow completes, update etl.etl_audit_log with end_time, status = COMPLETED, and row count metrics (rows_read, rows_inserted, rows_rejected).",
+      "4. On any package error, log details to etl.etl_error_log via an Execute SQL Task."
+    ],
+    "entities": [
+      {
+        "name": "Extract_Producer",
+        "entity_type": "PACKAGE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": null,
+        "description": "SSIS package that orchestrates the producer ETL process."
+      },
+      {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows read from source."
+      },
+      {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows successfully inserted into target."
+      },
+      {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": "int",
+        "line_number": null,
+        "description": "Counter for rows rejected due to validation errors."
+      },
+      {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": "string",
+        "line_number": null,
+        "description": "Name of the package (Extract_Producer)."
+      },
+      {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": "datetime",
+        "line_number": null,
+        "description": "Timestamp when the package started."
+      },
+      {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection to the Guidewire PolicyCenter PostgreSQL replica (read‑only)."
+      },
+      {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "ADO.NET Npgsql connection to the Insurance Data Warehouse PostgreSQL instance."
+      },
+      {
+        "name": "SQL_LogStart",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "Execute SQL Task that inserts a start record into etl.etl_audit_log."
+      },
+      {
+        "name": "SQL_LogEnd",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "Execute SQL Task that updates the audit log with end time and row counts."
+      },
+      {
+        "name": "EH_LogError",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "Execute SQL Task that logs package errors to etl.etl_error_log."
+      },
+      {
+        "name": "DFT_Main",
+        "entity_type": "TASK",
+        "parent_entity": "Extract_Producer",
+        "data_type": null,
+        "line_number": null,
+        "description": "Data Flow Task that performs extraction, cleansing, validation and loading."
+      },
+      {
+        "name": "SRC - producer (PostgreSQL)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Source component executing SELECT against public.producer."
+      },
+      {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column component that trims producer_name and upper‑cases state_code."
+      },
+      {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Derived Column component that adds etl_load_date."
+      },
+      {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Conditional Split component that enforces business rules."
+      },
+      {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "Union All component that merges all error streams."
+      },
+      {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that writes error rows to stg.error_quarantine."
+      },
+      {
+        "name": "DST - Load producer (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "parent_entity": "DFT_Main",
+        "data_type": null,
+        "line_number": null,
+        "description": "OLE DB Destination that loads valid rows into stg.producer."
+      },
+      {
+        "name": "public.producer",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_Guidewire_PG_Source",
+        "data_type": null,
+        "line_number": null,
+        "description": "Source table containing producer master data."
+      },
+      {
+        "name": "producer_id",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "integer",
+        "line_number": null,
+        "description": "Primary key of the producer record."
+      },
+      {
+        "name": "producer_code",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": "Business code identifying the producer."
+      },
+      {
+        "name": "producer_name",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": "Name of the producer."
+      },
+      {
+        "name": "commission_rate",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "numeric",
+        "line_number": null,
+        "description": "Commission rate expressed as a percentage."
+      },
+      {
+        "name": "producer_type",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": "Type of producer (e.g., AGENCY, BROKER, AGENT, INDIVIDUAL)."
+      },
+      {
+        "name": "state_code",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "char(2)",
+        "line_number": null,
+        "description": "Two‑letter US state code."
+      },
+      {
+        "name": "producer_status",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "varchar",
+        "line_number": null,
+        "description": "Current status of the producer."
+      },
+      {
+        "name": "created_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "public.producer",
+        "data_type": "date",
+        "line_number": null,
+        "description": "Date the producer record was created."
+      },
+      {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "parent_entity": "stg.producer",
+        "data_type": "timestamp",
+        "line_number": null,
+        "description": "Timestamp when the row was loaded by the ETL process."
+      },
+      {
+        "name": "stg.producer",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Staging table for validated producer records."
+      },
+      {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Table that stores rows rejected by validation for later review."
+      },
+      {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Audit log tracking package execution details."
+      },
+      {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "parent_entity": "CM_DW_PG_Target",
+        "data_type": null,
+        "line_number": null,
+        "description": "Error log capturing package‑level exceptions."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from producer_name.",
+        "source_entities": [
+          "producer_name"
+        ],
+        "target_entities": [
+          "producer_name"
+        ],
+        "expression": "TRIM(producer_name)",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Convert state_code to upper case after trimming.",
+        "source_entities": [
+          "state_code"
+        ],
+        "target_entities": [
+          "state_code"
+        ],
+        "expression": "UPPER(TRIM(state_code))",
+        "line_number": null,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "source_entities": [],
+        "target_entities": [
+          "etl_load_date"
+        ],
+        "expression": "GETDATE()",
+        "line_number": null,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "FILTER",
+        "description": "Validate commission_rate is between 0.00 and 100.00.",
+        "source_entities": [
+          "commission_rate"
+        ],
+        "target_entities": [
+          "Valid Rows",
+          "Invalid Rows"
+        ],
+        "expression": "commission_rate >= 0.00 AND commission_rate <= 100.00",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "FILTER",
+        "description": "Validate producer_type is one of the allowed values.",
+        "source_entities": [
+          "producer_type"
+        ],
+        "target_entities": [
+          "Valid Rows",
+          "Invalid Rows"
+        ],
+        "expression": "producer_type IN ('AGENCY','BROKER','AGENT','INDIVIDUAL')",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "FILTER",
+        "description": "Validate created_date is not in the future.",
+        "source_entities": [
+          "created_date"
+        ],
+        "target_entities": [
+          "Valid Rows",
+          "Invalid Rows"
+        ],
+        "expression": "created_date <= GETDATE()",
+        "line_number": null,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Map source columns to target staging table columns (1:1 mapping).",
+        "source_entities": [
+          "producer_id",
+          "producer_code",
+          "producer_name",
+          "commission_rate",
+          "producer_type",
+          "state_code",
+          "producer_status",
+          "created_date"
+        ],
+        "target_entities": [
+          "producer_id",
+          "producer_code",
+          "producer_name",
+          "commission_rate",
+          "producer_type",
+          "state_code",
+          "producer_status",
+          "created_date"
+        ],
+        "expression": null,
+        "line_number": null,
+        "confidence": 0.93
+      }
+    ],
+    "business_rules": [
+      "commission_rate must be >= 0.00 and <= 100.00",
+      "producer_type must be one of: AGENCY, BROKER, AGENT, INDIVIDUAL",
+      "created_date must be less than or equal to the current system date"
+    ],
+    "dependencies": [
+      "CM_Guidewire_PG_Source (source PostgreSQL connection)",
+      "CM_DW_PG_Target (target PostgreSQL connection)",
+      "public.producer (source table)",
+      "stg.producer (target staging table)",
+      "stg.error_quarantine (error quarantine table)",
+      "etl.etl_audit_log (audit log table)",
+      "etl.etl_error_log (error log table)"
+    ],
+    "relationships": [
+      {
+        "source": "SQL_LogStart",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Insert start record into audit log."
+      },
+      {
+        "source": "SRC - producer (PostgreSQL)",
+        "target": "public.producer",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": null,
+        "description": "SELECT query reads rows from source table."
+      },
+      {
+        "source": "SRC - producer (PostgreSQL)",
+        "target": "DER - Data Cleansing",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Source output feeds into data cleansing component."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "DER - Derived / Calculated Columns",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Cleansed rows flow to derived column component."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "CSPL - Business Rule Validation",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Rows with added etl_load_date flow to conditional split."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "DST - Load producer (PostgreSQL DW)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Valid rows are written to stg.producer."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Invalid rows are sent to Union All for error handling."
+      },
+      {
+        "source": "SRC - producer (PostgreSQL)",
+        "target": "UN - Union All Error Rows",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Source error output (e.g., read failures) is routed to Union All."
+      },
+      {
+        "source": "UN - Union All Error Rows",
+        "target": "DST - Error Log (stg.error_quarantine)",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Unified error stream is loaded into error quarantine table."
+      },
+      {
+        "source": "SQL_LogEnd",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.98,
+        "evidence_line": null,
+        "description": "Update audit log with end time and row counts."
+      },
+      {
+        "source": "EH_LogError",
+        "target": "etl.etl_error_log",
+        "relationship_type": "WRITES_TO",
+        "confidence": 0.97,
+        "evidence_line": null,
+        "description": "Insert package error details into error log."
+      },
+      {
+        "source": "RowsRead",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "RowsRead variable value is passed to audit log update."
+      },
+      {
+        "source": "RowsInserted",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "RowsInserted variable value is passed to audit log update."
+      },
+      {
+        "source": "RowsRejected",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "MAPS_TO",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "RowsRejected variable value is passed to audit log update."
+      }
+    ],
+    "confidence": 0.78
+  },
+  "reconciliation": {
+    "parser_facts_count": 0,
+    "llm_findings_count": 33,
+    "confirmed_entities": [],
+    "inferred_entities": [
+      "Extract_Producer",
+      "RowsRead",
+      "RowsInserted",
+      "RowsRejected",
+      "PackageName",
+      "StartTime",
+      "CM_Guidewire_PG_Source",
+      "CM_DW_PG_Target",
+      "SQL_LogStart",
+      "SQL_LogEnd",
+      "EH_LogError",
+      "DFT_Main",
+      "SRC - producer (PostgreSQL)",
+      "DER - Data Cleansing",
+      "DER - Derived / Calculated Columns",
+      "CSPL - Business Rule Validation",
+      "Union All component",
+      "stg.producer",
+      "stg.error_quarantine",
+      "etl.etl_audit_log",
+      "etl.etl_error_log",
+      "public.producer"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "Extract_Producer",
+        "target": "RowsRead",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows read from source."
+      },
+      {
+        "source": "Extract_Producer",
+        "target": "RowsInserted",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows successfully loaded."
+      },
+      {
+        "source": "Extract_Producer",
+        "target": "RowsRejected",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows rejected by validation."
+      },
+      {
+        "source": "Extract_Producer",
+        "target": "SQL_LogStart",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package start."
+      },
+      {
+        "source": "Extract_Producer",
+        "target": "SQL_LogEnd",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package end and metrics."
+      },
+      {
+        "source": "Extract_Producer",
+        "target": "EH_LogError",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package errors."
+      },
+      {
+        "source": "DFT_Main",
+        "target": "SRC - producer (PostgreSQL)",
+        "relationship_type": "CONTAINS",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Source component reading from public.producer."
+      },
+      {
+        "source": "SRC - producer (PostgreSQL)",
+        "target": "public.producer",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "SELECT statement against the source table."
+      },
+      {
+        "source": "DER - Data Cleansing",
+        "target": "producer_name / state_code",
+        "relationship_type": "TRANSFORMS",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Trims whitespace and upper‑cases state_code."
+      },
+      {
+        "source": "DER - Derived / Calculated Columns",
+        "target": "etl_load_date",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Adds ETL load timestamp using GETDATE()."
+      },
+      {
+        "source": "CSPL - Business Rule Validation",
+        "target": "business_rules",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Conditional Split enforcing commission_rate, producer_type, created_date rules."
+      },
+      {
+        "source": "DFT_Main",
+        "target": "stg.producer",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Valid rows are written to the staging table."
+      },
+      {
+        "source": "DFT_Main",
+        "target": "stg.error_quarantine",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Invalid and error rows are routed to the quarantine table."
+      },
+      {
+        "source": "SQL_LogStart",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Logs package start with status RUNNING."
+      },
+      {
+        "source": "SQL_LogEnd",
+        "target": "etl.etl_audit_log",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Updates audit log with end time, status COMPLETED and row counts."
+      },
+      {
+        "source": "EH_LogError",
+        "target": "etl.etl_error_log",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Logs package error details."
+      }
+    ],
+    "discrepancies": [
+      "Deterministic parser produced no AST entities (tables, columns, files), while LLM extracted a full set of package, variable, task, and table entities.",
+      "Parser lacked any line number or source code location information; all LLM‑derived entities have null line numbers.",
+      "Parser did not capture the Union All component or the explicit error‑quarantine flow, which were inferred from the narrative."
+    ],
+    "gaps_detected": [
+      "Missing explicit definition of the Union All component and its configuration.",
+      "No schema details (column names, data types) for source table public.producer or target tables stg.producer and stg.error_quarantine.",
+      "Absence of lookup or reference data components that might be used for validation (e.g., state code lookup).",
+      "No line‑level mapping to the .dtsx XML, preventing precise traceability of tasks to source lines.",
+      "Potential external stored procedures or functions referenced in the SQL tasks are not described."
+    ],
+    "overall_confidence": 0.78
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "public.producer",
+        "stg.producer",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log"
+      ],
+      "columns": [
+        "producer_id",
+        "producer_code",
+        "producer_name",
+        "commission_rate",
+        "producer_type",
+        "state_code",
+        "producer_status",
+        "created_date",
+        "etl_load_date"
+      ],
+      "parser_summary": {}
+    },
+    "documented_knowledge": {
+      "purpose": "Extracts, cleanses, validates and loads PRODUCER master data from the Guidewire PolicyCenter PostgreSQL replica into the insurance data warehouse, while logging audit information and quarantining invalid rows.",
+      "narrative": "When the package runs it first logs a start entry in etl.etl_audit_log (status RUNNING). The main Data Flow task reads all columns from public.producer via the CM_Guidewire_PG_Source connection. Each row passes through a Derived Column component that trims whitespace from producer_name and forces state_code to upper case. A second Derived Column adds an ETL metadata column etl_load_date (current timestamp). The rows are then evaluated by a Conditional Split that enforces three business rules: commission_rate between 0 and 100, producer_type limited to AGENCY, BROKER, AGENT or INDIVIDUAL, and created_date not in the future. Valid rows are bulk‑loaded (fast load, 10,000 rows per batch) into the staging table stg.producer on the CM_DW_PG_Target connection. Invalid rows, source read errors, and any lookup‑no‑match rows are merged by a Union All component and written to stg.error_quarantine for later review. After the data flow completes, an Execute SQL task updates the audit log with end_time, status COMPLETED and the row counts (rows_read, rows_inserted, rows_rejected). If any task raises an error, the OnError event handler inserts a record into etl.etl_error_log with details of the failure.",
+      "business_domain": "Policy / Producer Master Data (Guidewire PolicyCenter)",
+      "business_rules": [
+        "commission_rate must be greater than or equal to 0.00 and less than or equal to 100.00",
+        "producer_type must be one of the allowed values: 'AGENCY', 'BROKER', 'AGENT', 'INDIVIDUAL'",
+        "created_date must not be in the future (created_date <= current system date)",
+        "Whitespace is trimmed from producer_name and state_code is normalized to upper case",
+        "Rows failing any rule are routed to the error quarantine table"
+      ],
+      "key_logic": [
+        "1. Log package start by inserting a row into etl.etl_audit_log (status = RUNNING).",
+        "2. Execute a Data Flow Task (DFT_Main) that:",
+        "   a. Reads rows from public.producer using a SELECT statement.",
+        "   b. Trims whitespace from producer_name and upper‑cases state_code (Data Cleansing).",
+        "   c. Adds ETL metadata column etl_load_date with GETDATE() (Derived Columns).",
+        "   d. Applies business rule validation via Conditional Split:",
+        "      - commission_rate must be between 0.00 and 100.00",
+        "      - producer_type must be one of ('AGENCY','BROKER','AGENT','INDIVIDUAL')",
+        "      - created_date must be less than or equal to the current date.",
+        "   e. Routes valid rows to the Load producer destination.",
+        "   f. Routes invalid rows, source read errors, and lookup no‑match rows to a Union All component.",
+        "   g. Writes the unified error stream to stg.error_quarantine.",
+        "3. After the Data Flow completes, update etl.etl_audit_log with end_time, status = COMPLETED, and row count metrics (rows_read, rows_inserted, rows_rejected).",
+        "4. On any package error, log details to etl.etl_error_log via an Execute SQL Task."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "Extract_Producer",
+        "RowsRead",
+        "RowsInserted",
+        "RowsRejected",
+        "PackageName",
+        "StartTime",
+        "CM_Guidewire_PG_Source",
+        "CM_DW_PG_Target",
+        "SQL_LogStart",
+        "SQL_LogEnd",
+        "EH_LogError",
+        "DFT_Main",
+        "SRC - producer (PostgreSQL)",
+        "DER - Data Cleansing",
+        "DER - Derived / Calculated Columns",
+        "CSPL - Business Rule Validation",
+        "Union All component",
+        "stg.producer",
+        "stg.error_quarantine",
+        "etl.etl_audit_log",
+        "etl.etl_error_log",
+        "public.producer"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "CALCULATION",
+          "description": "Trim whitespace from producer_name.",
+          "source_entities": [
+            "producer_name"
+          ],
+          "target_entities": [
+            "producer_name"
+          ],
+          "expression": "TRIM(producer_name)",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "CALCULATION",
+          "description": "Convert state_code to upper case after trimming.",
+          "source_entities": [
+            "state_code"
+          ],
+          "target_entities": [
+            "state_code"
+          ],
+          "expression": "UPPER(TRIM(state_code))",
+          "line_number": null,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "CALCULATION",
+          "description": "Add ETL load timestamp column.",
+          "source_entities": [],
+          "target_entities": [
+            "etl_load_date"
+          ],
+          "expression": "GETDATE()",
+          "line_number": null,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "FILTER",
+          "description": "Validate commission_rate is between 0.00 and 100.00.",
+          "source_entities": [
+            "commission_rate"
+          ],
+          "target_entities": [
+            "Valid Rows",
+            "Invalid Rows"
+          ],
+          "expression": "commission_rate >= 0.00 AND commission_rate <= 100.00",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "FILTER",
+          "description": "Validate producer_type is one of the allowed values.",
+          "source_entities": [
+            "producer_type"
+          ],
+          "target_entities": [
+            "Valid Rows",
+            "Invalid Rows"
+          ],
+          "expression": "producer_type IN ('AGENCY','BROKER','AGENT','INDIVIDUAL')",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "FILTER",
+          "description": "Validate created_date is not in the future.",
+          "source_entities": [
+            "created_date"
+          ],
+          "target_entities": [
+            "Valid Rows",
+            "Invalid Rows"
+          ],
+          "expression": "created_date <= GETDATE()",
+          "line_number": null,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "MAPPING",
+          "description": "Map source columns to target staging table columns (1:1 mapping).",
+          "source_entities": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+          ],
+          "target_entities": [
+            "producer_id",
+            "producer_code",
+            "producer_name",
+            "commission_rate",
+            "producer_type",
+            "state_code",
+            "producer_status",
+            "created_date"
+          ],
+          "expression": null,
+          "line_number": null,
+          "confidence": 0.93
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "Extract_Producer",
+          "target": "RowsRead",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Package variable tracking rows read from source."
+        },
+        {
+          "source": "Extract_Producer",
+          "target": "RowsInserted",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Package variable tracking rows successfully loaded."
+        },
+        {
+          "source": "Extract_Producer",
+          "target": "RowsRejected",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "Package variable tracking rows rejected by validation."
+        },
+        {
+          "source": "Extract_Producer",
+          "target": "SQL_LogStart",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Execute SQL Task that logs package start."
+        },
+        {
+          "source": "Extract_Producer",
+          "target": "SQL_LogEnd",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Execute SQL Task that logs package end and metrics."
+        },
+        {
+          "source": "Extract_Producer",
+          "target": "EH_LogError",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Execute SQL Task that logs package errors."
+        },
+        {
+          "source": "DFT_Main",
+          "target": "SRC - producer (PostgreSQL)",
+          "relationship_type": "CONTAINS",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Source component reading from public.producer."
+        },
+        {
+          "source": "SRC - producer (PostgreSQL)",
+          "target": "public.producer",
+          "relationship_type": "READS_FROM",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "SELECT statement against the source table."
+        },
+        {
+          "source": "DER - Data Cleansing",
+          "target": "producer_name / state_code",
+          "relationship_type": "TRANSFORMS",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Trims whitespace and upper‑cases state_code."
+        },
+        {
+          "source": "DER - Derived / Calculated Columns",
+          "target": "etl_load_date",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Adds ETL load timestamp using GETDATE()."
+        },
+        {
+          "source": "CSPL - Business Rule Validation",
+          "target": "business_rules",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "Conditional Split enforcing commission_rate, producer_type, created_date rules."
+        },
+        {
+          "source": "DFT_Main",
+          "target": "stg.producer",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Valid rows are written to the staging table."
+        },
+        {
+          "source": "DFT_Main",
+          "target": "stg.error_quarantine",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Invalid and error rows are routed to the quarantine table."
+        },
+        {
+          "source": "SQL_LogStart",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Logs package start with status RUNNING."
+        },
+        {
+          "source": "SQL_LogEnd",
+          "target": "etl.etl_audit_log",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "Updates audit log with end time, status COMPLETED and row counts."
+        },
+        {
+          "source": "EH_LogError",
+          "target": "etl.etl_error_log",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Logs package error details."
+        }
+      ],
+      "gaps": [
+        "Missing explicit definition of the Union All component and its configuration.",
+        "No schema details (column names, data types) for source table public.producer or target tables stg.producer and stg.error_quarantine.",
+        "Absence of lookup or reference data components that might be used for validation (e.g., state code lookup).",
+        "No line‑level mapping to the .dtsx XML, preventing precise traceability of tasks to source lines.",
+        "Potential external stored procedures or functions referenced in the SQL tasks are not described."
+      ]
+    },
+    "overall_confidence": 0.78
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:Extract_Producer.dtsx",
+      "label": "Artifact",
+      "properties": {
+        "name": "Extract_Producer.dtsx",
+        "source_type": "ssis",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\ssis\\packages\\Extract_Producer.dtsx",
+        "total_lines": 170
+      }
+    },
+    {
+      "id": "PACKAGE:Extract_Producer",
+      "label": "Package",
+      "properties": {
+        "name": "Extract_Producer",
+        "entity_type": "PACKAGE",
+        "data_type": null,
+        "parent": null,
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRead",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRead",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsInserted",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsInserted",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:RowsRejected",
+      "label": "Variable",
+      "properties": {
+        "name": "RowsRejected",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:PackageName",
+      "label": "Variable",
+      "properties": {
+        "name": "PackageName",
+        "entity_type": "VARIABLE",
+        "data_type": "string",
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "VARIABLE:StartTime",
+      "label": "Variable",
+      "properties": {
+        "name": "StartTime",
+        "entity_type": "VARIABLE",
+        "data_type": "datetime",
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:CM_Guidewire_PG_Source",
+      "label": "Table",
+      "properties": {
+        "name": "CM_Guidewire_PG_Source",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:CM_DW_PG_Target",
+      "label": "Table",
+      "properties": {
+        "name": "CM_DW_PG_Target",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL_LogStart",
+      "label": "Task",
+      "properties": {
+        "name": "SQL_LogStart",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SQL_LogEnd",
+      "label": "Task",
+      "properties": {
+        "name": "SQL_LogEnd",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:EH_LogError",
+      "label": "Task",
+      "properties": {
+        "name": "EH_LogError",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DFT_Main",
+      "label": "Task",
+      "properties": {
+        "name": "DFT_Main",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "Extract_Producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:SRC - producer (PostgreSQL)",
+      "label": "Task",
+      "properties": {
+        "name": "SRC - producer (PostgreSQL)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DER - Data Cleansing",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Data Cleansing",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DER - Derived / Calculated Columns",
+      "label": "Task",
+      "properties": {
+        "name": "DER - Derived / Calculated Columns",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:CSPL - Business Rule Validation",
+      "label": "Task",
+      "properties": {
+        "name": "CSPL - Business Rule Validation",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:UN - Union All Error Rows",
+      "label": "Task",
+      "properties": {
+        "name": "UN - Union All Error Rows",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Error Log (stg.error_quarantine)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TASK:DST - Load producer (PostgreSQL DW)",
+      "label": "Task",
+      "properties": {
+        "name": "DST - Load producer (PostgreSQL DW)",
+        "entity_type": "TASK",
+        "data_type": null,
+        "parent": "DFT_Main",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:public.producer",
+      "label": "Table",
+      "properties": {
+        "name": "public.producer",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_Guidewire_PG_Source",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_id",
+      "label": "Column",
+      "properties": {
+        "name": "producer_id",
+        "entity_type": "COLUMN",
+        "data_type": "integer",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_code",
+      "label": "Column",
+      "properties": {
+        "name": "producer_code",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_name",
+      "label": "Column",
+      "properties": {
+        "name": "producer_name",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:commission_rate",
+      "label": "Column",
+      "properties": {
+        "name": "commission_rate",
+        "entity_type": "COLUMN",
+        "data_type": "numeric",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_type",
+      "label": "Column",
+      "properties": {
+        "name": "producer_type",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:state_code",
+      "label": "Column",
+      "properties": {
+        "name": "state_code",
+        "entity_type": "COLUMN",
+        "data_type": "char(2)",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:producer_status",
+      "label": "Column",
+      "properties": {
+        "name": "producer_status",
+        "entity_type": "COLUMN",
+        "data_type": "varchar",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:created_date",
+      "label": "Column",
+      "properties": {
+        "name": "created_date",
+        "entity_type": "COLUMN",
+        "data_type": "date",
+        "parent": "public.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "COLUMN:etl_load_date",
+      "label": "Column",
+      "properties": {
+        "name": "etl_load_date",
+        "entity_type": "COLUMN",
+        "data_type": "timestamp",
+        "parent": "stg.producer",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.producer",
+      "label": "Table",
+      "properties": {
+        "name": "stg.producer",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:stg.error_quarantine",
+      "label": "Table",
+      "properties": {
+        "name": "stg.error_quarantine",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_audit_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_audit_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TABLE:etl.etl_error_log",
+      "label": "Table",
+      "properties": {
+        "name": "etl.etl_error_log",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "CM_DW_PG_Target",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "CALCULATION",
+        "description": "Trim whitespace from producer_name.",
+        "expression": "TRIM(producer_name)",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "CALCULATION",
+        "description": "Convert state_code to upper case after trimming.",
+        "expression": "UPPER(TRIM(state_code))",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Add ETL load timestamp column.",
+        "expression": "GETDATE()",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "FILTER",
+        "description": "Validate commission_rate is between 0.00 and 100.00.",
+        "expression": "commission_rate >= 0.00 AND commission_rate <= 100.00",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "FILTER",
+        "description": "Validate producer_type is one of the allowed values.",
+        "expression": "producer_type IN ('AGENCY','BROKER','AGENT','INDIVIDUAL')",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "FILTER",
+        "description": "Validate created_date is not in the future.",
+        "expression": "created_date <= GETDATE()",
+        "line_number": null
+      }
+    },
+    {
+      "id": "TRANSFORMATION:Extract_Producer.dtsx:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "MAPPING",
+        "description": "Map source columns to target staging table columns (1:1 mapping).",
+        "expression": null,
+        "line_number": null
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "PACKAGE:Extract_Producer",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "VARIABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "VARIABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "VARIABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "VARIABLE:PackageName",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "VARIABLE:StartTime",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:CM_Guidewire_PG_Source",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:CM_DW_PG_Target",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:SQL_LogStart",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:SQL_LogEnd",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:EH_LogError",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:DFT_Main",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:SRC - producer (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:DER - Data Cleansing",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:DER - Derived / Calculated Columns",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:CSPL - Business Rule Validation",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:UN - Union All Error Rows",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:DST - Error Log (stg.error_quarantine)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TASK:DST - Load producer (PostgreSQL DW)",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:public.producer",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:producer_id",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:producer_code",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:producer_name",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:commission_rate",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:producer_type",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:state_code",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:producer_status",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:created_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "COLUMN:etl_load_date",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:stg.producer",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:Extract_Producer.dtsx",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "ssis"
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:RowsRead",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows read from source."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:RowsInserted",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows successfully loaded."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:RowsRejected",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "Package variable tracking rows rejected by validation."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:SQL_LogStart",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package start."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:SQL_LogEnd",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package end and metrics."
+      }
+    },
+    {
+      "source_id": "TABLE:Extract_Producer",
+      "target_id": "TABLE:EH_LogError",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Execute SQL Task that logs package errors."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT_Main",
+      "target_id": "TABLE:SRC - producer (PostgreSQL)",
+      "type": "CONTAINS",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Source component reading from public.producer."
+      }
+    },
+    {
+      "source_id": "TABLE:SRC - producer (PostgreSQL)",
+      "target_id": "TABLE:public.producer",
+      "type": "READS_FROM",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "SELECT statement against the source table."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Data Cleansing",
+      "target_id": "TABLE:producer_name / state_code",
+      "type": "TRANSFORMS",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Trims whitespace and upper‑cases state_code."
+      }
+    },
+    {
+      "source_id": "TABLE:DER - Derived / Calculated Columns",
+      "target_id": "TABLE:etl_load_date",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Adds ETL load timestamp using GETDATE()."
+      }
+    },
+    {
+      "source_id": "TABLE:CSPL - Business Rule Validation",
+      "target_id": "TABLE:business_rules",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Conditional Split enforcing commission_rate, producer_type, created_date rules."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT_Main",
+      "target_id": "TABLE:stg.producer",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Valid rows are written to the staging table."
+      }
+    },
+    {
+      "source_id": "TABLE:DFT_Main",
+      "target_id": "TABLE:stg.error_quarantine",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Invalid and error rows are routed to the quarantine table."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL_LogStart",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Logs package start with status RUNNING."
+      }
+    },
+    {
+      "source_id": "TABLE:SQL_LogEnd",
+      "target_id": "TABLE:etl.etl_audit_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "Updates audit log with end time, status COMPLETED and row counts."
+      }
+    },
+    {
+      "source_id": "TABLE:EH_LogError",
+      "target_id": "TABLE:etl.etl_error_log",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Logs package error details."
+      }
+    }
+  ]
+}

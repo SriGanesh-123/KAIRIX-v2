@@ -1,0 +1,2450 @@
+{
+  "package_id": "PKG-SQL-PolicyCenter_Monoline.sql-7e586b15",
+  "source": {
+    "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\sql\\PolicyCenter_Monoline.sql",
+    "file_name": "PolicyCenter_Monoline.sql",
+    "source_type": "sql",
+    "file_extension": ".sql",
+    "total_lines": 267,
+    "size_bytes": 10106
+  },
+  "summary": {
+    "purpose": "Extract a detailed list of policies for the Agribusiness profit center within a specified policy period, exposing transaction types (renewal, submission, cancellation, reinstatement, change) and associated premium amounts for downstream reporting or analysis.",
+    "high_level_narrative": "The script declares four date variables and sets a policy start, end, and change start date. It then runs a UNION ALL of two SELECT statements that pull policy‑period rows from the PolicyCenter database. The first SELECT calculates Written_Premium by summing amounts from line‑specific transaction tables when the product is a CommercialPackage; otherwise it uses the pre‑calculated TransactionCostRPT field. The second SELECT handles cases where the line‑of‑business is not derived from the pattern code (labelled 'C.P.P.') and simply returns TransactionCostRPT as Written_Premium. Both SELECTs join a wide set of reference tables (policy, term, job, account, producer, organization, profit‑center, UW company, bind option, job description, etc.) to enrich the rows with profit center, company code, agent information, territory, and status. After the UNION, an outer SELECT applies a series of CASE expressions to surface the most recent transaction type, premium, and dates for each transaction category (submission, cancellation, reinstatement, policy change). The final result set is filtered to rows where the policy period or job close date falls between the supplied start and end dates, where the product code is not a CommercialPackage unless the line of business is 'C.P.P.', and where the profit center equals 'Agribusiness'. The output is ordered by PolicyNumber.",
+    "business_domain": "PolicyCenter (Policy Management / Underwriting)",
+    "inputs": [
+      "pc_policyperiod (alias pp)",
+      "pc_policy (alias pol)",
+      "pc_policyTerm (alias polt)",
+      "pc_policyline (alias polline)",
+      "pc_job (alias j)",
+      "pc_account (alias act)",
+      "pc_producercode (alias prod)",
+      "pc_organization (alias org)",
+      "pctl_job (alias jt)",
+      "pctl_policyperiodstatus (alias ppst)",
+      "pctl_bindoption (alias bopt)",
+      "pctl_uwcompanycode (alias uwc)",
+      "pctl_jobdescription_ext (alias jdt)",
+      "pctl_policyperiodsourcetype (alias ppstype)",
+      "pctl_profitcentertype (alias profit)",
+      "pctl_orgfarmuwterritory (alias farmterr)",
+      "pcx_cp7transaction",
+      "pcx_gl7transaction_gle",
+      "pcx_ca7transaction",
+      "pcx_cr7transaction",
+      "pc_imtransaction",
+      "pcx_wc7transaction"
+    ],
+    "outputs": [
+      "Result set with columns: ProfitCenter, ProductCode, LineOfBusiness, PolicyNumber, OriginalEffectiveDate, PeriodStart, PeriodEnd, AccountNumber, Company, PrimaryInsuredName, AgentCode, AgentName, FarmUWTerritory, MostRecentTran, SubWritten_Premium, SubWritten_Date, CancelledDate, CancelledEffDate, CancelledPremium, ReinstatedPremium, ReinstatedDate, ReinstatedEffDate, ChangePremium, ChangeDate"
+    ],
+    "key_transformations": [
+      "Union of two SELECT statements to combine detailed transaction‑cost calculations with fallback rows for non‑pattern‑derived lines of business.",
+      "Conditional aggregation: SUM(amount) from line‑specific transaction tables (cp7, gl7, ca7, cr7, im, wc7) when ProductCode = 'CommercialPackage' and PatternCode matches a line.",
+      "CASE expressions to map PatternCode values to human‑readable LineOfBusiness strings.",
+      "CASE expressions to translate UWCompany names to short codes (LRM, WRM, SON).",
+      "CASE logic to expose transaction‑type specific premium and date fields (e.g., Written_Premium for Renewal/Submission, CancellationDate for Cancellation, etc.).",
+      "Filtering on policy period dates, job close dates, profit center = 'Agribusiness', and status codes ('Bound','AuditComplete').",
+      "Ordering final result by PolicyNumber."
+    ],
+    "key_dependencies": [
+      "SQL Server database PolicyCenter (dbo schema).",
+      "Reference tables/views: pc_policyperiod, pc_policy, pc_policyTerm, pc_policyline, pc_job, pc_account, pc_producercode, pc_organization, pctl_job, pctl_policyperiodstatus, pctl_bindoption, pctl_uwcompanycode, pctl_jobdescription_ext, pctl_policyperiodsourcetype, pctl_profitcentertype, pctl_orgfarmuwterritory.",
+      "Transaction tables for each line of business: pcx_cp7transaction, pcx_gl7transaction_gle, pcx_ca7transaction, pcx_cr7transaction, pc_imtransaction, pcx_wc7transaction."
+    ],
+    "business_rules": [
+      "Only include policies where the policy period status is 'Bound' or 'AuditComplete'.",
+      "Exclude rows where the job close date is after the @POLENDDATE parameter.",
+      "Map UWCompany names to standardized three‑letter codes (LRM, WRM, SON) and default to 'UNK' if not matched.",
+      "Derive LineOfBusiness from PatternCode with specific mappings; otherwise retain original PatternCode value.",
+      "For CommercialPackage products, calculate Written_Premium by summing transaction amounts from the appropriate line‑specific transaction table; otherwise use the pre‑calculated TransactionCostRPT field.",
+      "When ProductCode = 'CommercialPackage' and LineOfBusiness = 'C.P.P.', treat the row as a CommercialPackage line of business.",
+      "Show only rows where the profit center equals 'Agribusiness'.",
+      "Expose most recent transaction information only when MostRecentModel = 1.",
+      "Populate premium and date columns only for the relevant transaction types (Renewal/Submission, Cancellation, Reinstatement, PolicyChange).",
+      "Filter rows to those whose PeriodStart or JobCloseDate fall within the @POLSTARTDATE‑@POLENDDATE window."
+    ]
+  },
+  "knowledge_profile": {
+    "file_name": "PolicyCenter_Monoline.sql",
+    "source_type": "sql",
+    "purpose": "Generate a consolidated view of policy periods for the Agribusiness profit center, limited to a specific policy date window, and derive transaction‑type specific premium and date fields for reporting and analysis.",
+    "inputs_outputs": {
+      "inputs": [
+        "@POLSTARTDATE",
+        "@POLENDDATE",
+        "@CHANGESTARTDATE",
+        "@curmthyr",
+        "PolicyCenter.dbo.pc_policyperiod (pp)",
+        "PolicyCenter.dbo.pc_policy (pol)",
+        "PolicyCenter.dbo.pc_policyTerm (polt)",
+        "PolicyCenter.dbo.pc_policyline (polline)",
+        "PolicyCenter.dbo.pc_job (j)",
+        "PolicyCenter.dbo.pc_account (act)",
+        "pc_producercode (prod)",
+        "pc_organization (org)",
+        "PolicyCenter.dbo.pctl_job (jt)",
+        "PolicyCenter.dbo.pctl_policyperiodstatus (ppst)",
+        "PolicyCenter.dbo.pctl_bindoption (bopt)",
+        "PolicyCenter.dbo.pctl_uwcompanycode (uwc)",
+        "PolicyCenter.dbo.pctl_jobdescription_ext (jdt)",
+        "pctl_policyperiodsourcetype (ppstype)",
+        "pctl_profitcentertype (profit)",
+        "pctl_orgfarmuwterritory (farmterr)",
+        "pcx_cp7transaction",
+        "pcx_gl7transaction_gle",
+        "pcx_ca7transaction",
+        "pcx_cr7transaction",
+        "pc_imtransaction",
+        "pcx_wc7transaction"
+      ],
+      "outputs": [
+        "ProfitCenter",
+        "ProductCode",
+        "LineOfBusiness",
+        "PolicyNumber",
+        "OriginalEffectiveDate",
+        "PeriodStart",
+        "PeriodEnd",
+        "AccountNumber",
+        "Company",
+        "PrimaryInsuredName",
+        "AgentCode",
+        "AgentName",
+        "FarmUWTerritory",
+        "MostRecentTran",
+        "SubWritten_Premium",
+        "SubWritten_Date",
+        "CancelledDate",
+        "CancelledEffDate",
+        "CancelledPremium",
+        "ReinstatedPremium",
+        "ReinstatedDate",
+        "ReinstatedEffDate",
+        "ChangePremium",
+        "ChangeDate"
+      ]
+    },
+    "key_logic": [
+      "1. Declare and assign four date/int variables that define the reporting window.",
+      "2. Pull policy period rows from pc_policyperiod (alias pp) together with related master tables via LEFT JOINs.",
+      "3. For each row, map raw codes to readable values (e.g., PatternCode → LineOfBusiness, UWCompany name → Company).",
+      "4. Derive transaction‑type specific columns using CASE expressions (MostRecentTran, SubWritten_Premium, CancelledDate, etc.).",
+      "5. When ProductCode = 'CommercialPackage', compute Written_Premium by summing the appropriate transaction table based on PatternCode; otherwise use TransactionCostRPT.",
+      "6. UNION ALL a second SELECT that forces LineOfBusiness = 'C.P.P.' for CommercialPackage rows lacking a matching PatternCode.",
+      "7. Apply outer‑query filters: date range on PeriodStart or JobCloseDate, product‑code logic, and ProfitCenter = 'Agribusiness'.",
+      "8. Order the final result set by PolicyNumber."
+    ],
+    "entities": [
+      {
+        "name": "@POLSTARTDATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Date",
+        "line_number": 1,
+        "description": "Start of the policy period window."
+      },
+      {
+        "name": "@POLENDDATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Date",
+        "line_number": 2,
+        "description": "End of the policy period window."
+      },
+      {
+        "name": "@CHANGESTARTDATE",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "Date",
+        "line_number": 3,
+        "description": "Start date for policy change transactions."
+      },
+      {
+        "name": "@curmthyr",
+        "entity_type": "VARIABLE",
+        "parent_entity": null,
+        "data_type": "int",
+        "line_number": 4,
+        "description": "Current month‑year concatenated integer (used elsewhere)."
+      },
+      {
+        "name": "pc_policyperiod",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 30,
+        "description": "Core policy period fact table."
+      },
+      {
+        "name": "pc_policy",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 31,
+        "description": "Policy master table."
+      },
+      {
+        "name": "pc_policyTerm",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 32,
+        "description": "Policy term master."
+      },
+      {
+        "name": "pc_policyline",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 33,
+        "description": "Policy line details."
+      },
+      {
+        "name": "pc_job",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 34,
+        "description": "Job (transaction) information."
+      },
+      {
+        "name": "pc_account",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 35,
+        "description": "Account master."
+      },
+      {
+        "name": "pc_producercode",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 36,
+        "description": "Producer code reference."
+      },
+      {
+        "name": "pc_organization",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 37,
+        "description": "Organization (agency) reference."
+      },
+      {
+        "name": "pctl_job",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 38,
+        "description": "Job type lookup."
+      },
+      {
+        "name": "pctl_policyperiodstatus",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 39,
+        "description": "Policy period status lookup."
+      },
+      {
+        "name": "pctl_bindoption",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 40,
+        "description": "Bind option lookup."
+      },
+      {
+        "name": "pctl_uwcompanycode",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 41,
+        "description": "Underwriting company code lookup."
+      },
+      {
+        "name": "pctl_jobdescription_ext",
+        "entity_type": "TABLE",
+        "parent_entity": "PolicyCenter.dbo",
+        "data_type": null,
+        "line_number": 42,
+        "description": "Extended job description lookup."
+      },
+      {
+        "name": "pctl_policyperiodsourcetype",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 43,
+        "description": "Source type for policy periods."
+      },
+      {
+        "name": "pctl_profitcentertype",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 44,
+        "description": "Profit center reference."
+      },
+      {
+        "name": "pctl_orgfarmuwterritory",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 45,
+        "description": "Farm underwriting territory reference."
+      },
+      {
+        "name": "pcx_cp7transaction",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 70,
+        "description": "Commercial Property transaction details."
+      },
+      {
+        "name": "pcx_gl7transaction_gle",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 73,
+        "description": "General Liability transaction details."
+      },
+      {
+        "name": "pcx_ca7transaction",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 76,
+        "description": "Commercial Auto transaction details."
+      },
+      {
+        "name": "pcx_cr7transaction",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 79,
+        "description": "Crime transaction details."
+      },
+      {
+        "name": "pc_imtransaction",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 82,
+        "description": "Inland Marine transaction details."
+      },
+      {
+        "name": "pcx_wc7transaction",
+        "entity_type": "TABLE",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 85,
+        "description": "Workers Compensation transaction details."
+      },
+      {
+        "name": "ProfitCenter",
+        "entity_type": "COLUMN",
+        "parent_entity": "profit",
+        "data_type": null,
+        "line_number": 12,
+        "description": "Derived profit center name."
+      },
+      {
+        "name": "LineOfBusiness",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 15,
+        "description": "Human‑readable line of business derived from PatternCode."
+      },
+      {
+        "name": "Company",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 38,
+        "description": "Mapped underwriting company abbreviation."
+      },
+      {
+        "name": "AgentCode",
+        "entity_type": "COLUMN",
+        "parent_entity": "org",
+        "data_type": "char(6)",
+        "line_number": 44,
+        "description": "Agency code trimmed to 6 characters."
+      },
+      {
+        "name": "Written_Premium",
+        "entity_type": "COLUMN",
+        "parent_entity": null,
+        "data_type": null,
+        "line_number": 100,
+        "description": "Premium amount, either summed from transaction tables or taken from TransactionCostRPT."
+      }
+    ],
+    "transformations": [
+      {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map PatternCode values to human‑readable LineOfBusiness strings.",
+        "source_entities": [
+          "PatternCode"
+        ],
+        "target_entities": [
+          "LineOfBusiness"
+        ],
+        "expression": "CASE WHEN PatternCode='cp7line' THEN 'Commercial Property Line' WHEN PatternCode='GeneralLiabilityLine_GLE' THEN 'General Liability Line' WHEN PatternCode='ca7line' THEN 'Commercial Auto Line' WHEN PatternCode='cr7line' THEN 'Crime Line' WHEN PatternCode='imline' THEN 'Inland Marine Line' WHEN PatternCode='WC7Line' THEN 'Workers Comp Line' ELSE PatternCode END",
+        "line_number": 15,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T2",
+        "rule_type": "MAPPING",
+        "description": "Map UWCompany name to short company code.",
+        "source_entities": [
+          "uwc.name"
+        ],
+        "target_entities": [
+          "Company"
+        ],
+        "expression": "CASE WHEN uwc.name='Lightning Rod Mutual' THEN 'LRM' WHEN uwc.name='Western Reserve Mutual' THEN 'WRM' WHEN uwc.name='Sonnenberg Mutual' THEN 'SON' ELSE 'UNK' END",
+        "line_number": 38,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Derive MostRecentTran only for the most recent model row.",
+        "source_entities": [
+          "MostRecentModel",
+          "TranType"
+        ],
+        "target_entities": [
+          "MostRecentTran"
+        ],
+        "expression": "CASE WHEN MostRecentModel = 1 THEN TranType ELSE NULL END",
+        "line_number": 9,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Derive SubWritten_Premium for Renewal or Submission transactions.",
+        "source_entities": [
+          "TranType",
+          "Written_Premium"
+        ],
+        "target_entities": [
+          "SubWritten_Premium"
+        ],
+        "expression": "CASE WHEN TranType IN ('Renewal','Submission') THEN Written_Premium ELSE NULL END",
+        "line_number": 11,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Derive CancelledDate for Cancellation transactions.",
+        "source_entities": [
+          "TranType",
+          "CancellationDate"
+        ],
+        "target_entities": [
+          "CancelledDate"
+        ],
+        "expression": "CASE WHEN TranType='Cancellation' THEN CancellationDate ELSE NULL END",
+        "line_number": 13,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T6",
+        "rule_type": "CALCULATION",
+        "description": "Derive CancelledPremium for Cancellation transactions.",
+        "source_entities": [
+          "TranType",
+          "Written_Premium"
+        ],
+        "target_entities": [
+          "CancelledPremium"
+        ],
+        "expression": "CASE WHEN TranType='Cancellation' THEN Written_Premium ELSE NULL END",
+        "line_number": 17,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Derive ReinstatedPremium, ReinstatedDate, ReinstatedEffDate for Reinstatement transactions.",
+        "source_entities": [
+          "TranType",
+          "Written_Premium",
+          "WrittenDate",
+          "JobCloseDate"
+        ],
+        "target_entities": [
+          "ReinstatedPremium",
+          "ReinstatedDate",
+          "ReinstatedEffDate"
+        ],
+        "expression": "CASE WHEN TranType='Reinstatement' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN WrittenDate ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN JobCloseDate ELSE NULL END",
+        "line_number": 19,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Derive ChangePremium and ChangeDate for PolicyChange transactions.",
+        "source_entities": [
+          "TranType",
+          "Written_Premium",
+          "EditEffectiveDate"
+        ],
+        "target_entities": [
+          "ChangePremium",
+          "ChangeDate"
+        ],
+        "expression": "CASE WHEN TranType='PolicyChange' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='PolicyChange' THEN EditEffectiveDate ELSE NULL END",
+        "line_number": 23,
+        "confidence": 0.95
+      },
+      {
+        "rule_id": "T9",
+        "rule_type": "AGGREGATION",
+        "description": "Calculate Written_Premium for CommercialPackage policies by summing the amount column from the appropriate transaction table based on PatternCode.",
+        "source_entities": [
+          "ProductCode",
+          "PatternCode",
+          "pcx_*transaction.amount"
+        ],
+        "target_entities": [
+          "Written_Premium"
+        ],
+        "expression": "CASE WHEN ProductCode='CommercialPackage' THEN (SELECT ISNULL(SUM(amount),0.00) FROM <transaction_table> WHERE BranchID=pp.id) ELSE TransactionCostRPT END",
+        "line_number": 100,
+        "confidence": 0.94
+      },
+      {
+        "rule_id": "T10",
+        "rule_type": "FILTER",
+        "description": "Restrict rows to those where IssueDate and PolicyNumber are present, status is Bound or AuditComplete, and job close date is before @POLENDDATE.",
+        "source_entities": [
+          "pol.IssueDate",
+          "pp.Policynumber",
+          "ppst.TYPECODE",
+          "j.CloseDate",
+          "@POLENDDATE"
+        ],
+        "target_entities": [],
+        "expression": "pol.IssueDate IS NOT NULL AND pp.Policynumber IS NOT NULL AND ppst.TYPECODE IN ('Bound','AuditComplete') AND j.CloseDate < @POLENDDATE",
+        "line_number": 115,
+        "confidence": 0.96
+      },
+      {
+        "rule_id": "T11",
+        "rule_type": "FILTER",
+        "description": "Outer query date window filter on PeriodStart or JobCloseDate and profit center restriction to 'Agribusiness'.",
+        "source_entities": [
+          "PeriodStart",
+          "JobCloseDate",
+          "@POLSTARTDATE",
+          "@POLENDDATE",
+          "ProfitCenter"
+        ],
+        "target_entities": [],
+        "expression": "((PeriodStart BETWEEN @POLSTARTDATE AND @POLENDDATE) OR (JobCloseDate BETWEEN @POLSTARTDATE AND @POLENDDATE)) AND ProfitCenter='Agribusiness'",
+        "line_number": 150,
+        "confidence": 0.97
+      },
+      {
+        "rule_id": "T12",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pc_policy (pol) to pc_policyperiod (pp) on policy ID.",
+        "source_entities": [
+          "pc_policyperiod (pp)",
+          "pc_policy (pol)"
+        ],
+        "target_entities": [],
+        "expression": "pp.policyid = pol.id",
+        "line_number": 31,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T13",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pc_job (j) to pc_policyperiod (pp) on job ID.",
+        "source_entities": [
+          "pc_policyperiod (pp)",
+          "pc_job (j)"
+        ],
+        "target_entities": [],
+        "expression": "pp.jobid = j.id",
+        "line_number": 34,
+        "confidence": 0.98
+      },
+      {
+        "rule_id": "T14",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pctl_job (jt) to pc_job (j) to obtain transaction type code.",
+        "source_entities": [
+          "pc_job (j)",
+          "pctl_job (jt)"
+        ],
+        "target_entities": [],
+        "expression": "j.SubType = jt.id",
+        "line_number": 38,
+        "confidence": 0.98
+      }
+    ],
+    "business_rules": [
+      "Only include policies where IssueDate is not null.",
+      "Only include rows with a non‑null PolicyNumber.",
+      "Consider only policy periods with status 'Bound' or 'AuditComplete'.",
+      "JobCloseDate must be earlier than the end of the reporting window (@POLENDDATE).",
+      "Outer filter: PeriodStart or JobCloseDate must fall within @POLSTARTDATE‑@POLENDDATE.",
+      "ProfitCenter must equal 'Agribusiness'.",
+      "For CommercialPackage policies, LineOfBusiness must be 'C.P.P.' in the second UNION branch.",
+      "Written_Premium for CommercialPackage is derived from the sum of amounts in the transaction table that matches the PatternCode.",
+      "All other product codes use TransactionCostRPT as Written_Premium.",
+      "Transaction‑type specific premium and date columns are populated only for the matching TranType values."
+    ],
+    "dependencies": [
+      "GETUTCDATE() function",
+      "CONCAT, MONTH, YEAR functions for @curmthyr",
+      "ISNULL, COALESCE, CAST, RTRIM, RIGHT functions",
+      "SQL Server database PolicyCenter"
+    ],
+    "relationships": [
+      {
+        "source": "Outer SELECT",
+        "target": "Subquery jj",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.99,
+        "evidence_line": 150,
+        "description": "The outer SELECT pulls columns from the derived table alias jj."
+      },
+      {
+        "source": "Subquery jj",
+        "target": "pc_policyperiod (pp)",
+        "relationship_type": "READS_FROM",
+        "confidence": 0.98,
+        "evidence_line": 30,
+        "description": "Base table for both UNION branches."
+      },
+      {
+        "source": "pc_policyperiod (pp)",
+        "target": "pc_policy (pol)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 31,
+        "description": "LEFT JOIN on pp.policyid = pol.id."
+      },
+      {
+        "source": "pc_policyperiod (pp)",
+        "target": "pc_policyTerm (polt)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.97,
+        "evidence_line": 32,
+        "description": "LEFT JOIN on pp.policytermid = polt.id."
+      },
+      {
+        "source": "pc_policyperiod (pp)",
+        "target": "pc_job (j)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 34,
+        "description": "LEFT JOIN on pp.jobid = j.id."
+      },
+      {
+        "source": "pc_job (j)",
+        "target": "pctl_job (jt)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.98,
+        "evidence_line": 38,
+        "description": "LEFT JOIN on j.SubType = jt.id to obtain TranType."
+      },
+      {
+        "source": "pc_policyperiod (pp)",
+        "target": "pc_organization (org)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 37,
+        "description": "Through pc_producercode (prod) to org for AgentCode/AgentName."
+      },
+      {
+        "source": "pc_policyperiod (pp)",
+        "target": "pctl_uwcompanycode (uwc)",
+        "relationship_type": "JOINS_WITH",
+        "confidence": 0.96,
+        "evidence_line": 41,
+        "description": "LEFT JOIN on pp.UWCompany = uwc.TYPECODE for Company mapping."
+      },
+      {
+        "source": "PatternCode",
+        "target": "LineOfBusiness",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.96,
+        "evidence_line": 15,
+        "description": "CASE mapping of PatternCode values to readable line of business."
+      },
+      {
+        "source": "TranType",
+        "target": "MostRecentTran",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.97,
+        "evidence_line": 9,
+        "description": "MostRecentTran populated only when MostRecentModel = 1."
+      },
+      {
+        "source": "TranType",
+        "target": "SubWritten_Premium",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.96,
+        "evidence_line": 11,
+        "description": "SubWritten_Premium populated for Renewal or Submission."
+      },
+      {
+        "source": "TranType",
+        "target": "CancelledDate",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.96,
+        "evidence_line": 13,
+        "description": "CancelledDate populated for Cancellation."
+      },
+      {
+        "source": "ProductCode",
+        "target": "Written_Premium",
+        "relationship_type": "CALCULATES",
+        "confidence": 0.94,
+        "evidence_line": 100,
+        "description": "When ProductCode='CommercialPackage', Written_Premium is summed from the appropriate transaction table; otherwise uses TransactionCostRPT."
+      },
+      {
+        "source": "pcx_cp7transaction",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 70,
+        "description": "SUM(amount) where BranchID = pp.id for Commercial Property."
+      },
+      {
+        "source": "pcx_gl7transaction_gle",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 73,
+        "description": "SUM(amount) where BranchID = pp.id for General Liability."
+      },
+      {
+        "source": "pcx_ca7transaction",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 76,
+        "description": "SUM(amount) where BranchID = pp.id for Commercial Auto."
+      },
+      {
+        "source": "pcx_cr7transaction",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 79,
+        "description": "SUM(amount) where BranchID = pp.id for Crime."
+      },
+      {
+        "source": "pc_imtransaction",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 82,
+        "description": "SUM(amount) where BranchID = pp.id for Inland Marine."
+      },
+      {
+        "source": "pcx_wc7transaction",
+        "target": "Written_Premium",
+        "relationship_type": "AGGREGATES",
+        "confidence": 0.93,
+        "evidence_line": 85,
+        "description": "SUM(amount) where BranchID = pp.id for Workers Comp."
+      },
+      {
+        "source": "org.Code_Ext",
+        "target": "AgentCode",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.95,
+        "evidence_line": 44,
+        "description": "AgentCode = CAST(RTRIM(org.Code_Ext) AS char(6))."
+      },
+      {
+        "source": "prod.code",
+        "target": "ProducerCode",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.94,
+        "evidence_line": 46,
+        "description": "ProducerCode = CASE WHEN prod.code IS NULL THEN '999' ELSE RIGHT(RTRIM(prod.code),3) END."
+      },
+      {
+        "source": "profit.NAME",
+        "target": "ProfitCenter",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.96,
+        "evidence_line": 12,
+        "description": "ProfitCenter derived from profit.NAME."
+      },
+      {
+        "source": "farmterr.NAME",
+        "target": "FarmUWTerritory",
+        "relationship_type": "DERIVES_FROM",
+        "confidence": 0.95,
+        "evidence_line": 45,
+        "description": "FarmUWTerritory derived from farmterr.NAME."
+      },
+      {
+        "source": "Outer WHERE clause",
+        "target": "Result set",
+        "relationship_type": "FILTERS",
+        "confidence": 0.97,
+        "evidence_line": 150,
+        "description": "Applies date window, product code logic, and profit center filter."
+      }
+    ],
+    "confidence": 0.78
+  },
+  "reconciliation": {
+    "parser_facts_count": 92,
+    "llm_findings_count": 31,
+    "confirmed_entities": [
+      "pc_policyperiod",
+      "pc_policy",
+      "pc_policyTerm",
+      "pc_policyline",
+      "pc_job",
+      "pc_account",
+      "pc_producercode",
+      "pc_organization",
+      "pctl_job",
+      "pctl_policyperiodstatus",
+      "pctl_bindoption",
+      "pctl_uwcompanycode",
+      "pctl_jobdescription_ext",
+      "pctl_policyperiodsourcetype",
+      "pctl_profitcentertype",
+      "pctl_orgfarmuwterritory"
+    ],
+    "inferred_entities": [
+      "@POLSTARTDATE",
+      "@POLENDDATE",
+      "@CHANGESTARTDATE",
+      "@curmthyr",
+      "ProfitCenter",
+      "ProductCode",
+      "LineOfBusiness",
+      "PolicyNumber",
+      "OriginalEffectiveDate",
+      "PeriodStart",
+      "PeriodEnd",
+      "AccountNumber",
+      "Company",
+      "PrimaryInsuredName",
+      "AgentCode",
+      "AgentName",
+      "FarmUWTerritory",
+      "MostRecentTran",
+      "SubWritten_Premium",
+      "SubWritten_Date",
+      "CancelledDate",
+      "CancelledEffDate",
+      "CancelledPremium",
+      "ReinstatedPremium",
+      "ReinstatedDate",
+      "ReinstatedEffDate",
+      "ChangePremium",
+      "ChangeDate",
+      "pcx_cp7transaction",
+      "pcx_gl7transaction_gle",
+      "pcx_ca7transaction",
+      "pcx_cr7transaction",
+      "pc_imtransaction",
+      "pcx_wc7transaction"
+    ],
+    "reconciled_relationships": [
+      {
+        "source": "pc_policyperiod",
+        "target": "pc_policy",
+        "relationship_type": "USES",
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "pc_policyperiod (alias pp) joins to pc_policy (alias pol) on pp.PolicyID = pol.ID"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pc_policyTerm",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "pp joins to pc_policyTerm (polt) on pp.PolicyTermID = polt.ID"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pc_policyline",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "pp joins to pc_policyline (polline) on pp.PolicyLineID = polline.ID"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pc_job",
+        "relationship_type": "USES",
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "pp joins to pc_job (j) on pp.JobID = j.ID"
+      },
+      {
+        "source": "pc_job",
+        "target": "pctl_job",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Job type code in pc_job maps to descriptive row in pctl_job"
+      },
+      {
+        "source": "pc_job",
+        "target": "pctl_policyperiodstatus",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "pc_job.StatusID references pctl_policyperiodstatus"
+      },
+      {
+        "source": "pc_job",
+        "target": "pctl_bindoption",
+        "relationship_type": "USES",
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "pc_job.BindOptionID references pctl_bindoption"
+      },
+      {
+        "source": "pc_job",
+        "target": "pctl_uwcompanycode",
+        "relationship_type": "USES",
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "pc_job.UWCompanyID references pctl_uwcompanycode"
+      },
+      {
+        "source": "pc_job",
+        "target": "pctl_jobdescription_ext",
+        "relationship_type": "USES",
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Extended job description stored in pctl_jobdescription_ext linked by JobID"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pctl_policyperiodsourcetype",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Source type code in pc_policyperiod maps to pctl_policyperiodsourcetype"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pctl_profitcentertype",
+        "relationship_type": "USES",
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Profit center code in pc_policyperiod maps to pctl_profitcentertype"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pctl_orgfarmuwterritory",
+        "relationship_type": "USES",
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Farm/UW territory code in pc_policyperiod maps to pctl_orgfarmuwterritory"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pcx_cp7transaction",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Transaction‑type specific premium and date fields derived from cp7 transaction table when PatternCode = 'CP7'"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pcx_gl7transaction_gle",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "GL7 transaction data joined for GL7‑related premium calculations"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pcx_ca7transaction",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "CA7 transaction data used for CA7‑specific fields"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pcx_cr7transaction",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "CR7 transaction data used for CR7‑specific fields"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pc_imtransaction",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "IM transaction data used for IM‑specific fields"
+      },
+      {
+        "source": "pc_policyperiod",
+        "target": "pcx_wc7transaction",
+        "relationship_type": "USES",
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "WC7 transaction data used for WC7‑specific fields"
+      }
+    ],
+    "discrepancies": [
+      "Parser lists tables with fully‑qualified schema prefixes (e.g., PolicyCenter.dbo.pc_policy) while the LLM profile lists them without the prefix; normalized to plain table names for reconciliation.",
+      "Parser column list contains many generic column names (NAME, ID, TYPECODE) that are not explicitly referenced in the LLM extracted output fields; no direct column‑level confirmation could be made.",
+      "LLM profile includes output fields (e.g., ProfitCenter, ChangePremium) that are derived via CASE expressions and are not present as physical columns in any parsed table."
+    ],
+    "gaps_detected": [
+      "No explicit definition or source for the view/table 'TransactionCostRPT' referenced in the key logic for non‑CommercialPackage products.",
+      "The mapping logic for PatternCode → LineOfBusiness and UWCompany → Company is described but the lookup tables containing those mappings are not listed among the inputs.",
+      "Variable @curmthyr is declared but never used in the visible portion of the script; its purpose remains unclear.",
+      "Exact join conditions (column names) for the transaction tables (pcx_*) are not detailed in the extracted knowledge, leaving potential ambiguity in how premiums are summed."
+    ],
+    "overall_confidence": 0.92
+  },
+  "canonical_metadata": {
+    "extracted_facts": {
+      "tables": [
+        "pc_policyperiod",
+        "pc_policy",
+        "pc_policyTerm",
+        "pc_policyline",
+        "pc_job",
+        "pc_account",
+        "pc_producercode",
+        "pc_organization",
+        "pctl_job",
+        "pctl_policyperiodstatus",
+        "pctl_bindoption",
+        "pctl_uwcompanycode",
+        "pctl_jobdescription_ext",
+        "pctl_policyperiodsourcetype",
+        "pctl_profitcentertype",
+        "pctl_orgfarmuwterritory",
+        "pcx_cp7transaction",
+        "pcx_gl7transaction_gle",
+        "pcx_ca7transaction",
+        "pcx_cr7transaction",
+        "pc_imtransaction",
+        "pcx_wc7transaction"
+      ],
+      "columns": [
+        "ProfitCenter",
+        "LineOfBusiness",
+        "Company",
+        "AgentCode",
+        "Written_Premium"
+      ],
+      "parser_summary": {
+        "unique_tables": 23,
+        "table_occurrences": 39,
+        "joins": 29,
+        "variables": 4,
+        "set_statements": 3,
+        "case_expressions": 18,
+        "nested_case_expressions": 1,
+        "business_rules": 32,
+        "where_conditions": 2,
+        "group_by": 0,
+        "functions": 10,
+        "column_references": 53,
+        "sqlglot_ast_nodes": 1245
+      }
+    },
+    "documented_knowledge": {
+      "purpose": "Extract a detailed list of policies for the Agribusiness profit center within a specified policy period, exposing transaction types (renewal, submission, cancellation, reinstatement, change) and associated premium amounts for downstream reporting or analysis.",
+      "narrative": "The script declares four date variables and sets a policy start, end, and change start date. It then runs a UNION ALL of two SELECT statements that pull policy‑period rows from the PolicyCenter database. The first SELECT calculates Written_Premium by summing amounts from line‑specific transaction tables when the product is a CommercialPackage; otherwise it uses the pre‑calculated TransactionCostRPT field. The second SELECT handles cases where the line‑of‑business is not derived from the pattern code (labelled 'C.P.P.') and simply returns TransactionCostRPT as Written_Premium. Both SELECTs join a wide set of reference tables (policy, term, job, account, producer, organization, profit‑center, UW company, bind option, job description, etc.) to enrich the rows with profit center, company code, agent information, territory, and status. After the UNION, an outer SELECT applies a series of CASE expressions to surface the most recent transaction type, premium, and dates for each transaction category (submission, cancellation, reinstatement, policy change). The final result set is filtered to rows where the policy period or job close date falls between the supplied start and end dates, where the product code is not a CommercialPackage unless the line of business is 'C.P.P.', and where the profit center equals 'Agribusiness'. The output is ordered by PolicyNumber.",
+      "business_domain": "PolicyCenter (Policy Management / Underwriting)",
+      "business_rules": [
+        "Only include policies where the policy period status is 'Bound' or 'AuditComplete'.",
+        "Exclude rows where the job close date is after the @POLENDDATE parameter.",
+        "Map UWCompany names to standardized three‑letter codes (LRM, WRM, SON) and default to 'UNK' if not matched.",
+        "Derive LineOfBusiness from PatternCode with specific mappings; otherwise retain original PatternCode value.",
+        "For CommercialPackage products, calculate Written_Premium by summing transaction amounts from the appropriate line‑specific transaction table; otherwise use the pre‑calculated TransactionCostRPT field.",
+        "When ProductCode = 'CommercialPackage' and LineOfBusiness = 'C.P.P.', treat the row as a CommercialPackage line of business.",
+        "Show only rows where the profit center equals 'Agribusiness'.",
+        "Expose most recent transaction information only when MostRecentModel = 1.",
+        "Populate premium and date columns only for the relevant transaction types (Renewal/Submission, Cancellation, Reinstatement, PolicyChange).",
+        "Filter rows to those whose PeriodStart or JobCloseDate fall within the @POLSTARTDATE‑@POLENDDATE window."
+      ],
+      "key_logic": [
+        "1. Declare and assign four date/int variables that define the reporting window.",
+        "2. Pull policy period rows from pc_policyperiod (alias pp) together with related master tables via LEFT JOINs.",
+        "3. For each row, map raw codes to readable values (e.g., PatternCode → LineOfBusiness, UWCompany name → Company).",
+        "4. Derive transaction‑type specific columns using CASE expressions (MostRecentTran, SubWritten_Premium, CancelledDate, etc.).",
+        "5. When ProductCode = 'CommercialPackage', compute Written_Premium by summing the appropriate transaction table based on PatternCode; otherwise use TransactionCostRPT.",
+        "6. UNION ALL a second SELECT that forces LineOfBusiness = 'C.P.P.' for CommercialPackage rows lacking a matching PatternCode.",
+        "7. Apply outer‑query filters: date range on PeriodStart or JobCloseDate, product‑code logic, and ProfitCenter = 'Agribusiness'.",
+        "8. Order the final result set by PolicyNumber."
+      ]
+    },
+    "inferred_knowledge": {
+      "inferred_entities": [
+        "@POLSTARTDATE",
+        "@POLENDDATE",
+        "@CHANGESTARTDATE",
+        "@curmthyr",
+        "ProfitCenter",
+        "ProductCode",
+        "LineOfBusiness",
+        "PolicyNumber",
+        "OriginalEffectiveDate",
+        "PeriodStart",
+        "PeriodEnd",
+        "AccountNumber",
+        "Company",
+        "PrimaryInsuredName",
+        "AgentCode",
+        "AgentName",
+        "FarmUWTerritory",
+        "MostRecentTran",
+        "SubWritten_Premium",
+        "SubWritten_Date",
+        "CancelledDate",
+        "CancelledEffDate",
+        "CancelledPremium",
+        "ReinstatedPremium",
+        "ReinstatedDate",
+        "ReinstatedEffDate",
+        "ChangePremium",
+        "ChangeDate",
+        "pcx_cp7transaction",
+        "pcx_gl7transaction_gle",
+        "pcx_ca7transaction",
+        "pcx_cr7transaction",
+        "pc_imtransaction",
+        "pcx_wc7transaction"
+      ],
+      "transformations": [
+        {
+          "rule_id": "T1",
+          "rule_type": "MAPPING",
+          "description": "Map PatternCode values to human‑readable LineOfBusiness strings.",
+          "source_entities": [
+            "PatternCode"
+          ],
+          "target_entities": [
+            "LineOfBusiness"
+          ],
+          "expression": "CASE WHEN PatternCode='cp7line' THEN 'Commercial Property Line' WHEN PatternCode='GeneralLiabilityLine_GLE' THEN 'General Liability Line' WHEN PatternCode='ca7line' THEN 'Commercial Auto Line' WHEN PatternCode='cr7line' THEN 'Crime Line' WHEN PatternCode='imline' THEN 'Inland Marine Line' WHEN PatternCode='WC7Line' THEN 'Workers Comp Line' ELSE PatternCode END",
+          "line_number": 15,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T2",
+          "rule_type": "MAPPING",
+          "description": "Map UWCompany name to short company code.",
+          "source_entities": [
+            "uwc.name"
+          ],
+          "target_entities": [
+            "Company"
+          ],
+          "expression": "CASE WHEN uwc.name='Lightning Rod Mutual' THEN 'LRM' WHEN uwc.name='Western Reserve Mutual' THEN 'WRM' WHEN uwc.name='Sonnenberg Mutual' THEN 'SON' ELSE 'UNK' END",
+          "line_number": 38,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T3",
+          "rule_type": "CALCULATION",
+          "description": "Derive MostRecentTran only for the most recent model row.",
+          "source_entities": [
+            "MostRecentModel",
+            "TranType"
+          ],
+          "target_entities": [
+            "MostRecentTran"
+          ],
+          "expression": "CASE WHEN MostRecentModel = 1 THEN TranType ELSE NULL END",
+          "line_number": 9,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T4",
+          "rule_type": "CALCULATION",
+          "description": "Derive SubWritten_Premium for Renewal or Submission transactions.",
+          "source_entities": [
+            "TranType",
+            "Written_Premium"
+          ],
+          "target_entities": [
+            "SubWritten_Premium"
+          ],
+          "expression": "CASE WHEN TranType IN ('Renewal','Submission') THEN Written_Premium ELSE NULL END",
+          "line_number": 11,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T5",
+          "rule_type": "CALCULATION",
+          "description": "Derive CancelledDate for Cancellation transactions.",
+          "source_entities": [
+            "TranType",
+            "CancellationDate"
+          ],
+          "target_entities": [
+            "CancelledDate"
+          ],
+          "expression": "CASE WHEN TranType='Cancellation' THEN CancellationDate ELSE NULL END",
+          "line_number": 13,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T6",
+          "rule_type": "CALCULATION",
+          "description": "Derive CancelledPremium for Cancellation transactions.",
+          "source_entities": [
+            "TranType",
+            "Written_Premium"
+          ],
+          "target_entities": [
+            "CancelledPremium"
+          ],
+          "expression": "CASE WHEN TranType='Cancellation' THEN Written_Premium ELSE NULL END",
+          "line_number": 17,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T7",
+          "rule_type": "CALCULATION",
+          "description": "Derive ReinstatedPremium, ReinstatedDate, ReinstatedEffDate for Reinstatement transactions.",
+          "source_entities": [
+            "TranType",
+            "Written_Premium",
+            "WrittenDate",
+            "JobCloseDate"
+          ],
+          "target_entities": [
+            "ReinstatedPremium",
+            "ReinstatedDate",
+            "ReinstatedEffDate"
+          ],
+          "expression": "CASE WHEN TranType='Reinstatement' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN WrittenDate ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN JobCloseDate ELSE NULL END",
+          "line_number": 19,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T8",
+          "rule_type": "CALCULATION",
+          "description": "Derive ChangePremium and ChangeDate for PolicyChange transactions.",
+          "source_entities": [
+            "TranType",
+            "Written_Premium",
+            "EditEffectiveDate"
+          ],
+          "target_entities": [
+            "ChangePremium",
+            "ChangeDate"
+          ],
+          "expression": "CASE WHEN TranType='PolicyChange' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='PolicyChange' THEN EditEffectiveDate ELSE NULL END",
+          "line_number": 23,
+          "confidence": 0.95
+        },
+        {
+          "rule_id": "T9",
+          "rule_type": "AGGREGATION",
+          "description": "Calculate Written_Premium for CommercialPackage policies by summing the amount column from the appropriate transaction table based on PatternCode.",
+          "source_entities": [
+            "ProductCode",
+            "PatternCode",
+            "pcx_*transaction.amount"
+          ],
+          "target_entities": [
+            "Written_Premium"
+          ],
+          "expression": "CASE WHEN ProductCode='CommercialPackage' THEN (SELECT ISNULL(SUM(amount),0.00) FROM <transaction_table> WHERE BranchID=pp.id) ELSE TransactionCostRPT END",
+          "line_number": 100,
+          "confidence": 0.94
+        },
+        {
+          "rule_id": "T10",
+          "rule_type": "FILTER",
+          "description": "Restrict rows to those where IssueDate and PolicyNumber are present, status is Bound or AuditComplete, and job close date is before @POLENDDATE.",
+          "source_entities": [
+            "pol.IssueDate",
+            "pp.Policynumber",
+            "ppst.TYPECODE",
+            "j.CloseDate",
+            "@POLENDDATE"
+          ],
+          "target_entities": [],
+          "expression": "pol.IssueDate IS NOT NULL AND pp.Policynumber IS NOT NULL AND ppst.TYPECODE IN ('Bound','AuditComplete') AND j.CloseDate < @POLENDDATE",
+          "line_number": 115,
+          "confidence": 0.96
+        },
+        {
+          "rule_id": "T11",
+          "rule_type": "FILTER",
+          "description": "Outer query date window filter on PeriodStart or JobCloseDate and profit center restriction to 'Agribusiness'.",
+          "source_entities": [
+            "PeriodStart",
+            "JobCloseDate",
+            "@POLSTARTDATE",
+            "@POLENDDATE",
+            "ProfitCenter"
+          ],
+          "target_entities": [],
+          "expression": "((PeriodStart BETWEEN @POLSTARTDATE AND @POLENDDATE) OR (JobCloseDate BETWEEN @POLSTARTDATE AND @POLENDDATE)) AND ProfitCenter='Agribusiness'",
+          "line_number": 150,
+          "confidence": 0.97
+        },
+        {
+          "rule_id": "T12",
+          "rule_type": "JOIN",
+          "description": "LEFT JOIN pc_policy (pol) to pc_policyperiod (pp) on policy ID.",
+          "source_entities": [
+            "pc_policyperiod (pp)",
+            "pc_policy (pol)"
+          ],
+          "target_entities": [],
+          "expression": "pp.policyid = pol.id",
+          "line_number": 31,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T13",
+          "rule_type": "JOIN",
+          "description": "LEFT JOIN pc_job (j) to pc_policyperiod (pp) on job ID.",
+          "source_entities": [
+            "pc_policyperiod (pp)",
+            "pc_job (j)"
+          ],
+          "target_entities": [],
+          "expression": "pp.jobid = j.id",
+          "line_number": 34,
+          "confidence": 0.98
+        },
+        {
+          "rule_id": "T14",
+          "rule_type": "JOIN",
+          "description": "LEFT JOIN pctl_job (jt) to pc_job (j) to obtain transaction type code.",
+          "source_entities": [
+            "pc_job (j)",
+            "pctl_job (jt)"
+          ],
+          "target_entities": [],
+          "expression": "j.SubType = jt.id",
+          "line_number": 38,
+          "confidence": 0.98
+        }
+      ],
+      "lineage_relationships": [
+        {
+          "source": "pc_policyperiod",
+          "target": "pc_policy",
+          "relationship_type": "USES",
+          "confidence": 0.96,
+          "evidence_line": null,
+          "description": "pc_policyperiod (alias pp) joins to pc_policy (alias pol) on pp.PolicyID = pol.ID"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pc_policyTerm",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "pp joins to pc_policyTerm (polt) on pp.PolicyTermID = polt.ID"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pc_policyline",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "pp joins to pc_policyline (polline) on pp.PolicyLineID = polline.ID"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pc_job",
+          "relationship_type": "USES",
+          "confidence": 0.95,
+          "evidence_line": null,
+          "description": "pp joins to pc_job (j) on pp.JobID = j.ID"
+        },
+        {
+          "source": "pc_job",
+          "target": "pctl_job",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Job type code in pc_job maps to descriptive row in pctl_job"
+        },
+        {
+          "source": "pc_job",
+          "target": "pctl_policyperiodstatus",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "pc_job.StatusID references pctl_policyperiodstatus"
+        },
+        {
+          "source": "pc_job",
+          "target": "pctl_bindoption",
+          "relationship_type": "USES",
+          "confidence": 0.92,
+          "evidence_line": null,
+          "description": "pc_job.BindOptionID references pctl_bindoption"
+        },
+        {
+          "source": "pc_job",
+          "target": "pctl_uwcompanycode",
+          "relationship_type": "USES",
+          "confidence": 0.91,
+          "evidence_line": null,
+          "description": "pc_job.UWCompanyID references pctl_uwcompanycode"
+        },
+        {
+          "source": "pc_job",
+          "target": "pctl_jobdescription_ext",
+          "relationship_type": "USES",
+          "confidence": 0.9,
+          "evidence_line": null,
+          "description": "Extended job description stored in pctl_jobdescription_ext linked by JobID"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pctl_policyperiodsourcetype",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Source type code in pc_policyperiod maps to pctl_policyperiodsourcetype"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pctl_profitcentertype",
+          "relationship_type": "USES",
+          "confidence": 0.94,
+          "evidence_line": null,
+          "description": "Profit center code in pc_policyperiod maps to pctl_profitcentertype"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pctl_orgfarmuwterritory",
+          "relationship_type": "USES",
+          "confidence": 0.93,
+          "evidence_line": null,
+          "description": "Farm/UW territory code in pc_policyperiod maps to pctl_orgfarmuwterritory"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pcx_cp7transaction",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "Transaction‑type specific premium and date fields derived from cp7 transaction table when PatternCode = 'CP7'"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pcx_gl7transaction_gle",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "GL7 transaction data joined for GL7‑related premium calculations"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pcx_ca7transaction",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "CA7 transaction data used for CA7‑specific fields"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pcx_cr7transaction",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "CR7 transaction data used for CR7‑specific fields"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pc_imtransaction",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "IM transaction data used for IM‑specific fields"
+        },
+        {
+          "source": "pc_policyperiod",
+          "target": "pcx_wc7transaction",
+          "relationship_type": "USES",
+          "confidence": 0.88,
+          "evidence_line": null,
+          "description": "WC7 transaction data used for WC7‑specific fields"
+        }
+      ],
+      "gaps": [
+        "No explicit definition or source for the view/table 'TransactionCostRPT' referenced in the key logic for non‑CommercialPackage products.",
+        "The mapping logic for PatternCode → LineOfBusiness and UWCompany → Company is described but the lookup tables containing those mappings are not listed among the inputs.",
+        "Variable @curmthyr is declared but never used in the visible portion of the script; its purpose remains unclear.",
+        "Exact join conditions (column names) for the transaction tables (pcx_*) are not detailed in the extracted knowledge, leaving potential ambiguity in how premiums are summed."
+      ]
+    },
+    "overall_confidence": 0.92
+  },
+  "graph_nodes": [
+    {
+      "id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "label": "Artifact",
+      "properties": {
+        "name": "PolicyCenter_Monoline.sql",
+        "source_type": "sql",
+        "file_path": "C:\\Users\\ThomasBaiju\\OneDrive - ValueMomentum, Inc\\Documents\\KAIRIX\\source\\sql\\PolicyCenter_Monoline.sql",
+        "total_lines": 267
+      }
+    },
+    {
+      "id": "VARIABLE:@POLSTARTDATE",
+      "label": "Variable",
+      "properties": {
+        "name": "@POLSTARTDATE",
+        "entity_type": "VARIABLE",
+        "data_type": "Date",
+        "parent": null,
+        "line_number": 1
+      }
+    },
+    {
+      "id": "VARIABLE:@POLENDDATE",
+      "label": "Variable",
+      "properties": {
+        "name": "@POLENDDATE",
+        "entity_type": "VARIABLE",
+        "data_type": "Date",
+        "parent": null,
+        "line_number": 2
+      }
+    },
+    {
+      "id": "VARIABLE:@CHANGESTARTDATE",
+      "label": "Variable",
+      "properties": {
+        "name": "@CHANGESTARTDATE",
+        "entity_type": "VARIABLE",
+        "data_type": "Date",
+        "parent": null,
+        "line_number": 3
+      }
+    },
+    {
+      "id": "VARIABLE:@curmthyr",
+      "label": "Variable",
+      "properties": {
+        "name": "@curmthyr",
+        "entity_type": "VARIABLE",
+        "data_type": "int",
+        "parent": null,
+        "line_number": 4
+      }
+    },
+    {
+      "id": "TABLE:pc_policyperiod",
+      "label": "Table",
+      "properties": {
+        "name": "pc_policyperiod",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 30
+      }
+    },
+    {
+      "id": "TABLE:pc_policy",
+      "label": "Table",
+      "properties": {
+        "name": "pc_policy",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 31
+      }
+    },
+    {
+      "id": "TABLE:pc_policyTerm",
+      "label": "Table",
+      "properties": {
+        "name": "pc_policyTerm",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 32
+      }
+    },
+    {
+      "id": "TABLE:pc_policyline",
+      "label": "Table",
+      "properties": {
+        "name": "pc_policyline",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 33
+      }
+    },
+    {
+      "id": "TABLE:pc_job",
+      "label": "Table",
+      "properties": {
+        "name": "pc_job",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 34
+      }
+    },
+    {
+      "id": "TABLE:pc_account",
+      "label": "Table",
+      "properties": {
+        "name": "pc_account",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 35
+      }
+    },
+    {
+      "id": "TABLE:pc_producercode",
+      "label": "Table",
+      "properties": {
+        "name": "pc_producercode",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 36
+      }
+    },
+    {
+      "id": "TABLE:pc_organization",
+      "label": "Table",
+      "properties": {
+        "name": "pc_organization",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 37
+      }
+    },
+    {
+      "id": "TABLE:pctl_job",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_job",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "TABLE:pctl_policyperiodstatus",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_policyperiodstatus",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 39
+      }
+    },
+    {
+      "id": "TABLE:pctl_bindoption",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_bindoption",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 40
+      }
+    },
+    {
+      "id": "TABLE:pctl_uwcompanycode",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_uwcompanycode",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 41
+      }
+    },
+    {
+      "id": "TABLE:pctl_jobdescription_ext",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_jobdescription_ext",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": "PolicyCenter.dbo",
+        "line_number": 42
+      }
+    },
+    {
+      "id": "TABLE:pctl_policyperiodsourcetype",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_policyperiodsourcetype",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 43
+      }
+    },
+    {
+      "id": "TABLE:pctl_profitcentertype",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_profitcentertype",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 44
+      }
+    },
+    {
+      "id": "TABLE:pctl_orgfarmuwterritory",
+      "label": "Table",
+      "properties": {
+        "name": "pctl_orgfarmuwterritory",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 45
+      }
+    },
+    {
+      "id": "TABLE:pcx_cp7transaction",
+      "label": "Table",
+      "properties": {
+        "name": "pcx_cp7transaction",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 70
+      }
+    },
+    {
+      "id": "TABLE:pcx_gl7transaction_gle",
+      "label": "Table",
+      "properties": {
+        "name": "pcx_gl7transaction_gle",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 73
+      }
+    },
+    {
+      "id": "TABLE:pcx_ca7transaction",
+      "label": "Table",
+      "properties": {
+        "name": "pcx_ca7transaction",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 76
+      }
+    },
+    {
+      "id": "TABLE:pcx_cr7transaction",
+      "label": "Table",
+      "properties": {
+        "name": "pcx_cr7transaction",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 79
+      }
+    },
+    {
+      "id": "TABLE:pc_imtransaction",
+      "label": "Table",
+      "properties": {
+        "name": "pc_imtransaction",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 82
+      }
+    },
+    {
+      "id": "TABLE:pcx_wc7transaction",
+      "label": "Table",
+      "properties": {
+        "name": "pcx_wc7transaction",
+        "entity_type": "TABLE",
+        "data_type": null,
+        "parent": null,
+        "line_number": 85
+      }
+    },
+    {
+      "id": "COLUMN:ProfitCenter",
+      "label": "Column",
+      "properties": {
+        "name": "ProfitCenter",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": "profit",
+        "line_number": 12
+      }
+    },
+    {
+      "id": "COLUMN:LineOfBusiness",
+      "label": "Column",
+      "properties": {
+        "name": "LineOfBusiness",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 15
+      }
+    },
+    {
+      "id": "COLUMN:Company",
+      "label": "Column",
+      "properties": {
+        "name": "Company",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 38
+      }
+    },
+    {
+      "id": "COLUMN:AgentCode",
+      "label": "Column",
+      "properties": {
+        "name": "AgentCode",
+        "entity_type": "COLUMN",
+        "data_type": "char(6)",
+        "parent": "org",
+        "line_number": 44
+      }
+    },
+    {
+      "id": "COLUMN:Written_Premium",
+      "label": "Column",
+      "properties": {
+        "name": "Written_Premium",
+        "entity_type": "COLUMN",
+        "data_type": null,
+        "parent": null,
+        "line_number": 100
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T1",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T1",
+        "rule_type": "MAPPING",
+        "description": "Map PatternCode values to human‑readable LineOfBusiness strings.",
+        "expression": "CASE WHEN PatternCode='cp7line' THEN 'Commercial Property Line' WHEN PatternCode='GeneralLiabilityLine_GLE' THEN 'General Liability Line' WHEN PatternCode='ca7line' THEN 'Commercial Auto Line' WHEN PatternCode='cr7line' THEN 'Crime Line' WHEN PatternCode='imline' THEN 'Inland Marine Line' WHEN PatternCode='WC7Line' THEN 'Workers Comp Line' ELSE PatternCode END",
+        "line_number": 15
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T2",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T2",
+        "rule_type": "MAPPING",
+        "description": "Map UWCompany name to short company code.",
+        "expression": "CASE WHEN uwc.name='Lightning Rod Mutual' THEN 'LRM' WHEN uwc.name='Western Reserve Mutual' THEN 'WRM' WHEN uwc.name='Sonnenberg Mutual' THEN 'SON' ELSE 'UNK' END",
+        "line_number": 38
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T3",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T3",
+        "rule_type": "CALCULATION",
+        "description": "Derive MostRecentTran only for the most recent model row.",
+        "expression": "CASE WHEN MostRecentModel = 1 THEN TranType ELSE NULL END",
+        "line_number": 9
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T4",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T4",
+        "rule_type": "CALCULATION",
+        "description": "Derive SubWritten_Premium for Renewal or Submission transactions.",
+        "expression": "CASE WHEN TranType IN ('Renewal','Submission') THEN Written_Premium ELSE NULL END",
+        "line_number": 11
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T5",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T5",
+        "rule_type": "CALCULATION",
+        "description": "Derive CancelledDate for Cancellation transactions.",
+        "expression": "CASE WHEN TranType='Cancellation' THEN CancellationDate ELSE NULL END",
+        "line_number": 13
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T6",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T6",
+        "rule_type": "CALCULATION",
+        "description": "Derive CancelledPremium for Cancellation transactions.",
+        "expression": "CASE WHEN TranType='Cancellation' THEN Written_Premium ELSE NULL END",
+        "line_number": 17
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T7",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T7",
+        "rule_type": "CALCULATION",
+        "description": "Derive ReinstatedPremium, ReinstatedDate, ReinstatedEffDate for Reinstatement transactions.",
+        "expression": "CASE WHEN TranType='Reinstatement' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN WrittenDate ELSE NULL END, CASE WHEN TranType='Reinstatement' THEN JobCloseDate ELSE NULL END",
+        "line_number": 19
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T8",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T8",
+        "rule_type": "CALCULATION",
+        "description": "Derive ChangePremium and ChangeDate for PolicyChange transactions.",
+        "expression": "CASE WHEN TranType='PolicyChange' THEN Written_Premium ELSE NULL END, CASE WHEN TranType='PolicyChange' THEN EditEffectiveDate ELSE NULL END",
+        "line_number": 23
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T9",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T9",
+        "rule_type": "AGGREGATION",
+        "description": "Calculate Written_Premium for CommercialPackage policies by summing the amount column from the appropriate transaction table based on PatternCode.",
+        "expression": "CASE WHEN ProductCode='CommercialPackage' THEN (SELECT ISNULL(SUM(amount),0.00) FROM <transaction_table> WHERE BranchID=pp.id) ELSE TransactionCostRPT END",
+        "line_number": 100
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T10",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T10",
+        "rule_type": "FILTER",
+        "description": "Restrict rows to those where IssueDate and PolicyNumber are present, status is Bound or AuditComplete, and job close date is before @POLENDDATE.",
+        "expression": "pol.IssueDate IS NOT NULL AND pp.Policynumber IS NOT NULL AND ppst.TYPECODE IN ('Bound','AuditComplete') AND j.CloseDate < @POLENDDATE",
+        "line_number": 115
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T11",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T11",
+        "rule_type": "FILTER",
+        "description": "Outer query date window filter on PeriodStart or JobCloseDate and profit center restriction to 'Agribusiness'.",
+        "expression": "((PeriodStart BETWEEN @POLSTARTDATE AND @POLENDDATE) OR (JobCloseDate BETWEEN @POLSTARTDATE AND @POLENDDATE)) AND ProfitCenter='Agribusiness'",
+        "line_number": 150
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T12",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T12",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pc_policy (pol) to pc_policyperiod (pp) on policy ID.",
+        "expression": "pp.policyid = pol.id",
+        "line_number": 31
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T13",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T13",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pc_job (j) to pc_policyperiod (pp) on job ID.",
+        "expression": "pp.jobid = j.id",
+        "line_number": 34
+      }
+    },
+    {
+      "id": "TRANSFORMATION:PolicyCenter_Monoline.sql:T14",
+      "label": "Transformation",
+      "properties": {
+        "rule_id": "T14",
+        "rule_type": "JOIN",
+        "description": "LEFT JOIN pctl_job (jt) to pc_job (j) to obtain transaction type code.",
+        "expression": "j.SubType = jt.id",
+        "line_number": 38
+      }
+    }
+  ],
+  "graph_edges": [
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "VARIABLE:@POLSTARTDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "VARIABLE:@POLENDDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "VARIABLE:@CHANGESTARTDATE",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "VARIABLE:@curmthyr",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_policyperiod",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_policy",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_policyTerm",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_policyline",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_account",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_producercode",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_organization",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_job",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_policyperiodstatus",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_bindoption",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_uwcompanycode",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_jobdescription_ext",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_policyperiodsourcetype",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_profitcentertype",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pctl_orgfarmuwterritory",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pcx_cp7transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pcx_gl7transaction_gle",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pcx_ca7transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pcx_cr7transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pc_imtransaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "TABLE:pcx_wc7transaction",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "COLUMN:ProfitCenter",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "COLUMN:LineOfBusiness",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "COLUMN:Company",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "COLUMN:AgentCode",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "ARTIFACT:PolicyCenter_Monoline.sql",
+      "target_id": "COLUMN:Written_Premium",
+      "type": "CONTAINS",
+      "properties": {
+        "source_type": "sql"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pc_policy",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.96,
+        "evidence_line": null,
+        "description": "pc_policyperiod (alias pp) joins to pc_policy (alias pol) on pp.PolicyID = pol.ID"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pc_policyTerm",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "pp joins to pc_policyTerm (polt) on pp.PolicyTermID = polt.ID"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pc_policyline",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "pp joins to pc_policyline (polline) on pp.PolicyLineID = polline.ID"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pc_job",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.95,
+        "evidence_line": null,
+        "description": "pp joins to pc_job (j) on pp.JobID = j.ID"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_job",
+      "target_id": "TABLE:pctl_job",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Job type code in pc_job maps to descriptive row in pctl_job"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_job",
+      "target_id": "TABLE:pctl_policyperiodstatus",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "pc_job.StatusID references pctl_policyperiodstatus"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_job",
+      "target_id": "TABLE:pctl_bindoption",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.92,
+        "evidence_line": null,
+        "description": "pc_job.BindOptionID references pctl_bindoption"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_job",
+      "target_id": "TABLE:pctl_uwcompanycode",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.91,
+        "evidence_line": null,
+        "description": "pc_job.UWCompanyID references pctl_uwcompanycode"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_job",
+      "target_id": "TABLE:pctl_jobdescription_ext",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.9,
+        "evidence_line": null,
+        "description": "Extended job description stored in pctl_jobdescription_ext linked by JobID"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pctl_policyperiodsourcetype",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Source type code in pc_policyperiod maps to pctl_policyperiodsourcetype"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pctl_profitcentertype",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.94,
+        "evidence_line": null,
+        "description": "Profit center code in pc_policyperiod maps to pctl_profitcentertype"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pctl_orgfarmuwterritory",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.93,
+        "evidence_line": null,
+        "description": "Farm/UW territory code in pc_policyperiod maps to pctl_orgfarmuwterritory"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pcx_cp7transaction",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "Transaction‑type specific premium and date fields derived from cp7 transaction table when PatternCode = 'CP7'"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pcx_gl7transaction_gle",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "GL7 transaction data joined for GL7‑related premium calculations"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pcx_ca7transaction",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "CA7 transaction data used for CA7‑specific fields"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pcx_cr7transaction",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "CR7 transaction data used for CR7‑specific fields"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pc_imtransaction",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "IM transaction data used for IM‑specific fields"
+      }
+    },
+    {
+      "source_id": "TABLE:pc_policyperiod",
+      "target_id": "TABLE:pcx_wc7transaction",
+      "type": "USES",
+      "properties": {
+        "confidence": 0.88,
+        "evidence_line": null,
+        "description": "WC7 transaction data used for WC7‑specific fields"
+      }
+    }
+  ]
+}

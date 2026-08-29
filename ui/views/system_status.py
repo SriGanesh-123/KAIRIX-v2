@@ -30,7 +30,7 @@ def render_system_status() -> None:
     with col_h:
         pass
     with col_ref:
-        if st.button("Refresh Status", use_container_width=True):
+        if st.button("🔄 Refresh Status", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 

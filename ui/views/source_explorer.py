@@ -6,10 +6,14 @@ code viewing, and new source registration across COBOL, SQL, and SSIS legacy sou
 """
 from __future__ import annotations
 
+import html
+import importlib
 import streamlit as st
-from ui.components.source_panel import render_source_metadata_card, render_code_viewer
+import ui.services.source_service as _src_svc_mod
+importlib.reload(_src_svc_mod)
 from ui.services.source_service import SourceService
 from ui.services.analyze_service import AnalyzeService
+from ui.components.source_panel import render_source_metadata_card, render_code_viewer
 from ui.components.metric_cards import format_metric
 
 
@@ -37,7 +41,7 @@ def render_source_explorer() -> None:
             if show_add:
                 st.session_state["show_add_source_form"] = not st.session_state.get("show_add_source_form", False)
         with col_ref:
-            if st.button("Refresh", use_container_width=True, key="btn_refresh_sources"):
+            if st.button("🔄 Refresh", use_container_width=True, key="btn_refresh_sources"):
                 SourceService.refresh_sources()
                 st.rerun()
 
@@ -155,6 +159,7 @@ def render_source_explorer() -> None:
         f"SSIS Packages ({ssis_count})",
     ]
 
+
     selected_filter_label = st.radio(
         "Filter by Technology",
         options=tech_options,
@@ -194,7 +199,7 @@ def render_source_explorer() -> None:
         unsafe_allow_html=True,
     )
 
-    col_sel, col_quick = st.columns([3.8, 1.2])
+    col_sel, col_quick, col_del = st.columns([3.2, 1.1, 0.9])
     with col_sel:
         selected_file_name = st.selectbox(
             "Select Source File:",
@@ -204,10 +209,31 @@ def render_source_explorer() -> None:
             label_visibility="collapsed",
         )
     with col_quick:
-        if st.button("Investigate File", use_container_width=True, key="btn_investigate_file"):
+        if st.button("🔍 Investigate", use_container_width=True, key="btn_investigate_file"):
             st.session_state["pending_investigation_query"] = f"Explain the business logic and dependencies in {selected_file_name}"
             st.session_state["navigate_to_page"] = "Investigation Agent"
             st.rerun()
+    with col_del:
+        with st.popover("🗑️ Delete", use_container_width=True):
+            st.markdown(
+                f"""
+                <div style="font-weight: 700; font-size: 0.92rem; color: #DC2626; margin-bottom: 0.25rem;">
+                    Delete Source File?
+                </div>
+                <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.75rem; line-height: 1.35;">
+                    Permanently delete <b>{html.escape(selected_file_name)}</b> and its cached knowledge package & summary?
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("Confirm Delete", type="primary", use_container_width=True, key=f"btn_confirm_del_{selected_file_name}"):
+                del_res = SourceService.delete_source_file(selected_file_name)
+                if del_res.get("success"):
+                    st.session_state["selected_source_file"] = None
+                    st.toast(f"Deleted source '{selected_file_name}'", icon="🗑️")
+                    st.rerun()
+                else:
+                    st.error(del_res.get("error", "Failed to delete file."))
 
 
     file_info = SourceService.get_file_details(selected_file_name)
@@ -220,53 +246,64 @@ def render_source_explorer() -> None:
     # Render Metadata Card
     render_source_metadata_card(file_info)
 
-    # Action Toolbar
-    col_a1, col_a2, col_a3, col_a4 = st.columns(4)
-    with col_a1:
-        if st.button("Re-run Analysis", use_container_width=True, key="btn_rerun_analysis"):
-            with st.status(f"Re-analyzing {selected_file_name}...", expanded=True) as status_box:
-                st.write("Running deterministic parser and extracting AST metadata...")
-                res = AnalyzeService.run_analysis(file_info["file_path"], force_refresh=True)
-                if res.get("success"):
-                    status_box.update(label=f"Analysis complete for {selected_file_name}!", state="complete")
-                    st.success(f"Generated updated knowledge package in {res.get('duration', 0)}s.")
-                    SourceService.refresh_sources()
-                    st.rerun()
-                else:
-                    status_box.update(label=f"Analysis error: {res.get('error')}", state="error")
-                    st.error(res.get("error", "Analysis failed."))
-
-    with col_a2:
-        if st.button("Pipeline Controls", use_container_width=True, key="btn_view_pipeline"):
-            st.session_state["navigate_to_page"] = "Pipeline"
-            st.rerun()
-
-    with col_a3:
-        if st.button("View in Graph", use_container_width=True, key="btn_view_graph"):
-            st.session_state["graph_search_term"] = selected_file_name
-            st.session_state["navigate_to_page"] = "Knowledge Graph"
-            st.rerun()
-
-    with col_a4:
-        if st.button("View Markdown Summary", use_container_width=True, key="btn_view_md_summary"):
-            st.session_state["show_summary_narrative"] = not st.session_state.get("show_summary_narrative", False)
-            st.rerun()
-
-    # Show Summary Dialog / Expander if available
-    summary_md = SourceService.get_summary_markdown(selected_file_name)
-    if summary_md:
-        is_expanded = st.session_state.get("show_summary_narrative", False)
-        with st.expander("Executive Summary Narrative", expanded=is_expanded):
-            st.markdown(summary_md)
-    elif st.session_state.get("show_summary_narrative", False):
-        st.info(f"No standalone Markdown summary file found for {selected_file_name}. Review the summary in the Canonical Knowledge Package tab.")
-
-    # Tabs for Source Code vs Knowledge Package Data
-    tab_code, tab_pkg, tab_entities = st.tabs(["Source Code", "Canonical Knowledge Package", "Extracted Entities & Rules"])
+    # Tabs in exact user-specified order
+    tab_code, tab_summary, tab_pkg, tab_entities = st.tabs([
+        "Source Code",
+        "Executive Summary",
+        "Canonical Knowledge Package",
+        "Extracted Entities & Rules",
+    ])
 
     with tab_code:
         code_str, _ = SourceService.read_source_code(file_info["file_path"])
         render_code_viewer(code_str, language=file_info.get("technology", "COBOL"))
+
+    with tab_summary:
+        summary_md = SourceService.get_summary_markdown(selected_file_name)
+        if summary_md:
+            col_sum_hdr, col_sum_dl = st.columns([4, 1.3])
+            with col_sum_hdr:
+                st.markdown(
+                    f"""
+                    <div style="margin-bottom: 0.5rem;">
+                        <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A;">Executive Summary — {html.escape(selected_file_name)}</div>
+                        <div style="font-size: 0.82rem; color: #64748B; margin-top: 0.15rem;">Deterministic AST analysis, business logic extraction, and architectural impact narrative.</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with col_sum_dl:
+                st.download_button(
+                    "📥 Download Summary",
+                    data=summary_md,
+                    file_name=f"{selected_file_name}_summary.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                    key="btn_download_summary_md",
+                )
+
+            st.markdown(summary_md)
+        else:
+            pkg = SourceService.get_knowledge_package(selected_file_name)
+            if pkg and pkg.get("summary"):
+                overview = pkg.get("summary", {}).get("overview", "")
+                purpose = pkg.get("summary", {}).get("purpose", "")
+                rules = pkg.get("summary", {}).get("business_rules", [])
+                st.markdown(
+                    f"""
+                    <div style="background:#FFFFFF; border:1px solid #D5DFEB; border-radius:14px; padding:1.5rem 1.8rem; box-shadow:4px 4px 14px rgba(166, 180, 200, 0.25); margin-top:0.25rem;">
+                        <h3 style="color:#0F172A; font-weight:800; margin-top:0;">{html.escape(selected_file_name)}</h3>
+                        <p style="color:#334155; font-size:0.95rem; line-height:1.6;"><strong>Purpose:</strong> {html.escape(purpose or overview)}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if rules:
+                    st.markdown("#### Key Business Rules")
+                    for r in rules:
+                        st.markdown(f"- {r}")
+            else:
+                st.info(f"No summary generated for {selected_file_name} yet. Run Layer 2 Knowledge Engineering to generate the executive summary.")
 
     with tab_pkg:
         pkg = SourceService.get_knowledge_package(selected_file_name)
@@ -287,11 +324,41 @@ def render_source_explorer() -> None:
             with col_e1:
                 st.markdown(f"#### Extracted Entities ({format_metric(len(entities))})")
                 if entities:
-                    st.dataframe(
-                        [{"Name": e.get("name"), "Type": e.get("entity_type"), "Data Type": e.get("data_type", "—"), "Line": e.get("line_number", "—")} for e in entities],
-                        use_container_width=True,
-                        hide_index=True,
-                        height=420,
+                    ent_rows_html = []
+                    for e in entities:
+                        e_name = str(e.get("name") or "—")
+                        e_type = str(e.get("entity_type") or "Entity")
+                        e_dtype = str(e.get("data_type") or "—")
+                        e_line = f"L{e.get('line_number')}" if e.get("line_number") else "—"
+                        ent_rows_html.append(
+                            f"<tr>"
+                            f"<td><strong style='color:#0F172A;'>{html.escape(e_name)}</strong></td>"
+                            f"<td><span style='font-size:0.75rem; color:#475569;'>{html.escape(e_type)}</span></td>"
+                            f"<td><span class='tbl-code'>{html.escape(e_dtype)}</span></td>"
+                            f"<td><span style='font-family:monospace; color:#64748B;'>{html.escape(e_line)}</span></td>"
+                            f"</tr>"
+                        )
+                    st.markdown(
+                        f"""
+                        <div class="kairix-table-wrapper" style="margin-top:0.4rem;">
+                            <div style="max-height: 480px; overflow-y: auto;">
+                                <table class="kairix-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Data Type</th>
+                                            <th>Line</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {''.join(ent_rows_html)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
                 else:
                     st.text("No entities listed.")
@@ -301,13 +368,13 @@ def render_source_explorer() -> None:
                 if rules:
                     rules_html = "".join([
                         f'<div style="background: #FFFFFF; border: 1px solid #D5DFEB; border-left: 3px solid #0284C7; border-radius: 7px; padding: 0.65rem 0.85rem; margin-bottom: 0.45rem; font-size: 0.85rem; color: #1E293B; line-height: 1.45; box-shadow: 1px 1px 3px rgba(166, 180, 200, 0.25);">'
-                        f'<span style="font-weight: 700; color: #0369A1; font-family: monospace;">Rule {i+1}:</span> {r}'
+                        f'<span style="font-weight: 700; color: #0369A1; font-family: monospace;">Rule {i+1}:</span> {html.escape(r)}'
                         f'</div>'
                         for i, r in enumerate(rules)
                     ])
                     st.markdown(
                         f"""
-                        <div class="neo-inset" style="height: 420px; max-height: 420px; overflow-y: auto; padding: 0.75rem; border-radius: 10px;">
+                        <div class="neo-inset" style="max-height: 480px; overflow-y: auto; padding: 0.75rem; border-radius: 10px;">
                             {rules_html}
                         </div>
                         """,
@@ -318,11 +385,41 @@ def render_source_explorer() -> None:
 
             if transforms:
                 st.markdown(f"#### Transformations ({format_metric(len(transforms))})")
-                st.dataframe(
-                    [{"Rule ID": t.get("rule_id"), "Type": t.get("rule_type"), "Description": t.get("description"), "Expression": t.get("expression", "—")} for t in transforms],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=280,
+                tf_rows_html = []
+                for t in transforms:
+                    t_id = str(t.get("rule_id") or "TR")
+                    t_type = str(t.get("rule_type") or "CALCULATION")
+                    t_desc = str(t.get("description") or "—")
+                    t_expr = str(t.get("expression") or "—")
+                    tf_rows_html.append(
+                        f"<tr>"
+                        f"<td><span class='tbl-code'>{html.escape(t_id)}</span></td>"
+                        f"<td><strong style='color:#0F172A;'>{html.escape(t_type)}</strong></td>"
+                        f"<td>{html.escape(t_desc)}</td>"
+                        f"<td><code style='font-size:0.78rem; background:#F1F5F9; padding:0.15rem 0.4rem; border-radius:4px;'>{html.escape(t_expr)}</code></td>"
+                        f"</tr>"
+                    )
+                st.markdown(
+                    f"""
+                    <div class="kairix-table-wrapper" style="margin-top:0.4rem;">
+                        <div style="max-height: 320px; overflow-y: auto;">
+                            <table class="kairix-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rule ID</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Expression</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {''.join(tf_rows_html)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
         else:
             st.info("No extracted entity details available.")

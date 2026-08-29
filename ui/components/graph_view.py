@@ -26,8 +26,9 @@ def render_graph_legend() -> None:
         ("Transformation", "#EA580C", "#FFEDD5"),
     ]
 
+
     pills = "".join([
-        f"<span style='display:inline-flex; align-items:center; gap:0.4rem; font-size:0.8rem; color:#334155; font-weight:600; background:{bg}; border:1px solid {border}; border-radius:16px; padding:0.25rem 0.65rem; box-shadow:1px 1px 3px rgba(166, 180, 200, 0.25);'>"
+        f"<span style='display:inline-flex; align-items:center; gap:0.45rem; font-size:0.82rem; color:#334155; font-weight:600; background:{bg}; border:1px solid {border}; border-radius:18px; padding:0.3rem 0.75rem; box-shadow:2px 2px 5px rgba(166, 180, 200, 0.28), -2px -2px 5px rgba(255, 255, 255, 0.9);'>"
         f"<span style='width:9px; height:9px; border-radius:50%; background:{border}; display:inline-block;'></span>"
         f"{name}</span>"
         for name, border, bg in legend_items
@@ -35,15 +36,16 @@ def render_graph_legend() -> None:
 
     st.markdown(
         f"""
-        <div style="background:#F4F7FB; border:1px solid #D5DFEB; border-radius:12px; padding:0.75rem 1rem; margin-bottom:1rem; box-shadow:4px 4px 10px rgba(166, 180, 200, 0.35), -4px -4px 10px rgba(255, 255, 255, 0.95);">
-            <div style="font-size:0.72rem; text-transform:uppercase; color:#64748B; margin-bottom:0.45rem; font-weight:800; letter-spacing:0.05em;">Neo4j Node Entity Schema</div>
-            <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
+        <div style="background:#FFFFFF; border:1px solid #D5DFEB; border-radius:16px; padding:0.85rem 1.15rem; margin-bottom:1.15rem; box-shadow:8px 8px 18px rgba(166, 180, 200, 0.45), -8px -8px 18px rgba(255, 255, 255, 0.95);">
+            <div style="font-size:0.74rem; text-transform:uppercase; color:#64748B; margin-bottom:0.5rem; font-weight:800; letter-spacing:0.05em;">Neo4j Node Entity Schema</div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.65rem;">
                 {pills}
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
 
 
 def render_graph_canvas(
@@ -131,18 +133,18 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         )
 
     card_markup = (
-        f'<div style="background:#F4F7FB; border:1px solid #D5DFEB; border-top:4px solid {badge_color}; border-radius:12px; padding:1rem; box-shadow:4px 4px 10px rgba(166, 180, 200, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95); margin-bottom:0.75rem;">'
-        f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.45rem;">'
-        f'<span style="background:{badge_bg}; color:{badge_color}; font-size:0.74rem; font-weight:800; padding:0.2rem 0.55rem; border-radius:6px; text-transform:uppercase; letter-spacing:0.03em;">{html.escape(node_type)}</span>'
+        f'<div style="background:#FFFFFF; border:1px solid #D5DFEB; border-top:4px solid {badge_color}; border-radius:16px; padding:1.25rem 1.4rem; box-shadow:8px 8px 20px rgba(166, 180, 200, 0.45), -8px -8px 20px rgba(255, 255, 255, 0.95); margin-bottom:0.85rem;">'
+        f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.55rem;">'
+        f'<span style="background:{badge_bg}; color:{badge_color}; font-size:0.76rem; font-weight:800; padding:0.25rem 0.65rem; border-radius:8px; text-transform:uppercase; letter-spacing:0.03em;">{html.escape(node_type)}</span>'
         f'</div>'
-        f'<h4 style="margin:0 0 0.5rem 0; color:#0F172A; font-size:1.05rem; font-weight:800; word-break:break-word; line-height:1.3;">{html.escape(raw_name)}</h4>'
-        f'<div style="font-size:0.8rem; color:#334155; line-height:1.5; margin-bottom:0.6rem; background:#E5EBF3; border:1px solid #D5DFEB; border-radius:8px; padding:0.5rem 0.65rem; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.35);">'
-        f'<div><b style="color:#64748B;">ID:</b> <span style="font-family:monospace; color:#0284C7; font-size:0.75rem;">{html.escape(node_id)}</span></div>'
+        f'<h4 style="margin:0 0 0.6rem 0; color:#0F172A; font-size:1.12rem; font-weight:800; word-break:break-word; line-height:1.3;">{html.escape(raw_name)}</h4>'
+        f'<div style="font-size:0.82rem; color:#334155; line-height:1.55; margin-bottom:0.75rem; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:0.6rem 0.85rem; box-shadow:inset 1px 1px 3px rgba(37, 99, 235, 0.12);">'
+        f'<div><b style="color:#64748B;">ID:</b> <span style="font-family:monospace; color:#2563EB; font-size:0.78rem; font-weight:600;">{html.escape(node_id)}</span></div>'
         f'<div><b style="color:#64748B;">Source File:</b> <span style="font-weight:600; color:#0F172A;">{html.escape(source_file)}</span></div>'
         f'{data_type_html}'
         f'</div>'
-        f'<div style="background:#EBF1F8; border:1px solid #BAE6FD; border-left:3px solid #0284C7; border-radius:8px; padding:0.6rem 0.75rem; font-size:0.8rem; color:#0369A1; line-height:1.45; box-shadow:inset 1px 1px 3px rgba(166, 180, 200, 0.3);">'
-        f'<div style="font-weight:700; color:#0F172A; font-size:0.74rem; text-transform:uppercase; margin-bottom:0.2rem;">Description / Purpose</div>'
+        f'<div style="background:#F0FDF4; border:1px solid #BBF7D0; border-left:3.5px solid #059669; border-radius:10px; padding:0.7rem 0.85rem; font-size:0.82rem; color:#065F46; line-height:1.5; box-shadow:inset 1px 1px 3px rgba(5, 150, 105, 0.1);">'
+        f'<div style="font-weight:700; color:#0F172A; font-size:0.75rem; text-transform:uppercase; margin-bottom:0.25rem;">Description / Purpose</div>'
         f'{html.escape(description)}'
         f'</div>'
         f'{edges_html}'

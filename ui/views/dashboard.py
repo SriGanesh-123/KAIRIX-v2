@@ -7,6 +7,7 @@ in enterprise light mode without emojis.
 """
 from __future__ import annotations
 
+import html
 import streamlit as st
 from ui.components.metric_cards import render_primary_metrics, render_metric_card, format_metric
 from ui.services.backend_service import BackendService
@@ -72,7 +73,7 @@ def render_dashboard() -> None:
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:0.85rem 1rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-weight:700; color:#0F172A; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
-                        <span>{icon_c}</span> Knowledge Engineering
+                        <span>{icon_c}</span> Layer 2: Knowledge Engineering
                     </span>
                     <span style="font-size:0.78rem; font-weight:700; color:#334155; display:flex; align-items:center; gap:0.3rem;">
                         <span class="status-dot {dot}"></span> {stt}{dur}
@@ -95,7 +96,7 @@ def render_dashboard() -> None:
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:0.85rem 1rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-weight:700; color:#0F172A; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
-                        <span>{icon_g}</span> Graph Layer (Neo4j)
+                        <span>{icon_g}</span> Layer 3: Graph Layer (Neo4j)
                     </span>
                     <span style="font-size:0.78rem; font-weight:700; color:#334155; display:flex; align-items:center; gap:0.3rem;">
                         <span class="status-dot {dot}"></span> {stt}{dur}
@@ -112,19 +113,19 @@ def render_dashboard() -> None:
         stt = s.get("status", "READY")
         dot = "dot-green" if stt == "COMPLETED" else ("dot-red" if stt == "FAILED" else "dot-amber")
         dur = f" • {s['duration']}s" if s.get("duration") else ""
-        icon_v = get_icon("database", size=16, color="#7C3AED")
+        icon_v = get_icon("search", size=16, color="#D97706")
         st.markdown(
             f"""
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:0.85rem 1rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-weight:700; color:#0F172A; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
-                        <span>{icon_v}</span> Vector Layer (Qdrant)
+                        <span>{icon_v}</span> Layer 3: Vector Layer (Qdrant)
                     </span>
                     <span style="font-size:0.78rem; font-weight:700; color:#334155; display:flex; align-items:center; gap:0.3rem;">
                         <span class="status-dot {dot}"></span> {stt}{dur}
                     </span>
                 </div>
-                <div style="font-size:0.78rem; color:#64748B; margin-top:0.25rem;">Code chunks & summary embeddings</div>
+                <div style="font-size:0.78rem; color:#64748B; margin-top:0.25rem;">Semantic search & chunk indexing</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -156,13 +157,16 @@ def render_dashboard() -> None:
         "Trace the data flow from COBOL rating to KPI reporting",
         "How is written premium calculated?",
     ]
-    chip_cols = st.columns(len(chips))
+    st.markdown('<div class="suggested-chips-container">', unsafe_allow_html=True)
+    c_col1, c_col2 = st.columns(2)
     for i, chip in enumerate(chips):
-        with chip_cols[i]:
-            if st.button(chip, key=f"dash_chip_{i}", use_container_width=True):
+        target_col = c_col1 if (i % 2 == 0) else c_col2
+        with target_col:
+            if st.button(f"{chip}  →", key=f"dash_chip_{i}", use_container_width=True):
                 st.session_state["pending_investigation_query"] = chip
                 st.session_state["navigate_to_page"] = "Investigation"
                 st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 
@@ -275,16 +279,47 @@ def render_dashboard() -> None:
     # 5. Recent Analyzed Artifacts
     st.markdown("### System Knowledge Artifacts")
     if all_files:
-        table_rows = [
-            {
-                "File Name": f.get("file_name", "—"),
-                "Tech": f.get("technology", "—"),
-                "Lines": format_metric(f.get("total_lines", 0)),
-                "Rules": format_metric(f.get("rule_count", 0)),
-                "Confidence": f"{f.get('confidence', 90)}%",
-                "Domain": f.get("domain", "General"),
-                "Status": "Verified" if f.get("has_knowledge_package") else "Pending",
-            }
-            for f in all_files[:10]
-        ]
-        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+        rows_html = []
+        for f in all_files[:10]:
+            fn = f.get("file_name", "—")
+            tech = f.get("technology", "COBOL")
+            lines = format_metric(f.get("total_lines", 0))
+            rules = format_metric(f.get("rule_count", 0))
+            domain = f.get("domain", "General")
+            has_pkg = f.get("has_knowledge_package")
+            status_badge_cls = "badge-status-completed" if has_pkg else "badge-status-pending"
+            status_text = "Verified" if has_pkg else "Pending"
+
+            rows_html.append(
+                f"<tr>"
+                f"<td><strong style='color:#0F172A;'>{html.escape(fn)}</strong></td>"
+                f"<td><span class='badge-tech badge-{tech.lower()}'>{html.escape(tech)}</span></td>"
+                f"<td><span class='tbl-code'>{lines}</span></td>"
+                f"<td><span class='tbl-code'>{rules}</span></td>"
+                f"<td><span style='color:#475569; font-size:0.84rem;'>{html.escape(domain)}</span></td>"
+                f"<td><span class='{status_badge_cls}'>{status_text}</span></td>"
+                f"</tr>"
+            )
+
+        table_html = f"""
+        <div class="kairix-table-wrapper">
+            <div style="max-height: 400px; overflow-y: auto; overflow-x: auto;">
+                <table class="kairix-table">
+                    <thead>
+                        <tr>
+                            <th>File Name</th>
+                            <th>Tech</th>
+                            <th>Lines</th>
+                            <th>Rules</th>
+                            <th>Domain</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(rows_html)}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)

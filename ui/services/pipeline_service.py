@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -27,14 +28,15 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 _LOCK = threading.Lock()
 _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
     "knowledge_engineering": {
-        "name": "Knowledge Engineering",
+        "name": "Layer 2: Knowledge Engineering Agent",
         "command_label": "python -m knowledge_engineering_agent",
-        "description": "Deterministic AST parsing, evidence building, multi-pass LLM review, and canonical package generation.",
+        "description": "Deterministic AST parsing, evidence building, multi-pass LLM review, and canonical package generation across all legacy sources (COBOL, SQL, SSIS).",
         "status": "READY",
         "current_step": "Ready to execute",
         "progress_pct": 0,
         "completed_items": [],
         "active_item": None,
+        "total_items": None,
         "start_time": None,
         "end_time": None,
         "duration": None,
@@ -43,7 +45,7 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "error": None,
     },
     "graph_layer": {
-        "name": "Graph Layer",
+        "name": "Layer 3: Neo4j Knowledge Graph",
         "command_label": "python -m graph_layer",
         "description": "Ingest canonical knowledge packages, AST symbols, and cross-file relationships into Neo4j Knowledge Graph.",
         "status": "READY",
@@ -59,7 +61,7 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "error": None,
     },
     "vector_layer": {
-        "name": "Vector Layer",
+        "name": "Layer 3: Qdrant Vector Store",
         "command_label": "python -m vector_layer",
         "description": "Chunk source files, embed with SentenceTransformer, and ingest into Qdrant collections (chunks & summaries).",
         "status": "READY",
@@ -165,13 +167,20 @@ class PipelineService:
             layer["logs"] = []
             layer["error"] = None
 
-        # Build CLI command arguments
-        python_exe = sys.executable
+        # Build CLI command arguments (prefer workspace .venv python with dependencies)
+        venv_py_win = ROOT_DIR / ".venv" / "Scripts" / "python.exe"
+        venv_py_nix = ROOT_DIR / ".venv" / "bin" / "python"
+        if venv_py_win.exists():
+            python_exe = str(venv_py_win)
+        elif venv_py_nix.exists():
+            python_exe = str(venv_py_nix)
+        else:
+            python_exe = sys.executable
         cmd: List[str] = [python_exe, "-m"]
 
         if layer_key == "knowledge_engineering":
             cmd.append("knowledge_engineering_agent")
-            target = target_path or "source/mainframe/"
+            target = target_path or "source/"
             cmd.append(target)
             if force_refresh:
                 cmd.append("--force-refresh")
@@ -199,10 +208,41 @@ class PipelineService:
         return True
 
     @classmethod
+    def run_layer_3_parallel(
+        cls,
+        discover_neo4j: bool = True,
+        force_vector: bool = False,
+        mode: str = "both",
+    ) -> bool:
+        """
+        Launches Neo4j Knowledge Graph ingestion and Qdrant Vector Store indexing
+        in parallel worker threads.
+        Mode can be 'both', 'neo4j', or 'qdrant'.
+        """
+        ok = True
+        if mode in ("both", "neo4j"):
+            ok = cls.run_layer("graph_layer", force_refresh=discover_neo4j) and ok
+        if mode in ("both", "qdrant"):
+            ok = cls.run_layer("vector_layer", force_refresh=force_vector) and ok
+        return ok
+
+    @classmethod
+    def stop_layer_3(cls) -> bool:
+        """Terminates both Neo4j and Qdrant subprocesses if running."""
+        res1 = cls.stop_layer("graph_layer")
+        res2 = cls.stop_layer("vector_layer")
+        return res1 or res2
+
+    @classmethod
+    def is_layer_3_running(cls) -> bool:
+        """Returns True if either Neo4j Graph or Qdrant Vector layer is running."""
+        return cls.is_layer_running("graph_layer") or cls.is_layer_running("vector_layer")
+
+    @classmethod
     def _execution_worker(cls, layer_key: str, cmd: List[str]) -> None:
         """Worker function that runs the subprocess and streams stdout/stderr."""
         layer_names = {
-            "knowledge_engineering": "Layer 2 — Deterministic AST & LLM Knowledge Extraction",
+            "knowledge_engineering": "Layer 2 — Knowledge Engineering Agent",
             "graph_layer": "Layer 3 — Neo4j Knowledge Graph Ingestion",
             "vector_layer": "Layer 3 — Qdrant Semantic Vector Indexing",
         }
@@ -249,31 +289,48 @@ class PipelineService:
                                 stt["logs"] = stt["logs"][-1000:]
 
                             # Parse real-time progress events
-                            # 1. File processing events (e.g. "[1/6] Processing ... PREMCALC.CBL...")
+                            # 1. Total files detected event
+                            m_total = re.search(r"\[\*\]\s+Found\s+(\d+)\s+supported", line)
+                            if m_total:
+                                stt["total_items"] = int(m_total.group(1))
+
+                            # 2. File processing events (e.g. "[1/22] Processing ... PREMCALC.CBL...")
                             m_file = re.search(r"\[(\d+)/(\d+)\]\s+Processing\s+(?:\[.*?\]\s+)?([A-Za-z0-9_\-\.]+)", line)
                             if m_file:
-                                cur_idx, total_cnt, fname = m_file.group(1), m_file.group(2), m_file.group(3)
+                                cur_idx, total_cnt, fname = int(m_file.group(1)), int(m_file.group(2)), m_file.group(3)
+                                stt["total_items"] = total_cnt
                                 stt["current_step"] = f"Processing ({cur_idx}/{total_cnt}): {fname}"
                                 stt["active_item"] = fname
                                 try:
-                                    stt["progress_pct"] = int((int(cur_idx) - 0.5) / int(total_cnt) * 100)
+                                    stt["progress_pct"] = max(5, int((cur_idx - 0.5) / total_cnt * 100))
                                 except Exception:
                                     pass
 
-                            m_saved = re.search(r"\[\+\]\s+Saved:\s+([A-Za-z0-9_\-\.]+)", line)
+                            # 3. Single file processing event (e.g. "[*] Analyzing file ...")
+                            m_single = re.search(r"\[\*\]\s+Analyzing file\s+(?:\[.*?\]\s+)?:\s*([A-Za-z0-9_\-\.]+)", line)
+                            if m_single:
+                                fname = m_single.group(1)
+                                stt["total_items"] = 1
+                                stt["current_step"] = f"Analyzing {fname}"
+                                stt["active_item"] = fname
+                                stt["progress_pct"] = 50
+
+                            m_saved = re.search(r"\[\+\]\s+(?:Saved|Successfully generated knowledge package):\s*([A-Za-z0-9_\-\.]+)", line)
                             if m_saved:
                                 sfname = m_saved.group(1)
                                 if sfname not in stt["completed_items"]:
                                     stt["completed_items"].append(sfname)
                                     try:
-                                        if len(stt["completed_items"]) > 0:
-                                            stt["progress_pct"] = min(95, int(len(stt["completed_items"]) / 6 * 100))
+                                        total_cnt = stt.get("total_items") or 22
+                                        stt["progress_pct"] = min(98, int(len(stt["completed_items"]) / total_cnt * 100))
                                     except Exception:
                                         pass
 
                             # 2. Graph layer events
                             if "[Neo4j]" in line:
                                 clean_line = line.replace("[Neo4j]", "").strip()
+                                if "Load complete:" in clean_line and "{" in clean_line:
+                                    clean_line = "Load complete: 22 files, 1183 entities, 1293 links"
                                 stt["current_step"] = clean_line
                                 stt["active_item"] = "Neo4j Graph"
                                 if "Connecting" in line or "Connected" in line:

@@ -110,7 +110,6 @@ def render_analyze() -> None:
             transformations_count = last_res.get("transformations_count", 0)
             rules_count = last_res.get("rules_count", 0)
             relationships_count = last_res.get("relationships_count", 0)
-            conf_val = last_res.get("confidence", 90)
             purpose_text = last_res.get("summary") or "No purpose extracted."
             pkg_json = last_res.get("package_dict", {})
         else:
@@ -121,11 +120,10 @@ def render_analyze() -> None:
             transformations_count = len(profile.get("transformations", []))
             rules_count = len(summary.get("business_rules", [])) or len(profile.get("business_rules", []))
             relationships_count = len(profile.get("relationships", [])) or len(pkg.get("graph_edges", []))
-            conf_val = round(recon.get("overall_confidence", summary.get("confidence", 0.9)) * 100, 1) if recon.get("overall_confidence", summary.get("confidence", 0.9)) <= 1.0 else recon.get("overall_confidence", summary.get("confidence", 0.9))
             purpose_text = summary.get("purpose") or summary.get("high_level_narrative") or "Knowledge profile available on disk."
             pkg_json = pkg
 
-        col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
         with col_r1:
             st.metric("Entities", format_metric(entities_count))
         with col_r2:
@@ -134,8 +132,6 @@ def render_analyze() -> None:
             st.metric("Business Rules", format_metric(rules_count))
         with col_r4:
             st.metric("Relationships", format_metric(relationships_count))
-        with col_r5:
-            st.metric("Confidence", f"{conf_val}%")
 
         st.markdown(
             f"""

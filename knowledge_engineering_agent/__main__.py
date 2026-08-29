@@ -10,10 +10,10 @@ Usage:
     python -m knowledge_engineering_agent source/sql/PolicyCenter_Monoline.sql
 
     # Analyze an entire folder incrementally (skips cached files):
-    python -m knowledge_engineering_agent source/mainframe/
+    python -m knowledge_engineering_agent source/
 
     # Force re-analysis (bypass cache):
-    python -m knowledge_engineering_agent source/sql/ --force-refresh
+    python -m knowledge_engineering_agent source/ --force-refresh
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def main():
         print(f"[*] Analyzing file {tag}: {target_path.name}")
         pkg = agent.analyze_file(target_path, force_refresh=args.force_refresh)
         saved = agent.save_package(pkg, output_dir)
-        print(f"[+] Successfully generated knowledge package: {saved.name}")
+        print(f"[+] Saved: {saved.name}")
         print(f"    - Purpose: {pkg.summary.purpose}")
         print(f"    - Entities: {len(pkg.knowledge_profile.entities)}")
         print(f"    - Transformations: {len(pkg.knowledge_profile.transformations)}")
@@ -102,7 +102,17 @@ def main():
         print(f"    - Local Summary saved to: {summary_dir / f'{target_path.stem}_summary.md'}")
     elif target_path.is_dir():
         supported_exts = {".sql", ".dtsx", ".cbl", ".cob", ".cpy"}
-        files = [p for p in target_path.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts]
+        all_found = [p for p in target_path.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts]
+
+        # Deduplicate files with identical names prioritizing deeper specific folder paths
+        seen_names = set()
+        files = []
+        for p in sorted(all_found, key=lambda x: (len(str(x)), str(x)), reverse=True):
+            if p.name not in seen_names:
+                seen_names.add(p.name)
+                files.append(p)
+        files.sort(key=lambda x: (x.suffix.lower(), x.name.lower()))
+
         print(f"[*] Found {len(files)} supported legacy source files in {target_path}")
 
         for i, file_p in enumerate(files, 1):

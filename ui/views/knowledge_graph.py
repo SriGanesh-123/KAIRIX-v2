@@ -42,7 +42,7 @@ def render_knowledge_graph() -> None:
     ]
     scope_options.extend([f"File: {fn}" for fn in all_file_names])
 
-    # Auto-sanitize old session state if it contains old emoji prefixes
+    # Auto-sanitize old session state if it contains old prefixes
     if "kg_single_scope_select" in st.session_state:
         cur_scope = str(st.session_state["kg_single_scope_select"])
         if cur_scope not in scope_options:
@@ -61,7 +61,6 @@ def render_knowledge_graph() -> None:
 
     # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Refresh)
     col_search, col_scope, col_type, col_reset = st.columns([3.8, 3.2, 2.0, 1.0])
-
 
     with col_search:
         pre_search = st.session_state.pop("graph_search_term", None)
@@ -93,7 +92,7 @@ def render_knowledge_graph() -> None:
 
     with col_reset:
         st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
-        if st.button("Refresh", use_container_width=True, help="Refresh Graph"):
+        if st.button("🔄 Refresh", use_container_width=True, help="Refresh Graph"):
             st.session_state.pop("graph_override_subgraph", None)
             st.rerun()
 
@@ -103,81 +102,80 @@ def render_knowledge_graph() -> None:
     selected_node = None
     connected_edges = []
 
-    # Check for active lineage trace override
-    override_subgraph = st.session_state.get("graph_override_subgraph")
-    if override_subgraph and not search_query:
-        nodes = override_subgraph.get("nodes", [])
-        edges = override_subgraph.get("edges", [])
-        st.info(f"Showing active lineage trace subgraph ({len(nodes)} nodes, {len(edges)} edges). Click 'Refresh' to return to overview.")
-
-    # 1. Search Query active
-    elif search_query and search_query.strip():
-        search_results = GraphService.search_nodes(search_query.strip(), max_results=10)
-        if search_results:
-            node_names = [r.get("display_name") or r.get("id") for r in search_results]
-            sel_node_name = st.selectbox(
-                f"Found {len(search_results)} matching node(s):",
-                options=node_names,
-                key="search_res_select",
-            )
-
-            chosen = next((r for r in search_results if (r.get("display_name") == sel_node_name or r.get("id") == sel_node_name)), search_results[0])
-            node_id = chosen.get("id")
-
-            subgraph = GraphService.get_node_neighborhood(node_id, hops=1)
-            nodes = subgraph.get("nodes", [])
-            edges = subgraph.get("edges", [])
-            selected_node = chosen
+    with st.spinner("Loading Knowledge Graph..."):
+        # Check for active lineage trace override
+        override_subgraph = st.session_state.get("graph_override_subgraph")
+        if override_subgraph and not search_query:
+            nodes = override_subgraph.get("nodes", [])
+            edges = override_subgraph.get("edges", [])
+        elif search_query and search_query.strip():
+            search_res = GraphService.search_nodes(search_query.strip())
+            if search_res:
+                target_id = search_res[0].get("id")
+                neighborhood = GraphService.get_node_neighborhood(target_id, hops=2)
+                nodes = neighborhood.get("nodes", [])
+                edges = neighborhood.get("edges", [])
+                selected_node = search_res[0]
+            else:
+                st.info(f"No graph nodes found matching '{search_query}'.")
         else:
-            st.warning(f"No nodes found matching '{search_query}'. Showing full system graph.")
-            subgraph = GraphService.get_overview_subgraph()
-            nodes = subgraph.get("nodes", [])
-            edges = subgraph.get("edges", [])
+            # Resolve selected preset or single-file scope
+            if "COBOL" in selected_scope:
+                sub = GraphService.get_overview_subgraph(preset="cobol")
+            elif "SSIS" in selected_scope:
+                sub = GraphService.get_overview_subgraph(preset="ssis")
+            elif "SQL" in selected_scope:
+                sub = GraphService.get_overview_subgraph(preset="sql")
+            elif "File:" in selected_scope:
+                fn = selected_scope.split("File: ")[-1].strip()
+                sub = GraphService.get_file_subgraph(fn)
+            else:
+                sub = GraphService.get_overview_subgraph(preset=None)
 
-    # 2. Preset: COBOL
-    elif "COBOL Mainframe" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(preset="cobol")
-        nodes = subgraph.get("nodes", [])
-        edges = subgraph.get("edges", [])
+            nodes = sub.get("nodes", [])
+            edges = sub.get("edges", [])
 
-    # 3. Preset: SSIS
-    elif "SSIS ETL Pipeline" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(preset="ssis")
-        nodes = subgraph.get("nodes", [])
-        edges = subgraph.get("edges", [])
-
-    # 4. Preset: SQL
-    elif "SQL PolicyCenter" in selected_scope:
-        subgraph = GraphService.get_overview_subgraph(preset="sql")
-        nodes = subgraph.get("nodes", [])
-        edges = subgraph.get("edges", [])
-
-    # 5. Specific File Selected
-    elif selected_scope.startswith("File: ") or selected_scope.startswith(" "):
-        target_fn = selected_scope.replace("File: ", "").replace(" ", "").strip()
-        subgraph = GraphService.get_file_subgraph(target_fn)
-        nodes = subgraph.get("nodes", [])
-        edges = subgraph.get("edges", [])
-
-
-    # 6. Default Full System Graph
-    else:
-        subgraph = GraphService.get_overview_subgraph()
-        nodes = subgraph.get("nodes", [])
-        edges = subgraph.get("edges", [])
-
-
-    # Apply client-side node type filter if specified
-    if selected_type_filter != "(All Types)" and nodes:
+    # Filter by node type if selected
+    if selected_type_filter and selected_type_filter != "(All Types)":
         filtered_nodes = [
             n for n in nodes
             if str(n.get("entity_type", "")).lower() == selected_type_filter.lower()
-            or selected_type_filter.lower() in [l.lower() for l in n.get("_labels", [])]
+            or selected_type_filter.lower() in [lbl.lower() for lbl in n.get("_labels", [])]
+            or (selected_type_filter == "Program" and (".cbl" in str(n.get("id", "")).lower() or ".cob" in str(n.get("id", "")).lower()))
+            or (selected_type_filter == "Package" and ".dtsx" in str(n.get("id", "")).lower())
+            or (selected_type_filter == "Table" and ".sql" in str(n.get("id", "")).lower())
+            or (selected_type_filter == "BusinessRule" and "rule" in str(n.get("id", "")).lower())
         ]
         if filtered_nodes:
-            filtered_node_ids = {str(n.get("id") or n.get("file_name") or n.get("name")) for n in filtered_nodes}
+            filtered_node_ids = {str(n.get("id")) for n in filtered_nodes}
             nodes = filtered_nodes
             edges = [e for e in edges if str(e.get("source")) in filtered_node_ids and str(e.get("target")) in filtered_node_ids]
+
+    # Pre-resolve selected node for synchronized inspector & canvas focus
+    node_labels_dict = {}
+    focus_node_id = None
+    if nodes:
+        for n in sorted(nodes, key=lambda x: str(x.get("name") or x.get("file_name") or x.get("id", "")).lower()):
+            nid = str(n.get("id") or n.get("file_name") or n.get("name"))
+            lbl = str(n.get("name") or n.get("file_name") or nid).split(":")[-1]
+            node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
+
+        stored_select = st.session_state.get("canvas_node_inspect_select")
+        if stored_select and stored_select in node_labels_dict:
+            chosen_id = node_labels_dict[stored_select]
+            focus_node_id = chosen_id
+        elif selected_node:
+            chosen_id = selected_node.get("id")
+            focus_node_id = chosen_id
+        else:
+            chosen_id = list(node_labels_dict.values())[0]
+            focus_node_id = None  # Fit entire graph on initial load
+
+        selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
+        connected_edges = [
+            e for e in edges
+            if str(e.get("source")) == chosen_id or str(e.get("target")) == chosen_id
+        ]
 
     # Layout: Graph Canvas on Left (70%), Node Details on Right (30%)
     col_canvas, col_details = st.columns([70, 30])
@@ -197,7 +195,7 @@ def render_knowledge_graph() -> None:
             nodes=nodes,
             edges=edges,
             height=700,
-            selected_node_id=selected_node.get("id") if selected_node else None,
+            selected_node_id=focus_node_id,
         )
 
     with col_details:
@@ -210,16 +208,15 @@ def render_knowledge_graph() -> None:
             unsafe_allow_html=True,
         )
 
-        if nodes:
-            node_labels_dict = {}
-            for n in nodes:
-                nid = str(n.get("id") or n.get("file_name") or n.get("name"))
-                lbl = str(n.get("name") or n.get("file_name") or nid).split(":")[-1]
-                node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
+        if node_labels_dict:
+            current_chosen_label = next((k for k, v in node_labels_dict.items() if v == (selected_node.get("id") if selected_node else "")), list(node_labels_dict.keys())[0])
+            options_list = list(node_labels_dict.keys())
+            curr_idx = options_list.index(current_chosen_label) if current_chosen_label in options_list else 0
 
             chosen_label = st.selectbox(
                 "Select Node to Inspect:",
-                options=list(node_labels_dict.keys()),
+                options=options_list,
+                index=curr_idx,
                 key="canvas_node_inspect_select",
                 label_visibility="collapsed",
             )

@@ -6,6 +6,7 @@ AST reconciliations, and verifiable audit evidence in light mode without emojis.
 """
 from __future__ import annotations
 
+import html
 import streamlit as st
 from ui.services.source_service import SourceService
 from ui.components.metric_cards import format_metric
@@ -29,13 +30,11 @@ def render_evidence() -> None:
     if preselected and preselected in file_names:
         st.session_state["evidence_file_select"] = preselected
 
-    col_file, col_stats = st.columns([3, 2])
-    with col_file:
-        selected_file_name = st.selectbox(
-            "Select Artifact to Inspect Evidence:",
-            options=file_names,
-            key="evidence_file_select",
-        )
+    selected_file_name = st.selectbox(
+        "Select Artifact to Inspect Evidence:",
+        options=file_names,
+        key="evidence_file_select",
+    )
 
     file_info = SourceService.get_file_details(selected_file_name)
     pkg = SourceService.get_knowledge_package(selected_file_name)
@@ -43,20 +42,6 @@ def render_evidence() -> None:
     if not pkg or not file_info:
         st.warning(f"No knowledge package evidence found for {selected_file_name}.")
         return
-
-    with col_stats:
-        confidence = file_info.get("confidence", 90.0)
-        st.markdown(
-            f"""
-            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:0.8rem 1rem; margin-top:0.4rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#64748B; font-size:0.85rem; font-weight:600;">Overall Audit Confidence:</span>
-                    <span style="font-size:1.2rem; font-weight:700; color:#059669; font-family:'JetBrains Mono', monospace;">{confidence}%</span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
     # Tabs for Evidence Categories (no emojis)
     tab_rules, tab_entities, tab_transforms, tab_recon = st.tabs([
@@ -91,18 +76,48 @@ def render_evidence() -> None:
         entities = profile.get("entities", [])
         if entities:
             st.markdown(f"#### Extracted Entities & Data Types ({format_metric(len(entities))})")
-            ent_rows = [
-                {
-                    "Entity Name": e.get("name", "—"),
-                    "Type": e.get("entity_type", "Entity"),
-                    "Data Type": e.get("data_type", "—"),
-                    "Line Number": f"L{e.get('line_number')}" if e.get("line_number") else "—",
-                    "Parent Container": e.get("parent_entity", "—"),
-                    "Description": e.get("description", "—"),
-                }
-                for e in entities
-            ]
-            st.dataframe(ent_rows, use_container_width=True, hide_index=True)
+            ent_rows_html = []
+            for e in entities:
+                e_name = str(e.get("name") or "—")
+                e_type = str(e.get("entity_type") or "Entity")
+                e_dtype = str(e.get("data_type") or "—")
+                e_line = f"L{e.get('line_number')}" if e.get("line_number") else "—"
+                e_parent = str(e.get("parent_entity") or "—")
+                e_desc = str(e.get("description") or "—")
+                ent_rows_html.append(
+                    f"<tr>"
+                    f"<td><strong style='color:#0F172A;'>{html.escape(e_name)}</strong></td>"
+                    f"<td><span style='font-size:0.75rem; color:#475569;'>{html.escape(e_type)}</span></td>"
+                    f"<td><span class='tbl-code'>{html.escape(e_dtype)}</span></td>"
+                    f"<td><span style='font-family:monospace; color:#64748B;'>{html.escape(e_line)}</span></td>"
+                    f"<td><span style='font-size:0.82rem; color:#475569;'>{html.escape(e_parent)}</span></td>"
+                    f"<td><span style='font-size:0.82rem; color:#334155;'>{html.escape(e_desc)}</span></td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                f"""
+                <div class="kairix-table-wrapper" style="margin-top:0.4rem;">
+                    <div style="max-height: 480px; overflow-y: auto; overflow-x: auto;">
+                        <table class="kairix-table">
+                            <thead>
+                                <tr>
+                                    <th>Entity Name</th>
+                                    <th>Type</th>
+                                    <th>Data Type</th>
+                                    <th>Line</th>
+                                    <th>Parent</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {''.join(ent_rows_html)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
             st.info("No entity details available.")
 
