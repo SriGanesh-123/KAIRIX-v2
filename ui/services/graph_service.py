@@ -618,36 +618,34 @@ class GraphService:
                     "smooth": {"enabled": True, "type": "continuous", "roundness": 0.2},
                 })
 
+        # Live dynamic force-directed physics configuration
         options = {
             "physics": {
                 "enabled": True,
-                "forceAtlas2Based": {
-                    "gravitationalConstant": -60,
-                    "centralGravity": 0.03,
-                    "springLength": 85,
-                    "springConstant": 0.08,
-                    "damping": 0.7,
-                    "avoidOverlap": 0.85,
-                },
-                "maxVelocity": 25,
-                "minVelocity": 0.75,
                 "solver": "forceAtlas2Based",
+                "forceAtlas2Based": {
+                    "gravitationalConstant": -180,
+                    "centralGravity": 0.008,
+                    "springLength": 180,
+                    "springConstant": 0.05,
+                    "damping": 0.4,
+                    "avoidOverlap": 0.9,
+                },
+                "maxVelocity": 45,
+                "minVelocity": 0.75,
                 "stabilization": {
-                    "enabled": True,
-                    "iterations": 140,
-                    "updateInterval": 25,
-                    "fit": True,
+                    "enabled": False,
                 },
             },
             "interaction": {
                 "hover": True,
                 "hoverConnectedEdges": True,
                 "selectConnectedEdges": True,
-                "navigationButtons": False,
-                "keyboard": False,
+                "navigationButtons": True,
+                "keyboard": True,
                 "zoomView": True,
                 "dragView": True,
-                "dragNodes": True,
+                "dragNodes": False,
                 "tooltipDelay": 100,
             },
         }
@@ -753,30 +751,26 @@ class GraphService:
         }}
       }});
 
-      // When stabilization completes, freeze physics so graph stays perfectly stationary
-      function finalizeLayout() {{
+      function handleStabilized() {{
         if (typeof network !== 'undefined' && network !== null) {{
-          network.setOptions({{ physics: {{ enabled: false }} }});
           if (selNodeId) {{
             try {{
               network.focus(selNodeId, {{
-                scale: 1.05,
+                scale: 1.0,
                 animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }}
               }});
               network.selectNodes([selNodeId]);
             }} catch (err) {{
-              network.fit();
+              network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
             }}
           }} else {{
-            network.fit();
+            network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
           }}
         }}
       }}
 
-      network.once('stabilizationIterationsDone', finalizeLayout);
-
-      // Fallback timer to guarantee physics freezes and prevents drifting
-      setTimeout(finalizeLayout, 450);
+      network.once('stabilizationIterationsDone', handleStabilized);
+      network.once('stabilized', handleStabilized);
 
       window.addEventListener('resize', function() {{
         if (typeof network !== 'undefined' && network !== null) {{
@@ -786,9 +780,5 @@ class GraphService:
     }})();
   </script>
 </body>
-</html>
-"""
+</html>"""
         return html_content
-
-
-

@@ -236,7 +236,7 @@ class TestStructuredExtraction(unittest.TestCase):
         # Test Format B: Custom unrecognized field
         tpl_b = "| Table | Columns | Business Function |"
         res_b = self.engine.extract(selected_files=[sql], template=tpl_b)
-        self.assertEqual(res_b.records[0].values.get("Business Function"), "UNKNOWN / Not specified in SQL")
+        self.assertEqual(res_b.records[0].values.get("Business Function"), "UNKNOWN / Not specified")
         self.assertTrue(any("Business Function" in w for w in res_b.warnings))
 
     # ── Test 14: Invalid or empty template handling ────────────────────────────

@@ -55,6 +55,10 @@ CONCEPT_SYNONYMS = {
     # Singular Column concept (implies row-per-column)
     "column": "column",
     "field": "column",
+    "field_name": "column",
+    "field name": "column",
+    "variable": "column",
+    "variables": "columns",
     "attribute": "column",
     "col": "column",
     "column_name": "column",
@@ -109,7 +113,7 @@ CONCEPT_SYNONYMS = {
     "with": "cte",
     "common table expression": "cte",
 
-    # Transformation / Expression
+    # Transformation / Expression / Business Rule
     "transformation": "transformation",
     "transformations": "transformation",
     "expression": "transformation",
@@ -118,26 +122,123 @@ CONCEPT_SYNONYMS = {
     "derived": "transformation",
     "derived_column": "transformation",
     "calculation": "transformation",
+    "calculations": "transformation",
     "logic": "transformation",
+    "compute": "transformation",
+    "rule": "transformation",
+    "business_rule": "transformation",
+    "business rule": "transformation",
+    "rules": "transformation",
+
+    # COBOL concepts
+    "program": "program",
+    "programs": "program",
+    "program_id": "program",
+    "program id": "program",
+    "program_name": "program",
+    "program name": "program",
+    "cbl_program": "program",
+    "cbl": "program",
+    "section": "section",
+    "sections": "section",
+    "division": "section",
+    "divisions": "section",
+    "section_name": "section",
+    "section name": "section",
+    "pic": "data_type",
+    "picture": "data_type",
+    "pic_clause": "data_type",
+    "pic clause": "data_type",
+    "group_level": "group_level",
+    "group level": "group_level",
+    "level": "group_level",
+    "level_number": "group_level",
+    "record_group": "group_level",
+    "copybook": "copybook",
+    "copybooks": "copybook",
+    "copy": "copybook",
+    "cpy": "copybook",
+    "include": "copybook",
+
+    # SSIS concepts
+    "package": "package",
+    "packages": "package",
+    "package_name": "package",
+    "package name": "package",
+    "dtsx": "package",
+    "task": "task",
+    "tasks": "task",
+    "data_flow": "task",
+    "data flow": "task",
+    "data_flow_task": "task",
+    "data flow task": "task",
+    "executable": "task",
+    "executables": "task",
+    "source_table": "source_table",
+    "source table": "source_table",
+    "source_query": "source_table",
+    "destination_table": "destination_table",
+    "destination table": "destination_table",
+    "target_table": "destination_table",
+    "target table": "destination_table",
+    "target": "destination_table",
+    "destination": "destination_table",
+    "column_mapping": "column_mapping",
+    "column mapping": "column_mapping",
+    "mapping": "column_mapping",
+    "mappings": "column_mapping",
+    "server": "database",
+    "server_name": "database",
+    "server name": "database",
+    "component": "task",
+    "component_name": "task",
+    "component name": "task",
+    "record_group": "table",
+    "record group": "table",
+    "connection_manager": "database",
+    "connection manager": "database",
+    "connection": "database",
+    "server": "database",
 }
 
 
 def normalize_concept(field_name: str) -> str:
     """
-    Normalizes a user-supplied field name string to its underlying SQL semantic concept.
-    Falls back to 'custom' if the field is not an AST concept.
+    Normalizes a user-supplied field name string to its underlying semantic concept.
+    Supports composite labels (e.g. 'Schema / Division', 'Table / Entity', 'Field / Column'),
+    parentheses (e.g. 'Data Type (PIC)'), and falls back to 'custom'.
     """
     clean_name = field_name.strip().lower()
-    # Normalize underscores and hyphens to spaces/standard form
-    clean_name_spaced = re.sub(r"[_\-]+", " ", clean_name)
-    clean_name_underscored = re.sub(r"[\s\-]+", "_", clean_name)
+    # Strip parentheses content for matching e.g. "data type (pic)" -> "data type"
+    clean_no_paren = re.sub(r"\([^)]*\)", "", clean_name).strip()
 
+    # 1. Direct match
     if clean_name in CONCEPT_SYNONYMS:
         return CONCEPT_SYNONYMS[clean_name]
+    if clean_no_paren in CONCEPT_SYNONYMS:
+        return CONCEPT_SYNONYMS[clean_no_paren]
+
+    # 2. Normalize underscores and hyphens
+    clean_name_spaced = re.sub(r"[_\-]+", " ", clean_name).strip()
+    clean_name_underscored = re.sub(r"[\s\-]+", "_", clean_name).strip()
+
     if clean_name_spaced in CONCEPT_SYNONYMS:
         return CONCEPT_SYNONYMS[clean_name_spaced]
     if clean_name_underscored in CONCEPT_SYNONYMS:
         return CONCEPT_SYNONYMS[clean_name_underscored]
+
+    # 3. Check for composite labels e.g. "Schema / Division", "Table / Entity", "Field / Column", "Transformation / Rule"
+    if "/" in clean_name or " or " in clean_name or " & " in clean_name or "\\" in clean_name:
+        sub_tokens = [s.strip() for s in re.split(r"[/\\&]|\bor\b", clean_name) if s.strip()]
+        for sub in sub_tokens:
+            sub_c = normalize_concept(sub)
+            if sub_c != "custom":
+                return sub_c
+
+    # 4. Check substring matches for standard concepts (longest tokens first)
+    for token, concept in sorted(CONCEPT_SYNONYMS.items(), key=lambda x: -len(x[0])):
+        if len(token) >= 3 and token in clean_name:
+            return concept
 
     return "custom"
 

@@ -2,15 +2,18 @@
 Deterministic Structured Extraction Engine for KAIRIX.
 
 Extracts tables, schemas, databases, column ownership, aliases, CTEs,
-and transformations from SQL AST without LLM hallucinations.
+COBOL records, fields, PIC clauses, formulas, copybooks, and SSIS data flows
+without LLM hallucinations.
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+import xml.etree.ElementTree as ET
 
 import sqlglot
 from sqlglot import exp
@@ -35,13 +38,23 @@ logger = logging.getLogger("kairix.investigation.structured_extractor")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SQL_DIR = PROJECT_ROOT / "source" / "sql"
 
-# Fast in-memory cache for parsed SQL files: (file_path, mtime) -> List[ExtractedTableInfo]
+# Search paths across all supported technologies
+SEARCH_DIRECTORIES = [
+    PROJECT_ROOT / "source" / "sql",
+    PROJECT_ROOT / "source" / "mainframe" / "cobol",
+    PROJECT_ROOT / "source" / "mainframe",
+    PROJECT_ROOT / "source" / "ssis" / "packages",
+    PROJECT_ROOT / "source" / "ssis",
+]
+
+# Fast in-memory cache for parsed files: (file_path, mtime) -> List[ExtractedTableInfo]
 _PARSED_CACHE: Dict[Tuple[str, float], List[ExtractedTableInfo]] = {}
 
 
 class StructuredExtractionEngine:
     """
-    Core deterministic SQL metadata and structured template extraction engine.
+    Core deterministic metadata and structured template extraction engine
+    supporting SQL AST, COBOL programs/variables, and SSIS data flows.
     """
 
     def __init__(self, sql_dir: Optional[Path] = None):
@@ -54,12 +67,12 @@ class StructuredExtractionEngine:
         on_progress: Optional[Callable[[str, str], None]] = None,
     ) -> StructuredExtractionResult:
         """
-        Execute deterministic structured extraction on selected SQL files against a template.
+        Execute deterministic structured extraction on selected files against a user template.
 
         Args:
-            selected_files: List of SQL file names or paths (or single file name/path/raw SQL).
-            template: User-defined template string (e.g. '| Schema | Database | Table | Columns |')
-                      or list of field names, or ParsedTemplate.
+            selected_files: List of file names or paths (or single file name/path/raw text).
+            template: User-defined template string (e.g. '| Schema | Database | Table | Columns |',
+                      or list of field names, or ParsedTemplate).
             on_progress: Optional progress callback receiving (stage, message).
 
         Returns:
@@ -87,7 +100,7 @@ class StructuredExtractionEngine:
                 template_fields=template_field_names,
                 selected_files=[],
                 records=[],
-                warnings=["No SQL files were selected for structured extraction."],
+                warnings=["No source files were selected for structured extraction."],
                 confidence=0.0,
                 execution_time_sec=time.perf_counter() - t_start,
             )
@@ -98,20 +111,37 @@ class StructuredExtractionEngine:
 
         total_files = len(file_list)
         for idx, file_item in enumerate(file_list, start=1):
-            if on_progress:
-                on_progress("parsing", f"Parsing SQL AST for ({idx}/{total_files}): {Path(file_item).name}...")
-
-            file_path, raw_sql = self._resolve_file_content(file_item)
-            if raw_sql is None:
+            file_path, raw_content = self._resolve_file_content(file_item)
+            if raw_content is None:
                 warnings.append(f"Source file '{file_item}' could not be found or read.")
                 continue
 
             display_name = Path(file_item).name if file_path else file_item
-            table_infos, file_warnings, file_evidence = self._extract_tables_and_columns(
-                source_file=display_name,
-                raw_sql=raw_sql,
-                file_path=file_path,
-            )
+            ext = Path(display_name).suffix.lower()
+
+            if on_progress:
+                on_progress("parsing", f"Extracting AST & metadata ({idx}/{total_files}): {display_name}...")
+
+            # Route by file type
+            if ext in (".cbl", ".cob", ".cpy"):
+                table_infos, file_warnings, file_evidence = self._extract_cobol_entities(
+                    source_file=display_name,
+                    raw_text=raw_content,
+                    file_path=file_path,
+                )
+            elif ext in (".dtsx", ".xml"):
+                table_infos, file_warnings, file_evidence = self._extract_ssis_entities(
+                    source_file=display_name,
+                    raw_text=raw_content,
+                    file_path=file_path,
+                )
+            else:
+                table_infos, file_warnings, file_evidence = self._extract_tables_and_columns(
+                    source_file=display_name,
+                    raw_sql=raw_content,
+                    file_path=file_path,
+                )
+
             all_table_infos.extend(table_infos)
             warnings.extend(file_warnings)
             source_evidence[display_name] = file_evidence
@@ -120,12 +150,12 @@ class StructuredExtractionEngine:
         for field in parsed_template.fields:
             if field.concept == "custom":
                 warnings.append(
-                    f"Template field '{field.raw_name}' is not an AST concept in SQL; populated with 'UNKNOWN / Not specified in SQL'."
+                    f"Template field '{field.raw_name}' is not recognized as a known AST concept; populated with 'UNKNOWN / Not specified'."
                 )
 
         # 4. Map extracted table infos into user-defined template records
         if on_progress:
-            on_progress("mapping", "Mapping extracted AST entities to requested template structure...")
+            on_progress("mapping", "Mapping extracted entities to requested template structure...")
 
         records = self._map_to_template_records(
             table_infos=all_table_infos,
@@ -137,7 +167,7 @@ class StructuredExtractionEngine:
         if not records:
             confidence = 0.0
         elif any(rec.confidence < 0.9 for rec in records) or any("error" in w.lower() for w in warnings):
-            confidence = 0.85
+            confidence = 0.88
 
         if on_progress:
             on_progress("complete", f"Structured extraction complete. Generated {len(records)} records.")
@@ -153,11 +183,11 @@ class StructuredExtractionEngine:
             execution_time_sec=round(time.perf_counter() - t_start, 3),
         )
 
-    # ── Internal Extraction Logic ─────────────────────────────────────────────
+    # ── File Resolution ───────────────────────────────────────────────────────
 
     def _resolve_file_content(self, file_item: str) -> Tuple[Optional[Path], Optional[str]]:
-        """Resolves file item to (Path, content) or (None, raw_sql)."""
-        # 1. Check direct path
+        """Resolves file item across SQL, COBOL, and SSIS source folders."""
+        # 1. Direct path check
         p = Path(file_item)
         if p.exists() and p.is_file():
             try:
@@ -166,29 +196,32 @@ class StructuredExtractionEngine:
                 logger.error("Error reading file %s: %s", p, e)
                 return None, None
 
-        # 2. Check in self.sql_dir
-        in_sql_dir = self.sql_dir / file_item
-        if in_sql_dir.exists() and in_sql_dir.is_file():
-            try:
-                return in_sql_dir, in_sql_dir.read_text(encoding="utf-8-sig", errors="ignore")
-            except Exception as e:
-                logger.error("Error reading file %s: %s", in_sql_dir, e)
-                return None, None
+        # 2. Check across search directories
+        for s_dir in SEARCH_DIRECTORIES:
+            candidate = s_dir / file_item
+            if candidate.exists() and candidate.is_file():
+                try:
+                    return candidate, candidate.read_text(encoding="utf-8-sig", errors="ignore")
+                except Exception as e:
+                    logger.error("Error reading file %s: %s", candidate, e)
+                    return None, None
 
-        # 3. Check in project source/sql
-        root_sql = PROJECT_ROOT / "source" / "sql" / file_item
-        if root_sql.exists() and root_sql.is_file():
-            try:
-                return root_sql, root_sql.read_text(encoding="utf-8-sig", errors="ignore")
-            except Exception as e:
-                logger.error("Error reading file %s: %s", root_sql, e)
-                return None, None
+            # Also check by base name inside search directory
+            candidate_base = s_dir / Path(file_item).name
+            if candidate_base.exists() and candidate_base.is_file():
+                try:
+                    return candidate_base, candidate_base.read_text(encoding="utf-8-sig", errors="ignore")
+                except Exception as e:
+                    logger.error("Error reading file %s: %s", candidate_base, e)
+                    return None, None
 
-        # 4. If string contains SQL keywords, treat as raw SQL string
+        # 3. If string contains SQL keywords, treat as raw SQL string
         if any(kw in file_item.upper() for kw in ["SELECT", "FROM", "INSERT", "UPDATE", "CREATE", "WITH"]):
             return None, file_item
 
         return None, None
+
+    # ── SQL AST Extraction ────────────────────────────────────────────────────
 
     def _extract_tables_and_columns(
         self,
@@ -197,10 +230,8 @@ class StructuredExtractionEngine:
         file_path: Optional[Path] = None,
     ) -> Tuple[List[ExtractedTableInfo], List[str], List[str]]:
         """
-        Parses SQL using SQLGlot AST and builds ExtractedTableInfo records
-        with precise column-to-table ownership resolution.
+        Parses SQL using SQLGlot AST and builds ExtractedTableInfo records.
         """
-        # Check cache if path is available
         if file_path:
             try:
                 mtime = file_path.stat().st_mtime
@@ -218,163 +249,29 @@ class StructuredExtractionEngine:
         clean_sql = remove_comments(raw_sql)
         sqlglot_sql = prepare_for_sqlglot(clean_sql)
 
-        # Parse AST with SQLGlot T-SQL dialect
-        expressions: List[Any] = []
         try:
-            expressions = sqlglot.parse(sqlglot_sql, read="tsql")
-        except Exception as err:
-            warnings.append(f"SQLGlot parser notice for {source_file}: {err}. Using fallback expression parser.")
+            statements = sqlglot.parse(sqlglot_sql, read="tsql")
+        except Exception as e:
             try:
-                expressions = sqlglot.parse(clean_sql, read="tsql", error_level=sqlglot.ErrorLevel.IGNORE)
-            except Exception:
-                expressions = []
+                statements = sqlglot.parse(clean_sql)
+            except Exception as e2:
+                warnings.append(f"SQLGlot parse warning in '{source_file}': {e2}")
+                return self._fallback_regex_sql_extraction(source_file, raw_sql)
 
-        if not expressions:
-            warnings.append(f"No executable SQL statements found in {source_file}.")
-            return [], warnings, evidence
-
-        # Extract CTE names across all expressions
-        global_cte_names: Set[str] = set()
-        for expr in expressions:
-            if expr is None:
-                continue
-            for cte in expr.find_all(exp.CTE):
-                if cte.alias:
-                    global_cte_names.add(cte.alias.strip().lower())
-
-        # Collect data per statement/scope
-        for statement_idx, expr in enumerate(expressions, start=1):
-            if expr is None:
+        for stmt in statements:
+            if stmt is None:
                 continue
 
-            # 1. Collect all tables referenced in this expression
-            # Maps table_key -> ExtractedTableInfo
-            stmt_tables: Dict[str, ExtractedTableInfo] = {}
-            # Maps alias (lower) -> table_key
-            alias_to_table_key: Dict[str, str] = {}
-            # Maps raw table name (lower) -> table_key
-            name_to_table_key: Dict[str, str] = {}
+            try:
+                stmt_tables = self._process_sql_statement(stmt, source_file, raw_sql)
+                extracted_tables.extend(stmt_tables)
+            except Exception as e:
+                logger.debug("Statement parse note in %s: %s", source_file, e)
 
-            # Check DML targets (INSERT INTO, UPDATE, DELETE)
-            for ins in expr.find_all(exp.Insert):
-                if ins.this and isinstance(ins.this, exp.Table):
-                    t_info = self._build_table_info(ins.this, source_file, clean_sql, "INSERT")
-                    k = self._table_key(t_info)
-                    stmt_tables[k] = t_info
-                    if t_info.alias:
-                        alias_to_table_key[t_info.alias.lower()] = k
-                    name_to_table_key[t_info.table_name.lower()] = k
+        if not extracted_tables:
+            return self._fallback_regex_sql_extraction(source_file, raw_sql)
 
-            for upd in expr.find_all(exp.Update):
-                if upd.this and isinstance(upd.this, exp.Table):
-                    t_info = self._build_table_info(upd.this, source_file, clean_sql, "UPDATE")
-                    k = self._table_key(t_info)
-                    stmt_tables[k] = t_info
-                    if t_info.alias:
-                        alias_to_table_key[t_info.alias.lower()] = k
-                    name_to_table_key[t_info.table_name.lower()] = k
-
-            # Collect FROM and JOIN tables
-            for tbl in expr.find_all(exp.Table):
-                # Ignore subquery aliases or raw functions that parse as Table
-                t_name = clean_identifier(tbl.this.name if tbl.this else tbl.sql(dialect="tsql"))
-                if not t_name:
-                    continue
-
-                # Skip if already captured in DML
-                t_info = self._build_table_info(tbl, source_file, clean_sql, "SELECT")
-                k = self._table_key(t_info)
-                if k not in stmt_tables:
-                    stmt_tables[k] = t_info
-
-                if t_info.alias:
-                    alias_to_table_key[t_info.alias.lower()] = k
-                name_to_table_key[t_info.table_name.lower()] = k
-
-            # Collect JOIN conditions and record them on tables
-            for join_expr in expr.find_all(exp.Join):
-                join_sql = clean_identifier(join_expr.sql(dialect="tsql"))
-                if join_expr.this and isinstance(join_expr.this, exp.Table):
-                    j_info = self._build_table_info(join_expr.this, source_file, clean_sql, "JOIN")
-                    jk = self._table_key(j_info)
-                    if jk in stmt_tables:
-                        stmt_tables[jk].joins.append(join_sql)
-
-            # 2. Extract and associate Column references to Tables
-            all_cols = list(expr.find_all(exp.Column))
-            for col in all_cols:
-                col_name = clean_identifier(col.this.name if col.this else col.sql(dialect="tsql"))
-                if not col_name:
-                    continue
-
-                table_qualifier = clean_identifier(col.table) if col.table else None
-
-                if table_qualifier:
-                    # Qualified column: e.g. p.policy_id or Policy.policy_id
-                    t_key = alias_to_table_key.get(table_qualifier.lower()) or name_to_table_key.get(table_qualifier.lower())
-                    if t_key and t_key in stmt_tables:
-                        if col_name not in stmt_tables[t_key].columns:
-                            stmt_tables[t_key].columns.append(col_name)
-                    else:
-                        # Qualifier not directly in stmt_tables (could be outer reference or CTE)
-                        # Find closest matching table
-                        matched = False
-                        for k, t_obj in stmt_tables.items():
-                            if (t_obj.alias and t_obj.alias.lower() == table_qualifier.lower()) or (
-                                t_obj.table_name.lower() == table_qualifier.lower()
-                            ):
-                                if col_name not in t_obj.columns:
-                                    t_obj.columns.append(col_name)
-                                matched = True
-                                break
-                        if not matched:
-                            # Attach as ambiguous column
-                            for t_obj in stmt_tables.values():
-                                if col_name not in t_obj.ambiguous_columns:
-                                    t_obj.ambiguous_columns.append(col_name)
-                else:
-                    # Unqualified column: e.g. status
-                    if len(stmt_tables) == 1:
-                        # Exactly 1 table in scope -> unambiguously belongs to this table
-                        single_t = list(stmt_tables.values())[0]
-                        if col_name not in single_t.columns:
-                            single_t.columns.append(col_name)
-                    elif len(stmt_tables) > 1:
-                        # Multiple tables in scope -> mark as ambiguous across candidate tables
-                        # Also place in primary FROM table with ambiguous notation
-                        primary_t = list(stmt_tables.values())[0]
-                        if col_name not in primary_t.columns:
-                            primary_t.columns.append(col_name)
-                        if col_name not in primary_t.ambiguous_columns:
-                            primary_t.ambiguous_columns.append(col_name)
-
-            # 3. Extract derived column transformations (CASE expressions, functions with alias)
-            for select in expr.find_all(exp.Select):
-                for sel_expr in select.expressions:
-                    if isinstance(sel_expr, exp.Alias):
-                        alias_name = clean_identifier(sel_expr.alias)
-                        inner_sql = sel_expr.this.sql(dialect="tsql")
-                        if isinstance(sel_expr.this, (exp.Case, exp.Anonymous, exp.Func, exp.Binary, exp.Cast)):
-                            derived_info = {
-                                "alias": alias_name,
-                                "expression": inner_sql,
-                                "type": sel_expr.this.__class__.__name__,
-                            }
-                            # Attach to primary table in this select
-                            if stmt_tables:
-                                list(stmt_tables.values())[0].derived_columns.append(derived_info)
-
-            # Add to extracted_tables list
-            for t_info in stmt_tables.values():
-                extracted_tables.append(t_info)
-                evidence.append(
-                    f"[{source_file}:L{t_info.line_number or 1}] Table `{t_info.table_name}` "
-                    f"(Schema: {t_info.schema_name or 'Not specified'}, DB: {t_info.database_name or 'Not specified'}, "
-                    f"Alias: {t_info.alias or 'None'}) -> {len(t_info.columns)} columns: {', '.join(t_info.columns[:5])}"
-                    f"{'...' if len(t_info.columns) > 5 else ''}"
-                )
-
-        # Cache if file_path is valid
+        # Cache result if valid
         if file_path:
             try:
                 mtime = file_path.stat().st_mtime
@@ -382,66 +279,380 @@ class StructuredExtractionEngine:
             except Exception:
                 pass
 
+        evidence.append(f"Parsed {len(extracted_tables)} table entities from {source_file}")
         return extracted_tables, warnings, evidence
 
-    def _build_table_info(
+    def _process_sql_statement(
         self,
-        tbl: exp.Table,
+        stmt: exp.Expression,
         source_file: str,
-        clean_sql: str,
-        statement_type: str = "SELECT",
-    ) -> ExtractedTableInfo:
-        """Constructs an ExtractedTableInfo from a SQLGlot Table AST node."""
-        # Database / Catalog
-        db_catalog = clean_identifier(tbl.catalog) if tbl.catalog else None
-        if db_catalog == "":
-            db_catalog = None
+        raw_sql: str,
+    ) -> List[ExtractedTableInfo]:
+        """Processes a single SQLGlot AST statement."""
+        results: List[ExtractedTableInfo] = []
 
-        # Schema
-        schema_name = clean_identifier(tbl.db) if tbl.db else None
-        if schema_name == "":
-            schema_name = None
+        # Find CTEs
+        cte_names: Set[str] = set()
+        with_clause = stmt.find(exp.With)
+        if with_clause:
+            for cte in with_clause.find_all(exp.CTE):
+                cte_alias = cte.alias
+                if cte_alias:
+                    cte_names.add(clean_identifier(cte_alias))
 
-        # Table name
-        table_name = clean_identifier(tbl.this.name if tbl.this else tbl.sql(dialect="tsql"))
+        # Find derived expressions and calculations
+        derived_cols: List[Dict[str, str]] = []
+        for select in stmt.find_all(exp.Select):
+            for projection in select.expressions:
+                if isinstance(projection, exp.Alias):
+                    alias_name = clean_identifier(projection.alias)
+                    expr_sql = projection.this.sql()
+                    derived_cols.append({"alias": alias_name, "expression": expr_sql, "data_type": "Derived / Computed"})
+                elif isinstance(projection, exp.Case):
+                    derived_cols.append({"alias": "CASE_EXPR", "expression": projection.sql(), "data_type": "Conditional CASE"})
 
-        # Table alias
-        alias = clean_identifier(tbl.alias) if tbl.alias else None
-        if alias == "":
-            alias = None
+        # Find all tables in statement
+        tables = list(stmt.find_all(exp.Table))
+        for t in tables:
+            t_name = clean_identifier(t.name)
+            if not t_name:
+                continue
 
-        # Determine line number in clean_sql
-        line_no = 1
-        try:
-            # Search for table name in SQL to locate approximate line
-            pattern = re.compile(rf"\b{re.escape(table_name)}\b", re.IGNORECASE)
-            match = pattern.search(clean_sql)
-            if match:
-                line_no = line_number(clean_sql, match.start())
-        except Exception:
-            line_no = 1
+            schema_name = clean_identifier(t.db) if t.db else None
+            catalog_name = clean_identifier(t.catalog) if t.catalog else None
+            alias = clean_identifier(t.alias) if t.alias else None
+            is_cte = t_name in cte_names
 
-        return ExtractedTableInfo(
-            source_file=source_file,
-            table_name=table_name or "UNKNOWN_TABLE",
-            schema_name=schema_name,
-            database_name=db_catalog,
-            alias=alias,
-            columns=[],
-            derived_columns=[],
-            joins=[],
-            statement_type=statement_type,
-            line_number=line_no,
-            ambiguous_columns=[],
+            # Find columns referencing this table or its alias
+            cols_found: Set[str] = set()
+            ambiguous_cols: Set[str] = set()
+
+            for col in stmt.find_all(exp.Column):
+                col_name = clean_identifier(col.name)
+                col_table = clean_identifier(col.table) if col.table else None
+
+                if col_table:
+                    if col_table.lower() in (t_name.lower(), (alias or "").lower()):
+                        cols_found.add(col_name)
+                else:
+                    if len(tables) == 1:
+                        cols_found.add(col_name)
+                    else:
+                        ambiguous_cols.add(col_name)
+
+            # Find Joins
+            joins: List[str] = []
+            for join in stmt.find_all(exp.Join):
+                join_tbl = join.this
+                if isinstance(join_tbl, exp.Table) and clean_identifier(join_tbl.name).lower() == t_name.lower():
+                    on_clause = join.args.get("on")
+                    on_sql = on_clause.sql() if on_clause else "CROSS/NATURAL"
+                    joins.append(f"{join.kind or 'INNER'} JOIN ON {on_sql}")
+
+            results.append(
+                ExtractedTableInfo(
+                    source_file=source_file,
+                    table_name=t_name,
+                    schema_name=schema_name,
+                    database_name=catalog_name,
+                    alias=alias,
+                    columns=sorted(list(cols_found)),
+                    derived_columns=derived_cols,
+                    joins=joins,
+                    statement_type="CTE" if is_cte else "SELECT",
+                    line_number=1,
+                    ambiguous_columns=sorted(list(ambiguous_cols)),
+                )
+            )
+
+        return results
+
+    def _fallback_regex_sql_extraction(
+        self,
+        source_file: str,
+        raw_sql: str,
+    ) -> Tuple[List[ExtractedTableInfo], List[str], List[str]]:
+        """Fast regex-based fallback extraction when full SQLGlot parser encounters dialect edge cases."""
+        extracted: List[ExtractedTableInfo] = []
+        table_pattern = re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+(?:\[?([a-zA-Z0-9_#]+)\]?\.)?(?:\[?([a-zA-Z0-9_#]+)\]?\.)?\[?([a-zA-Z0-9_#]+)\]?(?:\s+(?:AS\s+)?\[?([a-zA-Z0-9_#]+)\]?)?", re.IGNORECASE)
+
+        for match in table_pattern.finditer(raw_sql):
+            p1, p2, p3, alias = match.groups()
+            if p2 and p3:
+                catalog, schema, table = p1, p2, p3
+            elif p1 and p3:
+                catalog, schema, table = None, p1, p3
+            else:
+                catalog, schema, table = None, None, p3 or p1
+
+            if not table or table.upper() in ("SELECT", "WHERE", "GROUP", "ORDER", "JOIN"):
+                continue
+
+            extracted.append(
+                ExtractedTableInfo(
+                    source_file=source_file,
+                    table_name=table,
+                    schema_name=schema,
+                    database_name=catalog,
+                    alias=alias,
+                    columns=["(Inferred from SQL text)"],
+                    derived_columns=[],
+                    joins=[],
+                    statement_type="SQL_QUERY",
+                    line_number=1,
+                )
+            )
+
+        return extracted, ["Extracted via AST regex fallback."], [f"Found {len(extracted)} tables via pattern scanner"]
+
+    # ── COBOL Parser Extraction ───────────────────────────────────────────────
+
+    def _extract_cobol_entities(
+        self,
+        source_file: str,
+        raw_text: str,
+        file_path: Optional[Path] = None,
+    ) -> Tuple[List[ExtractedTableInfo], List[str], List[str]]:
+        """
+        Parses COBOL source code and extracts Program ID, Divisions, Sections,
+        01 Record Groups, Variables, PIC Data Types, COMPUTE Formulas, and Copybooks.
+        """
+        warnings: List[str] = []
+        evidence: List[str] = []
+        extracted_entities: List[ExtractedTableInfo] = []
+
+        lines = raw_text.splitlines()
+
+        # 1. Extract PROGRAM-ID
+        program_id = Path(source_file).stem
+        prog_match = re.search(r"PROGRAM-ID\.\s*([A-Za-z0-9\-]+)", raw_text, re.IGNORECASE)
+        if prog_match:
+            program_id = prog_match.group(1).strip()
+
+        # 2. Extract Copybooks
+        copybooks = re.findall(r"\bCOPY\s+([A-Za-z0-9\-]+)", raw_text, re.IGNORECASE)
+
+        # 3. Track active division/section & record groups
+        current_division = "IDENTIFICATION DIVISION"
+        current_section = "GENERAL"
+        current_01_group = "WS-ROOT-RECORD"
+        group_fields: Dict[str, List[str]] = {}
+        group_types: Dict[str, Dict[str, str]] = {}
+        group_lines: Dict[str, int] = {}
+        computes: List[Dict[str, str]] = []
+
+        var_pattern = re.compile(
+            r"^\s*(?:[0-9]{6})?\s*([0-9]{2})\s+([A-Za-z0-9\-]+)(?:\s+PIC(?:TURE)?\s+(?:IS\s+)?([^\s\.\,]+))?",
+            re.IGNORECASE,
         )
 
-    def _table_key(self, t: ExtractedTableInfo) -> str:
-        """Unique key for deduplicating table occurrences in the same statement."""
-        db = t.database_name or ""
-        sch = t.schema_name or ""
-        tbl = t.table_name or ""
-        al = t.alias or ""
-        return f"{t.source_file}::{db}.{sch}.{tbl}#{al}".lower()
+        compute_pattern = re.compile(
+            r"\bCOMPUTE\s+([A-Za-z0-9\-]+)\s*=\s*([^\.\n]+)",
+            re.IGNORECASE,
+        )
+        move_pattern = re.compile(
+            r"\bMOVE\s+([^\s]+)\s+TO\s+([A-Za-z0-9\-\,\s]+)",
+            re.IGNORECASE,
+        )
+
+        for line_idx, line in enumerate(lines, start=1):
+            clean_l = line.strip()
+            if not clean_l or clean_l.startswith("*") or clean_l.startswith("/"):
+                continue
+
+            # Check division / section changes
+            if "DIVISION" in clean_l.upper():
+                current_division = clean_l.split(".")[0].strip()
+                continue
+            if "SECTION" in clean_l.upper():
+                current_section = clean_l.split(".")[0].strip()
+                continue
+
+            # Parse COMPUTE formulas
+            c_match = compute_pattern.search(clean_l)
+            if c_match:
+                target_var = c_match.group(1).strip()
+                expr = c_match.group(2).strip().rstrip(".")
+                computes.append({"alias": target_var, "expression": f"COMPUTE {target_var} = {expr}", "data_type": "COMPUTE Expression"})
+
+            # Parse MOVE transformations
+            m_match = move_pattern.search(clean_l)
+            if m_match:
+                src_val = m_match.group(1).strip()
+                tgt_val = m_match.group(2).strip().rstrip(".")
+                computes.append({"alias": tgt_val, "expression": f"MOVE {src_val} TO {tgt_val}", "data_type": "MOVE Statement"})
+
+            # Parse Variable declarations
+            v_match = var_pattern.match(line)
+            if v_match:
+                lvl = v_match.group(1).strip()
+                var_name = v_match.group(2).strip()
+                pic_type = v_match.group(3).strip() if v_match.group(3) else "GROUP RECORD"
+
+                if lvl == "01" or lvl == "77":
+                    current_01_group = var_name
+                    if current_01_group not in group_fields:
+                        group_fields[current_01_group] = []
+                        group_types[current_01_group] = {}
+                        group_lines[current_01_group] = line_idx
+                else:
+                    if current_01_group not in group_fields:
+                        group_fields[current_01_group] = []
+                        group_types[current_01_group] = {}
+                        group_lines[current_01_group] = line_idx
+
+                    group_fields[current_01_group].append(var_name)
+                    group_types[current_01_group][var_name] = f"PIC {pic_type}"
+
+        # If no 01 groups were found, create a default program container
+        if not group_fields:
+            group_fields[f"{program_id}-FIELDS"] = ["(Working-Storage Variables)"]
+            group_types[f"{program_id}-FIELDS"] = {}
+            group_lines[f"{program_id}-FIELDS"] = 1
+
+        for grp_name, f_list in group_fields.items():
+            derived_for_group: List[Dict[str, str]] = []
+            for f in f_list:
+                pic_val = group_types.get(grp_name, {}).get(f, "PIC X(10)")
+                c_expr = next((c["expression"] for c in computes if c["alias"] == f), None)
+                derived_for_group.append({
+                    "alias": f,
+                    "expression": c_expr or f"Declared as {pic_val}",
+                    "data_type": pic_val,
+                })
+
+            joins_list = [f"COPY {cb}" for cb in copybooks] if copybooks else []
+
+            extracted_entities.append(
+                ExtractedTableInfo(
+                    source_file=source_file,
+                    table_name=grp_name,
+                    schema_name=current_section or current_division,
+                    database_name=program_id,
+                    alias=f"PROGRAM: {program_id}",
+                    columns=f_list,
+                    derived_columns=derived_for_group or computes[:5],
+                    joins=joins_list,
+                    statement_type="COBOL_RECORD",
+                    line_number=group_lines.get(grp_name, 1),
+                )
+            )
+
+        evidence.append(f"Parsed COBOL program '{program_id}' with {len(extracted_entities)} record groups and {len(computes)} calculations.")
+        return extracted_entities, warnings, evidence
+
+    # ── SSIS XML Package Extraction ───────────────────────────────────────────
+
+    def _extract_ssis_entities(
+        self,
+        source_file: str,
+        raw_text: str,
+        file_path: Optional[Path] = None,
+    ) -> Tuple[List[ExtractedTableInfo], List[str], List[str]]:
+        """
+        Parses SSIS .dtsx XML packages and extracts Package metadata, Connection Managers,
+        Data Flow Tasks, OLE DB Source Queries, Destination Tables, and Column Mappings.
+        """
+        warnings: List[str] = []
+        evidence: List[str] = []
+        extracted_entities: List[ExtractedTableInfo] = []
+
+        try:
+            root = ET.fromstring(raw_text.encode("utf-8", errors="ignore"))
+        except Exception as e:
+            warnings.append(f"SSIS XML parse warning in '{source_file}': {e}")
+            return [], warnings, []
+
+        package_name = Path(source_file).stem
+        for k, v in root.attrib.items():
+            if "ObjectName" in k:
+                package_name = v
+                break
+
+        # 1. Extract Connection Managers
+        conn_managers: List[str] = []
+        for elem in root.iter():
+            tag_clean = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+            if tag_clean == "ConnectionManager":
+                for k, v in elem.attrib.items():
+                    if "ObjectName" in k:
+                        conn_managers.append(v)
+
+        # 2. Extract Data Flow Tasks, Source Tables, and Destination Tables
+        task_count = 0
+        for elem in root.iter():
+            tag_clean = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+
+            if tag_clean in ("Executable", "pipeline", "component"):
+                task_name = ""
+                for k, v in elem.attrib.items():
+                    if "ObjectName" in k or "name" in k:
+                        task_name = v
+                        break
+
+                # Check for SQL commands, table names, and column definitions
+                sql_command = ""
+                target_table = ""
+                output_cols: List[str] = []
+                derived_cols: List[Dict[str, str]] = []
+
+                for sub in elem.iter():
+                    sub_tag = sub.tag.split("}")[-1] if "}" in sub.tag else sub.tag
+
+                    if sub_tag == "property":
+                        p_name = sub.attrib.get("name", "")
+                        if p_name in ("SqlCommand", "SqlCommandVariable") and sub.text:
+                            sql_command = sub.text.strip()
+                        elif p_name in ("OpenRowset", "OpenRowsetVariable") and sub.text:
+                            target_table = sub.text.strip()
+
+                    if sub_tag in ("outputColumn", "inputColumn"):
+                        c_name = sub.attrib.get("name", "")
+                        d_type = sub.attrib.get("dataType", "String")
+                        if c_name and c_name not in output_cols:
+                            output_cols.append(c_name)
+                            derived_cols.append({
+                                "alias": c_name,
+                                "expression": f"Mapped in {task_name or 'DataFlow'}",
+                                "data_type": d_type,
+                            })
+
+                if task_name and (output_cols or target_table or sql_command):
+                    task_count += 1
+                    t_name = target_table or task_name
+                    extracted_entities.append(
+                        ExtractedTableInfo(
+                            source_file=source_file,
+                            table_name=t_name,
+                            schema_name=task_name or "Data Flow Task",
+                            database_name=package_name,
+                            alias=conn_managers[0] if conn_managers else "SSIS_PACKAGE",
+                            columns=output_cols or ["(SSIS Data Flow Stream)"],
+                            derived_columns=derived_cols or [{"alias": "SQL_SOURCE", "expression": sql_command[:100], "data_type": "SSIS Query"}] if sql_command else [],
+                            joins=[f"Connected via {c}" for c in conn_managers[:2]],
+                            statement_type="SSIS_DATAFLOW",
+                            line_number=task_count,
+                        )
+                    )
+
+        if not extracted_entities:
+            extracted_entities.append(
+                ExtractedTableInfo(
+                    source_file=source_file,
+                    table_name=package_name,
+                    schema_name="SSIS ETL Pipeline",
+                    database_name=conn_managers[0] if conn_managers else package_name,
+                    alias="SSIS_PACKAGE",
+                    columns=["(Data Flow Pipeline Components)"],
+                    derived_columns=[],
+                    joins=[f"Connection: {c}" for c in conn_managers],
+                    statement_type="SSIS_PACKAGE",
+                    line_number=1,
+                )
+            )
+
+        evidence.append(f"Parsed SSIS package '{package_name}' with {len(extracted_entities)} pipeline entities.")
+        return extracted_entities, warnings, evidence
 
     # ── Template Mapping Logic ────────────────────────────────────────────────
 
@@ -451,7 +662,7 @@ class StructuredExtractionEngine:
         parsed_template: ParsedTemplate,
     ) -> List[StructuredExtractionRecord]:
         """
-        Maps extracted table info objects into structured records matching
+        Maps extracted table/entity info objects into structured records matching
         the user's exact requested template fields.
         """
         records: List[StructuredExtractionRecord] = []
@@ -460,19 +671,19 @@ class StructuredExtractionEngine:
         if parsed_template.layout_mode == "row_per_column":
             # ── Row-Per-Column Layout ──────────────────────────────────────────
             for t in table_infos:
-                # If table has no columns, output at least 1 record for the table
                 col_list = t.columns if t.columns else ["(No direct column references)"]
                 for col_name in col_list:
-                    # Look up if this column has a derived transformation
                     trans_match = next((d["expression"] for d in t.derived_columns if d.get("alias") == col_name), None)
-                    values: Dict[str, Any] = {}
+                    dtype_match = next((d.get("data_type", "UNKNOWN") for d in t.derived_columns if d.get("alias") == col_name), None)
 
+                    values: Dict[str, Any] = {}
                     for field in parsed_template.fields:
                         val = self._resolve_field_value(
                             field=field,
                             table_info=t,
                             column_name=col_name,
                             transformation=trans_match,
+                            data_type=dtype_match,
                         )
                         values[field.raw_name] = val
 
@@ -482,7 +693,7 @@ class StructuredExtractionEngine:
                         continue
                     seen_rows.add(row_key)
 
-                    evidence_str = f"File: {t.source_file}, Line: {t.line_number or 1} | Table: {t.table_name}, Col: {col_name}"
+                    evidence_str = f"File: {t.source_file}, Line: {t.line_number or 1} | Entity: {t.table_name}, Col: {col_name}"
                     confidence = 0.85 if col_name in t.ambiguous_columns else 1.0
 
                     records.append(
@@ -503,7 +714,7 @@ class StructuredExtractionEngine:
             # ── Grouped-By-Table Layout ────────────────────────────────────────
             for t in table_infos:
                 values: Dict[str, Any] = {}
-                col_joined = ", ".join(t.columns) if t.columns else "Not specified in SQL"
+                col_joined = ", ".join(t.columns) if t.columns else "Not specified"
 
                 for field in parsed_template.fields:
                     val = self._resolve_field_value(
@@ -511,6 +722,7 @@ class StructuredExtractionEngine:
                         table_info=t,
                         column_name=col_joined,
                         transformation=None,
+                        data_type=None,
                     )
                     values[field.raw_name] = val
 
@@ -519,7 +731,7 @@ class StructuredExtractionEngine:
                     continue
                 seen_rows.add(row_key)
 
-                evidence_str = f"File: {t.source_file}, Line: {t.line_number or 1} | Table: {t.table_name} ({len(t.columns)} cols)"
+                evidence_str = f"File: {t.source_file}, Line: {t.line_number or 1} | Entity: {t.table_name} ({len(t.columns)} cols)"
                 confidence = 0.85 if bool(t.ambiguous_columns) else 1.0
 
                 records.append(
@@ -544,35 +756,36 @@ class StructuredExtractionEngine:
         table_info: ExtractedTableInfo,
         column_name: Optional[str] = None,
         transformation: Optional[str] = None,
+        data_type: Optional[str] = None,
     ) -> str:
-        """Resolves a single field value strictly based on deterministic SQL evidence."""
+        """Resolves a single field value strictly based on deterministic source evidence."""
         concept = field.concept
 
         if concept == "schema":
             return table_info.schema_name or "UNKNOWN / Not specified"
 
-        if concept == "database":
+        if concept in ("database", "program", "package"):
             return table_info.database_name or "UNKNOWN / Not specified"
 
-        if concept == "table":
+        if concept == "section":
+            return table_info.schema_name or "GENERAL SECTION"
+
+        if concept in ("table", "source_table", "destination_table"):
             return table_info.table_name
 
-        if concept in ("columns", "column"):
+        if concept in ("columns", "column", "column_mapping", "source_column"):
             return column_name or "Not specified"
 
-        if concept == "alias":
-            return table_info.alias or "None"
-
-        if concept == "column_alias":
-            return column_name or "None"
+        if concept in ("alias", "column_alias"):
+            return table_info.alias or column_name or "None"
 
         if concept == "source_file":
             return table_info.source_file
 
-        if concept == "joins":
+        if concept in ("joins", "copybook"):
             return "; ".join(table_info.joins) if table_info.joins else "None"
 
-        if concept == "transformation":
+        if concept in ("transformation", "task"):
             if transformation:
                 return transformation
             if table_info.derived_columns:
@@ -580,7 +793,10 @@ class StructuredExtractionEngine:
             return "Direct column reference"
 
         if concept == "data_type":
-            return "UNKNOWN / Not specified"
+            return data_type or "UNKNOWN / Not specified"
+
+        if concept == "group_level":
+            return "01" if table_info.statement_type == "COBOL_RECORD" else "N/A"
 
         if concept == "nullable":
             return "UNKNOWN / Not specified"
@@ -589,4 +805,4 @@ class StructuredExtractionEngine:
             return "Yes (CTE)" if table_info.statement_type == "CTE" else "No"
 
         # Fallback for custom / unrecognized user fields
-        return "UNKNOWN / Not specified in SQL"
+        return "UNKNOWN / Not specified"

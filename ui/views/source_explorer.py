@@ -209,12 +209,12 @@ def render_source_explorer() -> None:
             label_visibility="collapsed",
         )
     with col_quick:
-        if st.button("🔍 Investigate", use_container_width=True, key="btn_investigate_file"):
+        if st.button("Investigate", use_container_width=True, key="btn_investigate_file"):
             st.session_state["pending_investigation_query"] = f"Explain the business logic and dependencies in {selected_file_name}"
             st.session_state["navigate_to_page"] = "Investigation Agent"
             st.rerun()
     with col_del:
-        with st.popover("🗑️ Delete", use_container_width=True):
+        with st.popover("Delete", use_container_width=True):
             st.markdown(
                 f"""
                 <div style="font-weight: 700; font-size: 0.92rem; color: #DC2626; margin-bottom: 0.25rem;">
@@ -274,7 +274,7 @@ def render_source_explorer() -> None:
                 )
             with col_sum_dl:
                 st.download_button(
-                    "📥 Download Summary",
+                    "Download Summary",
                     data=summary_md,
                     file_name=f"{selected_file_name}_summary.md",
                     mime="text/markdown",

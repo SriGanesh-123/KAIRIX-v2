@@ -8,6 +8,7 @@ Provides:
 from __future__ import annotations
 
 import html
+import importlib
 import io
 import json
 import time
@@ -15,8 +16,22 @@ from typing import Any, Dict, List
 import pandas as pd
 import streamlit as st
 
+import investigation_agent.structured_models
+import investigation_agent.template_parser
+import investigation_agent.structured_extractor
+import ui.services.investigation_service
+import ui.services.source_service
+
+importlib.reload(investigation_agent.structured_models)
+importlib.reload(investigation_agent.template_parser)
+importlib.reload(investigation_agent.structured_extractor)
+importlib.reload(ui.services.investigation_service)
+importlib.reload(ui.services.source_service)
+
+from investigation_agent.structured_extractor import StructuredExtractionEngine
 from ui.components.answer_panel import render_answer_panel
 from ui.services.investigation_service import InvestigationService
+from ui.services.source_service import SourceService
 
 SAMPLE_QUESTIONS = [
     "How is earned premium calculated?",
@@ -27,13 +42,29 @@ SAMPLE_QUESTIONS = [
     "What business rules apply to commercial auto policy rating?",
 ]
 
-PRESET_TEMPLATES = [
-    "| Schema | Database | Table | Columns |",
-    "| Database | Table | Column | Data Type |",
-    "| Table | Column | Transformation | Source |",
-    "| Source File | Schema | Database | Table | Columns |",
-    "| Schema | Table | Column | Nullable | Data Type |",
-]
+PRESET_TEMPLATES: Dict[str, List[str]] = {
+    "SQL": [
+        "| Schema | Database | Table | Columns |",
+        "| Database | Table | Column | Data Type |",
+        "| Table | Column | Transformation | Source |",
+        "| Source File | Schema | Database | Table | Columns |",
+    ],
+    "COBOL": [
+        "| Program | Section | Field Name | Data Type (PIC) | Expression / Rule |",
+        "| Program | Record Group | Variable | Data Type | Copybook |",
+        "| Program | Target Variable | Formula / COMPUTE | Input Fields |",
+    ],
+    "SSIS": [
+        "| Package | Data Flow Task | Source Table | Destination Table | Column Mappings |",
+        "| Package | Connection Manager | Server | Database | Component Name |",
+        "| Package | Task | Source Column | Target Column | Transformation |",
+    ],
+    "ALL": [
+        "| Source File | Schema / Section | Table / Entity | Column / Field | Transformation / Rule |",
+        "| Program / Package / DB | Entity / Table | Column / Variable | Data Type |",
+        "| Source File | Table | Columns |",
+    ],
+}
 
 
 def render_investigation() -> None:
@@ -50,7 +81,7 @@ def render_investigation() -> None:
     if "extraction_history" not in st.session_state:
         st.session_state["extraction_history"] = []
     if "selected_template_preset" not in st.session_state:
-        st.session_state["selected_template_preset"] = PRESET_TEMPLATES[0]
+        st.session_state["selected_template_preset"] = PRESET_TEMPLATES["SQL"][0]
 
     # Auto-sanitize old emoji values from session state
     if "investigation_mode_selection" in st.session_state:
@@ -60,8 +91,10 @@ def render_investigation() -> None:
         else:
             st.session_state["investigation_mode_selection"] = "Inquiry & Lineage Investigation"
 
-    # Check for pre-loaded query from other views
+    # Check for pre-loaded query from other views or chips (set BEFORE widget is rendered)
     preloaded_query = st.session_state.pop("pending_investigation_query", None)
+    if preloaded_query:
+        st.session_state["main_investigation_input"] = preloaded_query
 
 
     # 2. Hero Header
@@ -105,17 +138,19 @@ def render_investigation() -> None:
 
 def _render_normal_investigation(preloaded_query: str | None) -> None:
     """Renders the standard AI inquiry Q&A flow."""
+    # Reset any stale background flags to guarantee UI is always interactive
+    st.session_state["is_investigating"] = False
+    st.session_state["active_investigation_task_id"] = None
+
     # Search Form
     with st.form(key="investigation_search_form", clear_on_submit=False):
         user_question = st.text_input(
             "Ask your question...",
-            value=preloaded_query or "",
+            value=st.session_state.get("main_investigation_input", ""),
             placeholder="Ask any question about code, calculations, or lineage (e.g. How is earned premium calculated?)...",
             label_visibility="collapsed",
             key="main_investigation_input",
-            disabled=st.session_state.get("is_investigating", False),
         )
-
 
         col_sub, col_clr = st.columns([4, 1.2])
         with col_sub:
@@ -123,13 +158,13 @@ def _render_normal_investigation(preloaded_query: str | None) -> None:
                 "Run Investigation",
                 type="primary",
                 use_container_width=True,
-                disabled=st.session_state.get("is_investigating", False),
             )
         with col_clr:
             clear = st.form_submit_button("Clear History", use_container_width=True)
 
     if clear:
         st.session_state["investigation_history"] = []
+        st.session_state["main_investigation_input"] = ""
         st.rerun()
 
     # Suggested Questions Grid
@@ -155,46 +190,24 @@ def _render_normal_investigation(preloaded_query: str | None) -> None:
 
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 
-    # Handle Query Submission & Background Execution
+    # Handle Query Submission & Direct Real-Time Execution
     target_query = (user_question.strip() if (submit and user_question) else (preloaded_query.strip() if preloaded_query else ""))
 
     if target_query:
-        task_id = InvestigationService.start_background_query(target_query)
-        st.session_state["active_investigation_task_id"] = task_id
-        st.rerun()
+        with st.status(f"🔍 Investigating: \"{target_query}\"...", expanded=True) as status_box:
+            def _progress_cb(stage: str, msg: str):
+                st.write(f"• {msg}")
 
-    # Check Active Background Task Status
-    active_task_id = st.session_state.get("active_investigation_task_id")
-    if active_task_id:
-        task_info = InvestigationService.get_task_status(active_task_id)
-        if task_info and task_info.get("task_type") != "extraction":
-            status = task_info.get("status")
-            question_text = task_info.get("question", "")
+            res = InvestigationService.query(target_query, on_progress=_progress_cb)
 
-            if status == "running":
-                with st.status(f"Investigating: \"{question_text}\"...", expanded=True) as status_box:
-                    logs = task_info.get("progress_log", [])
-                    for log_msg in logs:
-                        st.write(f"• {log_msg}")
-                    st.info("You can freely navigate between pages — investigation will continue in the background.")
-                
-                time.sleep(1.0)
-                st.rerun()
-
-            elif status == "complete":
-                result = task_info.get("result")
-                if result:
-                    st.session_state["investigation_history"].insert(0, result)
-                st.session_state["active_investigation_task_id"] = None
-                InvestigationService.clear_task(active_task_id)
+            if res.get("success"):
+                st.session_state["investigation_history"].insert(0, res)
+                status_box.update(label=f"✅ Investigation Complete: \"{target_query}\"", state="complete", expanded=False)
                 st.toast("Investigation complete!")
                 st.rerun()
-
-            elif status == "error":
-                err_msg = task_info.get("error", "Unknown error")
-                st.error(f"Investigation failed: {err_msg}")
-                st.session_state["active_investigation_task_id"] = None
-                InvestigationService.clear_task(active_task_id)
+            else:
+                status_box.update(label="❌ Investigation Failed", state="error", expanded=True)
+                st.error(f"Investigation failed: {res.get('error', 'Unknown error')}")
 
     # Render Investigation Results History
     history = st.session_state.get("investigation_history", [])
@@ -220,93 +233,174 @@ def _render_structured_extraction() -> None:
         """
         <div style="background-color: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px; padding: 0.85rem 1.1rem; margin-top: 0.6rem; margin-bottom: 1.4rem;">
             <div style="font-weight: 700; font-size: 0.95rem; color: #0F172A; margin-bottom: 0.2rem;">
-                Deterministic SQL AST Structured Extraction
+                Deterministic Multi-Source AST Structured Extraction
             </div>
             <div style="font-size: 0.84rem; color: #475569; line-height: 1.45;">
-                Select one or more SQL scripts, define any custom tabular template (e.g. <code>| Schema | Database | Table | Columns |</code>), and extract verified table-column architectures with line-anchored provenance.
+                Select legacy source files across <strong>SQL, COBOL, or SSIS</strong>, define or import any custom tabular template (from <strong>CSV / Excel</strong> or Markdown), and extract verified tabular schemas with line-anchored provenance.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # 1. Fetch available SQL files
+    # ── Step 1: Select Source Type ─────────────────────────────────────────────
+    st.markdown("##### 1. Select Source Type")
+    tech_categories = ["ALL Technologies", "SQL", "COBOL", "SSIS"]
+    selected_tech_label = st.radio(
+        "Source Technology Filter",
+        options=tech_categories,
+        index=0,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="struct_tech_filter",
+    )
+    raw_tech = "ALL" if "ALL" in selected_tech_label else selected_tech_label
+
+    # ── Step 2: Select Source File(s) in Selected Source ───────────────────────
     try:
-        available_files = InvestigationService.get_available_sql_files()
-    except (AttributeError, Exception):
-        from pathlib import Path
-        project_root = Path(__file__).resolve().parents[2]
-        sql_dir = project_root / "source" / "sql"
+        available_files = InvestigationService.get_available_source_files(raw_tech)
+    except Exception:
         available_files = []
-        if sql_dir.exists():
-            for p in sorted(sql_dir.glob("*.sql")):
-                try:
-                    text = p.read_text(encoding="utf-8-sig", errors="ignore")
-                    lines = len(text.splitlines())
-                    size_kb = round(p.stat().st_size / 1024, 1)
-                    available_files.append({"name": p.name, "path": str(p), "lines": lines, "size_kb": size_kb})
-                except Exception:
-                    available_files.append({"name": p.name, "path": str(p), "lines": 0, "size_kb": 0.0})
 
     if not available_files:
-        st.warning("No SQL files found in `source/sql/`. Please add SQL files to run structured extraction.")
+        try:
+            all_f = SourceService.get_all_source_files()
+            if raw_tech == "ALL" or not raw_tech:
+                available_files = all_f
+            else:
+                available_files = [f for f in all_f if f.get("technology", "").upper() == raw_tech.upper()]
+        except Exception:
+            available_files = []
+
+    if not available_files:
+        st.warning(f"No source files found for technology '{selected_tech_label}'. Please ensure source files exist in the workspace.")
         return
 
-    file_options = [f["name"] for f in available_files]
+    file_options = [f["file_name"] for f in available_files]
     file_label_map = {
-        f["name"]: f"{f['name']}  ({f['lines']} lines, {f['size_kb']} KB)"
+        f["file_name"]: f"[{f.get('technology', 'SOURCE')}] {f['file_name']}  ({f.get('total_lines', 0)} lines, {round(f.get('size_bytes', 0)/1024, 1)} KB)"
         for f in available_files
     }
 
+    st.markdown(f"##### 2. Select Source File(s) in {selected_tech_label} ({len(file_options)} available)")
 
-    # Step 1: SQL File Selection
-    st.markdown("##### 1. Select Source SQL File(s)")
-    default_selection = [file_options[0]] if file_options else []
+    widget_key = f"struct_files_sel_{raw_tech}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = list(file_options)
+
+    col_btn_all, col_btn_clr, _ = st.columns([1.3, 1.4, 5.3])
+    with col_btn_all:
+        if st.button("Select All", use_container_width=True, key=f"btn_struct_sel_all_{raw_tech}"):
+            st.session_state[widget_key] = list(file_options)
+            st.session_state[f"cleared_{widget_key}"] = False
+            st.rerun()
+    with col_btn_clr:
+        if st.button("Clear Selection", use_container_width=True, key=f"btn_struct_clr_sel_{raw_tech}"):
+            st.session_state[widget_key] = []
+            st.session_state[f"cleared_{widget_key}"] = True
+            st.rerun()
+
+    if not st.session_state.get(f"cleared_{widget_key}", False) and not st.session_state.get(widget_key):
+        st.session_state[widget_key] = list(file_options)
+
+    # Filter any stale selections
+    valid_selected = [f for f in st.session_state.get(widget_key, []) if f in file_options]
+    if valid_selected != st.session_state.get(widget_key, []):
+        st.session_state[widget_key] = valid_selected
+
     selected_file_names = st.multiselect(
-        "Choose SQL files to analyze:",
+        "Choose files to analyze:",
         options=file_options,
-        default=default_selection,
         format_func=lambda x: file_label_map.get(x, x),
-        help="Select one or more SQL files. Extraction will strictly analyze the selected files.",
+        help="Select one or more source files. Extraction will strictly analyze the selected files.",
+        key=widget_key,
     )
 
-    st.markdown("<div style='margin-top: 0.8rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 1.0rem;'></div>", unsafe_allow_html=True)
 
-    # Step 2: Output Template Specification
-    st.markdown("##### 2. Define Output Template / Headers")
-    
+    # ── Step 3: Define Output Template / Headers ───────────────────────────────
+    st.markdown("##### 3. Define Output Template / Headers")
+
+    # Option A: Import Template from CSV or Excel file
     st.markdown(
-        "<div style='font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem;'>Quick Preset Formats:</div>",
+        "<div style='font-size: 0.84rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;'>"
+        "📁 Option A: Import Custom Template / Headers from CSV or Excel (.csv, .xlsx, .xls)"
+        "</div>",
         unsafe_allow_html=True,
     )
 
-    preset_cols = st.columns(len(PRESET_TEMPLATES))
-    for i, preset in enumerate(PRESET_TEMPLATES):
+    uploaded_template_file = st.file_uploader(
+        "Upload CSV or Excel Template Schema",
+        type=["csv", "xlsx", "xls"],
+        key="struct_template_uploader",
+        label_visibility="collapsed",
+        help="Upload an existing CSV or Excel spreadsheet. KAIRIX will automatically extract the column headers and use them as your output extraction template.",
+    )
+
+    if uploaded_template_file is not None:
+        try:
+            if uploaded_template_file.name.lower().endswith(".csv"):
+                df_hdr = pd.read_csv(uploaded_template_file, nrows=0)
+            else:
+                df_hdr = pd.read_excel(uploaded_template_file, nrows=0)
+
+            imported_cols = [str(c).strip() for c in df_hdr.columns if str(c).strip() and not str(c).startswith("Unnamed:")]
+            if imported_cols:
+                pipe_template = "| " + " | ".join(imported_cols) + " |"
+                st.session_state["custom_template_input"] = pipe_template
+                st.session_state["last_imported_filename"] = uploaded_template_file.name
+                st.session_state["last_imported_cols"] = imported_cols
+
+                chips_html = "".join([f"<span class='source-pill pill-sql' style='margin: 0.15rem;'>{html.escape(c)}</span>" for c in imported_cols])
+                st.markdown(
+                    f"""
+                    <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 0.65rem 0.95rem; margin-top: 0.4rem; margin-bottom: 0.6rem;">
+                        <div style="color: #166534; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.35rem;">
+                            ✅ Successfully imported {len(imported_cols)} column fields from <code>{html.escape(uploaded_template_file.name)}</code>:
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.3rem;">{chips_html}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        except Exception as e:
+            st.error(f"Could not read column headers from uploaded file: {e}")
+
+    # Option B: Preset Formats
+    active_presets = PRESET_TEMPLATES.get(raw_tech, PRESET_TEMPLATES["SQL"])
+    st.markdown(
+        "<div style='font-size: 0.82rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.8rem; margin-bottom: 0.4rem;'>Option B: Quick Preset Formats & Custom Edit:</div>",
+        unsafe_allow_html=True,
+    )
+
+    preset_cols = st.columns(len(active_presets))
+    for i, preset in enumerate(active_presets):
         with preset_cols[i]:
-            if st.button(preset, key=f"tpl_preset_{i}", use_container_width=True):
+            if st.button(preset, key=f"tpl_preset_{raw_tech}_{i}", use_container_width=True):
                 st.session_state["custom_template_input"] = preset
                 st.rerun()
 
-    current_template = st.session_state.get("custom_template_input", PRESET_TEMPLATES[0])
+    default_tpl = active_presets[0] if active_presets else "| Schema | Database | Table | Columns |"
+    current_template = st.session_state.get("custom_template_input", default_tpl)
 
     template_input = st.text_input(
         "Template headers (Markdown pipe table or comma-separated):",
         value=current_template,
         key="custom_template_input",
         placeholder="| Schema | Database | Table | Columns |",
-        help="Arbitrary user-defined columns, e.g., | Schema | Database | Table | Columns | or | Database | Table | Column | Data Type |",
+        help="Arbitrary user-defined columns, e.g., | Schema | Database | Table | Columns | or | Program | Section | Field Name | Data Type |",
     )
 
-    st.markdown("<div style='margin-top: 0.6rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 0.8rem;'></div>", unsafe_allow_html=True)
 
-    # Step 3: Run Extraction Buttons
+    # ── Step 4: Run Extraction Buttons ─────────────────────────────────────────
     col_run, col_clear = st.columns([4, 1.2])
     with col_run:
         run_extract = st.button(
             "Extract Structured Metadata",
             type="primary",
             use_container_width=True,
-            disabled=not selected_file_names or not template_input.strip(),
+            disabled=not template_input.strip(),
             key="btn_run_extract",
         )
     with col_clear:
@@ -317,40 +411,43 @@ def _render_structured_extraction() -> None:
         st.session_state["active_extraction_task_id"] = None
         st.rerun()
 
-    # Step 4: Handle Extraction Trigger
-    if run_extract and selected_file_names and template_input.strip():
-        try:
-            task_id = InvestigationService.start_background_extraction(
-                selected_files=selected_file_names,
-                template_str=template_input.strip(),
-            )
-            st.session_state["active_extraction_task_id"] = task_id
-            st.rerun()
-        except Exception:
-            from investigation_agent.structured_extractor import StructuredExtractionEngine
-            engine = StructuredExtractionEngine()
-            res = engine.extract(
-                selected_files=selected_file_names,
-                template=template_input.strip(),
-            )
-            records_data = [rec.model_dump() for rec in res.records]
-            res_dict = {
-                "success": True,
-                "template_raw": res.template_raw,
-                "template_fields": res.template_fields,
-                "selected_files": res.selected_files,
-                "records": records_data,
-                "warnings": res.warnings,
-                "source_evidence": res.source_evidence,
-                "confidence": res.confidence,
-                "execution_time_sec": res.execution_time_sec,
-            }
-            st.session_state["extraction_history"].insert(0, res_dict)
-            st.toast("Structured extraction complete!")
-            st.rerun()
+    # ── Step 5: Handle Extraction Trigger ──────────────────────────────────────
+    if run_extract:
+        effective_files = selected_file_names if selected_file_names else file_options
+        effective_template = template_input.strip() if template_input.strip() else default_tpl
 
+        if not effective_files:
+            st.error("⚠️ No source files available to analyze.")
+        else:
+            with st.spinner(f"Extracting structured metadata across {len(effective_files)} source file(s)..."):
+                try:
+                    from investigation_agent.structured_extractor import StructuredExtractionEngine
+                    engine = StructuredExtractionEngine()
+                    res = engine.extract(
+                        selected_files=effective_files,
+                        template=effective_template,
+                    )
+                    records_data = [rec.model_dump() for rec in res.records]
+                    res_dict = {
+                        "success": True,
+                        "template_raw": res.template_raw,
+                        "template_fields": res.template_fields,
+                        "selected_files": res.selected_files,
+                        "records": records_data,
+                        "warnings": res.warnings,
+                        "source_evidence": res.source_evidence,
+                        "confidence": res.confidence,
+                        "execution_time_sec": res.execution_time_sec,
+                    }
+                    if "extraction_history" not in st.session_state:
+                        st.session_state["extraction_history"] = []
+                    st.session_state["extraction_history"].insert(0, res_dict)
+                    st.toast(f"Structured extraction complete! Generated {len(records_data)} records.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Structured extraction encountered an error: {e}")
 
-    # Step 5: Check Active Extraction Task
+    # ── Step 6: Render Extraction Results ──────────────────────────────────────
     active_ext_id = st.session_state.get("active_extraction_task_id")
     if active_ext_id:
         task_info = InvestigationService.get_task_status(active_ext_id)

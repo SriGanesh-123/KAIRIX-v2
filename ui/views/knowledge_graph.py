@@ -185,7 +185,7 @@ def render_knowledge_graph() -> None:
             f"""
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                 <span style="font-size:0.85rem; color:#334155; font-weight:600;">Canvas: <b style="color:#0284C7;">{len(nodes)}</b> Nodes • <b style="color:#7C3AED;">{len(edges)}</b> Edges</span>
-                <span style="font-size:0.75rem; color:#64748B;">Scroll to zoom • Drag to pan • Drag circular nodes to reposition</span>
+                <span style="font-size:0.75rem; color:#64748B;">Scroll to zoom • Drag to pan canvas</span>
             </div>
             """,
             unsafe_allow_html=True,

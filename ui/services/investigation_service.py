@@ -23,26 +23,37 @@ _TASKS_LOCK = threading.Lock()
 _ACTIVE_TASKS: Dict[str, Dict[str, Any]] = {}
 
 
-@st.cache_resource(show_spinner=False)
+_AGENT_SINGLETON = None
+_AGENT_LOCK = threading.Lock()
+
+
 def _get_cached_investigation_agent():
     """
     Cached singleton InvestigationAgent to keep SentenceTransformer and DB clients warm.
+    Thread-safe for both Streamlit script runners and background worker threads.
     """
-    from investigation_agent.agent import InvestigationAgent
-    from ui.services.backend_service import BackendService
+    global _AGENT_SINGLETON
+    if _AGENT_SINGLETON is not None:
+        return _AGENT_SINGLETON
 
-    neo4j_client = BackendService.get_neo4j_client()
-    qdrant_wrapper = BackendService.get_qdrant_client()
-    embedder = BackendService.get_embedder()
-    llm_client = BackendService.get_llm_client()
+    with _AGENT_LOCK:
+        if _AGENT_SINGLETON is None:
+            from investigation_agent.agent import InvestigationAgent
+            from ui.services.backend_service import BackendService
 
-    return InvestigationAgent(
-        neo4j_client=neo4j_client,
-        qdrant=qdrant_wrapper,
-        embedder=embedder,
-        llm=llm_client,
-        debug=False,
-    )
+            neo4j_client = BackendService.get_neo4j_client()
+            qdrant_wrapper = BackendService.get_qdrant_client()
+            embedder = BackendService.get_embedder()
+            llm_client = BackendService.get_llm_client()
+
+            _AGENT_SINGLETON = InvestigationAgent(
+                neo4j_client=neo4j_client,
+                qdrant=qdrant_wrapper,
+                embedder=embedder,
+                llm=llm_client,
+                debug=False,
+            )
+    return _AGENT_SINGLETON
 
 
 class InvestigationService:
@@ -282,36 +293,25 @@ class InvestigationService:
     # ── Structured Template Extraction API ─────────────────────────────────────
 
     @classmethod
+    def get_available_source_files(cls, source_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Returns list of all available source files filtered by technology type (ALL, SQL, COBOL, SSIS).
+        """
+        from ui.services.source_service import SourceService
+        all_files = SourceService.get_all_source_files()
+        
+        target_type = (source_type or "ALL").upper().strip()
+        if target_type == "ALL" or not target_type or "ALL" in target_type:
+            return all_files
+        
+        return [f for f in all_files if f.get("technology", "").upper() == target_type]
+
+    @classmethod
     def get_available_sql_files(cls) -> List[Dict[str, Any]]:
         """
         Returns list of all available SQL files in source/sql with metadata.
         """
-        from pathlib import Path
-        project_root = Path(__file__).resolve().parents[2]
-        sql_dir = project_root / "source" / "sql"
-        results = []
-
-        if sql_dir.exists():
-            for p in sorted(sql_dir.glob("*.sql")):
-                try:
-                    text = p.read_text(encoding="utf-8-sig", errors="ignore")
-                    lines = len(text.splitlines())
-                    size_kb = round(p.stat().st_size / 1024, 1)
-                    results.append({
-                        "name": p.name,
-                        "path": str(p),
-                        "lines": lines,
-                        "size_kb": size_kb,
-                    })
-                except Exception:
-                    results.append({
-                        "name": p.name,
-                        "path": str(p),
-                        "lines": 0,
-                        "size_kb": 0.0,
-                    })
-
-        return results
+        return cls.get_available_source_files("SQL")
 
     @classmethod
     def extract_structured_sync(

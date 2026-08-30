@@ -198,70 +198,80 @@ JSON Schema:
         Used by the Investigation Agent and Relationship Discovery Agent
         for intent classification, Cypher generation, and answer synthesis.
         """
-        payload = {
-            "model": self.model,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-        }
-
-        payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        url = f"{self.base_url.rstrip('/')}/chat/completions"
-
-        request = Request(
-            url,
-            data=payload_bytes,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        models_to_try = [self.model]
+        # Include known healthy fallback models if using NVIDIA NIM
+        if "nvidia" in self.base_url or "nim" in self.base_url:
+            for fb in ["openai/gpt-oss-120b", "nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-super-120b-a12b"]:
+                if fb not in models_to_try:
+                    models_to_try.append(fb)
 
         last_error: Exception | None = None
-        body: dict | None = None
+        for current_model in models_to_try:
+            payload = {
+                "model": current_model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+            }
 
-        for attempt in range(1, self.max_retries + 2):
-            try:
-                if self.debug:
-                    print(f"[LLM] Sending text request (attempt {attempt}/{self.max_retries + 1})...", flush=True)
-                    print(f"[LLM] Model: {self.model}, Timeout: {self.timeout_seconds}s", flush=True)
-                with urlopen(request, timeout=self.timeout_seconds) as response:
+            payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            url = f"{self.base_url.rstrip('/')}/chat/completions"
+
+            request = Request(
+                url,
+                data=payload_bytes,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+
+            body: dict | None = None
+
+            for attempt in range(1, self.max_retries + 2):
+                try:
                     if self.debug:
-                        print(f"[LLM] HTTP status: {response.status}", flush=True)
-                    raw_body = response.read().decode("utf-8", errors="replace")
-                    body = json.loads(raw_body)
+                        print(f"[LLM] Sending text request (attempt {attempt}/{self.max_retries + 1})...", flush=True)
+                        print(f"[LLM] Model: {current_model}, Timeout: {self.timeout_seconds}s", flush=True)
+                    with urlopen(request, timeout=self.timeout_seconds) as response:
+                        if self.debug:
+                            print(f"[LLM] HTTP status: {response.status}", flush=True)
+                        raw_body = response.read().decode("utf-8", errors="replace")
+                        body = json.loads(raw_body)
+                        if self.debug:
+                            print("[LLM] Text completion successful.", flush=True)
+                        break
+                except TimeoutError as exc:
                     if self.debug:
-                        print("[LLM] Text completion successful.", flush=True)
+                        print(f"[LLM] Attempt {attempt} timed out for model {current_model} after {self.timeout_seconds}s.", flush=True)
+                    last_error = exc
+                    if attempt <= self.max_retries:
+                        time.sleep(1.5 * attempt)
+                        continue
                     break
-            except TimeoutError as exc:
-                if self.debug:
-                    print(f"[LLM] Attempt {attempt} timed out after {self.timeout_seconds}s.", flush=True)
-                last_error = exc
-                if attempt <= self.max_retries:
-                    time.sleep(2 * attempt)
-                    continue
-                raise LLMError(f"LLM text completion timed out after {self.max_retries + 1} attempts.") from exc
-            except (HTTPError, URLError) as exc:
-                if self.debug:
-                    print(f"[LLM] HTTP/URL Error: {exc}", flush=True)
-                last_error = exc
-                if attempt <= self.max_retries:
-                    time.sleep(2 * attempt)
-                    continue
-                raise LLMError(f"LLM text completion HTTP error: {exc}") from exc
+                except (HTTPError, URLError) as exc:
+                    if self.debug:
+                        print(f"[LLM] HTTP/URL Error on model {current_model}: {exc}", flush=True)
+                    last_error = exc
+                    if attempt <= self.max_retries and hasattr(exc, "code") and exc.code in (429, 500, 502, 503, 504):
+                        time.sleep(2 * attempt)
+                        continue
+                    break
 
-        if body is None:
-            raise LLMError("LLM returned no response body.")
+            if body is not None:
+                try:
+                    content = body["choices"][0]["message"]["content"]
+                    return content.strip() if isinstance(content, str) else str(content)
+                except (KeyError, IndexError, TypeError):
+                    pass
 
-        try:
-            content = body["choices"][0]["message"]["content"]
-            return content.strip() if isinstance(content, str) else str(content)
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"LLM text completion invalid response: {exc}") from exc
+        if last_error:
+            raise LLMError(f"LLM text completion failed across tried models: {last_error}") from last_error
+        raise LLMError("LLM returned no response body.")
 
 
 class LLMClient(OpenAICompatibleClient):
@@ -305,7 +315,7 @@ class LLMClient(OpenAICompatibleClient):
                 kwargs.get("model")
                 or os.getenv("NIM_MODEL", "")
                 or os.getenv("LLM_MODEL", "")
-                or "nvidia/llama-3.1-nemotron-70b-instruct"
+                or "openai/gpt-oss-120b"
             )
 
         super().__init__(
