@@ -66,27 +66,16 @@ def main() -> None:
 
     # 4. Page Routing for 4 Core Views (Investigation Agent is default Home)
     try:
-        import importlib
         if "Investigation" in selected_page:
-            from ui.views import investigation as inv_view
-            importlib.reload(inv_view)
-            inv_view.render_investigation()
+            render_investigation()
         elif "Source" in selected_page:
-            from ui.views import source_explorer as src_view
-            importlib.reload(src_view)
-            src_view.render_source_explorer()
+            render_source_explorer()
         elif "Pipeline" in selected_page:
-            from ui.views import pipeline as pip_view
-            importlib.reload(pip_view)
-            pip_view.render_pipeline()
+            render_pipeline()
         elif "Graph" in selected_page:
-            from ui.views import knowledge_graph as kg_view
-            importlib.reload(kg_view)
-            kg_view.render_knowledge_graph()
+            render_knowledge_graph()
         else:
-            from ui.views import investigation as inv_view
-            importlib.reload(inv_view)
-            inv_view.render_investigation()
+            render_investigation()
 
 
 

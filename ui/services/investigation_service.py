@@ -27,15 +27,24 @@ _AGENT_SINGLETON = None
 _AGENT_LOCK = threading.Lock()
 
 
+def reset_cached_investigation_agent() -> None:
+    """Resets the singleton investigation agent instance."""
+    global _AGENT_SINGLETON
+    with _AGENT_LOCK:
+        if _AGENT_SINGLETON is not None:
+            try:
+                _AGENT_SINGLETON.close()
+            except Exception:
+                pass
+            _AGENT_SINGLETON = None
+
+
 def _get_cached_investigation_agent():
     """
-    Cached singleton InvestigationAgent to keep SentenceTransformer and DB clients warm.
-    Thread-safe for both Streamlit script runners and background worker threads.
+    Constructs an InvestigationAgent using the pre-warmed singleton DB and embedding pools.
+    Thread-safe and always reflects the latest agent logic.
     """
     global _AGENT_SINGLETON
-    if _AGENT_SINGLETON is not None:
-        return _AGENT_SINGLETON
-
     with _AGENT_LOCK:
         if _AGENT_SINGLETON is None:
             from investigation_agent.agent import InvestigationAgent
@@ -53,7 +62,7 @@ def _get_cached_investigation_agent():
                 llm=llm_client,
                 debug=False,
             )
-    return _AGENT_SINGLETON
+        return _AGENT_SINGLETON
 
 
 class InvestigationService:
@@ -61,6 +70,10 @@ class InvestigationService:
     Service wrapper around InvestigationAgent with background task execution,
     caching, and structured parsing.
     """
+
+    @classmethod
+    def reset_agent(cls) -> None:
+        reset_cached_investigation_agent()
 
     @classmethod
     def start_background_query(cls, question: str) -> str:

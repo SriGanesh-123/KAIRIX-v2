@@ -25,8 +25,8 @@ class OpenAICompatibleClient(LLMProvider):
     api_key: str
     base_url: str
     model: str
-    timeout_seconds: int = 90
-    max_retries: int = 3
+    timeout_seconds: int = 45
+    max_retries: int = 1
     debug: bool = False
 
     def json_completion(
@@ -94,23 +94,24 @@ JSON Schema:
 
         for attempt in range(1, self.max_retries + 2):
             try:
-                print(
-                    f"[LLM] Sending request (attempt {attempt}/{self.max_retries + 1})...",
-                    flush=True,
-                )
-                print(f"[LLM] Model: {self.model}, Timeout: {self.timeout_seconds}s", flush=True)
+                if self.debug:
+                    print(
+                        f"[LLM] Sending request (attempt {attempt}/{self.max_retries + 1})...",
+                        flush=True,
+                    )
+                    print(f"[LLM] Model: {self.model}, Timeout: {self.timeout_seconds}s", flush=True)
 
                 with urlopen(request, timeout=self.timeout_seconds) as response:
-                    print(f"[LLM] HTTP status: {response.status}", flush=True)
+                    if self.debug:
+                        print(f"[LLM] HTTP status: {response.status}", flush=True)
                     raw_body = response.read().decode("utf-8", errors="replace")
                     body = json.loads(raw_body)
                     break
 
             except TimeoutError as exc:
-                print(f"[LLM] Attempt {attempt} timed out after {self.timeout_seconds}s.", flush=True)
                 last_error = exc
                 if attempt <= self.max_retries:
-                    time.sleep(2 * attempt)
+                    time.sleep(1)
                     continue
                 raise LLMError(f"LLM request timed out after {self.max_retries + 1} attempts.") from exc
 
@@ -120,24 +121,24 @@ JSON Schema:
                 except Exception:
                     error_body = "<unable to read error body>"
 
-                print(f"[LLM] HTTP ERROR {exc.code}: {error_body}", flush=True)
+                if self.debug:
+                    print(f"[LLM] HTTP ERROR {exc.code}: {error_body}", flush=True)
                 last_error = exc
-                # Retry on 429 (rate limit) or 5xx server errors
+                if exc.code in (401, 403):
+                    raise LLMError(f"LLM API unauthorized ({exc.code}): {exc.reason}") from exc
                 if exc.code in (429, 500, 502, 503, 504) and attempt <= self.max_retries:
-                    time.sleep(3 * attempt)
+                    time.sleep(1.5 * attempt)
                     continue
                 raise LLMError(f"LLM HTTP request failed with status {exc.code}: {exc.reason}") from exc
 
             except URLError as exc:
-                print(f"[LLM] URL ERROR: {exc}", flush=True)
                 last_error = exc
                 if attempt <= self.max_retries:
-                    time.sleep(2 * attempt)
+                    time.sleep(1)
                     continue
                 raise LLMError(f"LLM request failed: {exc}") from exc
 
             except json.JSONDecodeError as exc:
-                print(f"[LLM] Invalid HTTP response JSON: {exc}", flush=True)
                 raise LLMError("LLM returned an invalid HTTP response.") from exc
 
         # Extract message content
@@ -160,7 +161,6 @@ JSON Schema:
             result = json.loads(cleaned_content)
 
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            print(f"[LLM] Invalid model response parsing: {exc}", flush=True)
             raise LLMError(f"LLM returned no valid JSON object: {exc}") from exc
 
         if not isinstance(result, dict):
@@ -171,7 +171,6 @@ JSON Schema:
             schema.get("required", []),
         )
 
-        print("[LLM] JSON completion successful.", flush=True)
         return result
 
     @staticmethod
@@ -201,7 +200,7 @@ JSON Schema:
         models_to_try = [self.model]
         # Include known healthy fallback models if using NVIDIA NIM
         if "nvidia" in self.base_url or "nim" in self.base_url:
-            for fb in ["openai/gpt-oss-120b", "nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3-super-120b-a12b"]:
+            for fb in ["nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b"]:
                 if fb not in models_to_try:
                     models_to_try.append(fb)
 
@@ -250,16 +249,24 @@ JSON Schema:
                         print(f"[LLM] Attempt {attempt} timed out for model {current_model} after {self.timeout_seconds}s.", flush=True)
                     last_error = exc
                     if attempt <= self.max_retries:
+                        time.sleep(1)
+                        continue
+                    break
+                except HTTPError as exc:
+                    if self.debug:
+                        print(f"[LLM] HTTP Error on model {current_model}: {exc}", flush=True)
+                    last_error = exc
+                    if exc.code in (401, 403):
+                        # Don't keep trying models with invalid key
+                        raise LLMError(f"LLM API unauthorized ({exc.code}): {exc.reason}") from exc
+                    if attempt <= self.max_retries and exc.code in (429, 500, 502, 503, 504):
                         time.sleep(1.5 * attempt)
                         continue
                     break
-                except (HTTPError, URLError) as exc:
+                except URLError as exc:
                     if self.debug:
-                        print(f"[LLM] HTTP/URL Error on model {current_model}: {exc}", flush=True)
+                        print(f"[LLM] URL Error on model {current_model}: {exc}", flush=True)
                     last_error = exc
-                    if attempt <= self.max_retries and hasattr(exc, "code") and exc.code in (429, 500, 502, 503, 504):
-                        time.sleep(2 * attempt)
-                        continue
                     break
 
             if body is not None:
@@ -270,7 +277,7 @@ JSON Schema:
                     pass
 
         if last_error:
-            raise LLMError(f"LLM text completion failed across tried models: {last_error}") from last_error
+            raise LLMError(f"LLM text completion failed: {last_error}") from last_error
         raise LLMError("LLM returned no response body.")
 
 
@@ -279,7 +286,7 @@ class LLMClient(OpenAICompatibleClient):
     Auto-configured LLM client that reads from environment variables.
 
     Used by the Investigation Agent and Relationship Discovery Agent.
-    Falls back to default active NVIDIA NIM production model meta/llama-3.3-70b-instruct.
+    Falls back to default active NVIDIA NIM model nvidia/nemotron-3-nano-30b-a3b.
     """
 
     def __init__(self, **kwargs):
@@ -315,14 +322,14 @@ class LLMClient(OpenAICompatibleClient):
                 kwargs.get("model")
                 or os.getenv("NIM_MODEL", "")
                 or os.getenv("LLM_MODEL", "")
-                or "openai/gpt-oss-120b"
+                or "nvidia/nemotron-3-nano-30b-a3b"
             )
 
         super().__init__(
             api_key=api_key,
             base_url=base_url,
             model=model,
-            timeout_seconds=kwargs.get("timeout_seconds", int(os.getenv("LLM_TIMEOUT", "30"))),
+            timeout_seconds=kwargs.get("timeout_seconds", int(os.getenv("LLM_TIMEOUT", "60"))),
             max_retries=kwargs.get("max_retries", int(os.getenv("LLM_MAX_RETRIES", "1"))),
             debug=kwargs.get("debug", False),
-        )
+        )

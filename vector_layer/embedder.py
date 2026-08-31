@@ -59,9 +59,13 @@ class Embedder:
             except ImportError:
                 pass
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_name)
+            try:
+                self._model = SentenceTransformer(self.model_name, local_files_only=True)
+            except Exception:
+                self._model = SentenceTransformer(self.model_name)
             if not self.silent:
                 print(f"[Embedder] Model ready. Vector dim: {_VECTOR_DIM}")
+
 
     def embed(self, texts: List[str], batch_size: int = 64) -> List[List[float]]:
         """

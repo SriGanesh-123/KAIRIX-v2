@@ -16,18 +16,6 @@ from typing import Any, Dict, List
 import pandas as pd
 import streamlit as st
 
-import investigation_agent.structured_models
-import investigation_agent.template_parser
-import investigation_agent.structured_extractor
-import ui.services.investigation_service
-import ui.services.source_service
-
-importlib.reload(investigation_agent.structured_models)
-importlib.reload(investigation_agent.template_parser)
-importlib.reload(investigation_agent.structured_extractor)
-importlib.reload(ui.services.investigation_service)
-importlib.reload(ui.services.source_service)
-
 from investigation_agent.structured_extractor import StructuredExtractionEngine
 from ui.components.answer_panel import render_answer_panel
 from ui.services.investigation_service import InvestigationService
@@ -93,8 +81,6 @@ def render_investigation() -> None:
 
     # Check for pre-loaded query from other views or chips (set BEFORE widget is rendered)
     preloaded_query = st.session_state.pop("pending_investigation_query", None)
-    if preloaded_query:
-        st.session_state["main_investigation_input"] = preloaded_query
 
 
     # 2. Hero Header
@@ -137,16 +123,11 @@ def render_investigation() -> None:
 
 
 def _render_normal_investigation(preloaded_query: str | None) -> None:
-    """Renders the standard AI inquiry Q&A flow."""
-    # Reset any stale background flags to guarantee UI is always interactive
-    st.session_state["is_investigating"] = False
-    st.session_state["active_investigation_task_id"] = None
-
+    """Renders the standard AI inquiry Q&A flow with real-time live status streaming."""
     # Search Form
     with st.form(key="investigation_search_form", clear_on_submit=False):
         user_question = st.text_input(
             "Ask your question...",
-            value=st.session_state.get("main_investigation_input", ""),
             placeholder="Ask any question about code, calculations, or lineage (e.g. How is earned premium calculated?)...",
             label_visibility="collapsed",
             key="main_investigation_input",
@@ -164,7 +145,9 @@ def _render_normal_investigation(preloaded_query: str | None) -> None:
 
     if clear:
         st.session_state["investigation_history"] = []
-        st.session_state["main_investigation_input"] = ""
+        active_inv_id = st.session_state.pop("active_investigation_task_id", None)
+        if active_inv_id:
+            InvestigationService.clear_task(active_inv_id)
         st.rerun()
 
     # Suggested Questions Grid
@@ -190,24 +173,60 @@ def _render_normal_investigation(preloaded_query: str | None) -> None:
 
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
 
-    # Handle Query Submission & Direct Real-Time Execution
-    target_query = (user_question.strip() if (submit and user_question) else (preloaded_query.strip() if preloaded_query else ""))
+    # Handle Query Submission & Async Background Task Launch
+    target_query = (user_question.strip() if (submit and user_question.strip()) else (preloaded_query.strip() if preloaded_query else ""))
 
     if target_query:
-        with st.status(f"🔍 Investigating: \"{target_query}\"...", expanded=True) as status_box:
-            def _progress_cb(stage: str, msg: str):
-                st.write(f"• {msg}")
+        st.session_state["pending_investigation_query"] = None
+        task_id = InvestigationService.start_background_query(target_query)
+        st.session_state["active_investigation_task_id"] = task_id
+        st.rerun()
 
-            res = InvestigationService.query(target_query, on_progress=_progress_cb)
+    # Monitor Active Background Investigation Task
+    active_inv_id = st.session_state.get("active_investigation_task_id")
+    if active_inv_id:
+        task_info = InvestigationService.get_task_status(active_inv_id)
+        if not task_info:
+            st.session_state["active_investigation_task_id"] = None
+        elif task_info.get("status") == "running":
+            question_text = task_info.get("question", "Inquiry")
+            with st.status(f"🔍 Investigating: \"{question_text}\"...", expanded=True) as status_box:
+                progress_logs = task_info.get("progress_log", [])
+                if progress_logs:
+                    for log in progress_logs:
+                        status_box.write(f"• {log}")
+                else:
+                    status_box.write("• Analyzing inquiry scope & target architecture...")
 
-            if res.get("success"):
-                st.session_state["investigation_history"].insert(0, res)
-                status_box.update(label=f"✅ Investigation Complete: \"{target_query}\"", state="complete", expanded=False)
-                st.toast("Investigation complete!")
-                st.rerun()
-            else:
-                status_box.update(label="❌ Investigation Failed", state="error", expanded=True)
-                st.error(f"Investigation failed: {res.get('error', 'Unknown error')}")
+                st.caption("ℹ️ *Generation is running in the background. You can freely switch pages or explore other tabs without losing progress.*")
+                if st.button("Cancel Investigation", key="btn_cancel_active_inv"):
+                    st.session_state["active_investigation_task_id"] = None
+                    InvestigationService.clear_task(active_inv_id)
+                    st.rerun()
+
+            time.sleep(0.4)
+            st.rerun()
+        elif task_info.get("status") == "complete":
+            res = task_info.get("result")
+            if res:
+                history = st.session_state.setdefault("investigation_history", [])
+                if not history or history[0].get("question") != res.get("question") or history[0].get("answer") != res.get("answer"):
+                    history.insert(0, res)
+                if res.get("success"):
+                    elapsed_txt = f" in {res.get('execution_time_sec', 0)}s" if res.get("execution_time_sec") else ""
+                    st.toast(f"✅ Investigation complete{elapsed_txt}!")
+            st.session_state["active_investigation_task_id"] = None
+            InvestigationService.clear_task(active_inv_id)
+            st.rerun()
+        elif task_info.get("status") == "error":
+            err_msg = task_info.get("error", "Investigation failed")
+            res = task_info.get("result")
+            history = st.session_state.setdefault("investigation_history", [])
+            if res and (not history or history[0].get("question") != res.get("question")):
+                history.insert(0, res)
+            st.error(f"❌ Investigation encountered an error: {err_msg}")
+            st.session_state["active_investigation_task_id"] = None
+            InvestigationService.clear_task(active_inv_id)
 
     # Render Investigation Results History
     history = st.session_state.get("investigation_history", [])
@@ -419,62 +438,44 @@ def _render_structured_extraction() -> None:
         if not effective_files:
             st.error("⚠️ No source files available to analyze.")
         else:
-            with st.spinner(f"Extracting structured metadata across {len(effective_files)} source file(s)..."):
-                try:
-                    from investigation_agent.structured_extractor import StructuredExtractionEngine
-                    engine = StructuredExtractionEngine()
-                    res = engine.extract(
-                        selected_files=effective_files,
-                        template=effective_template,
-                    )
-                    records_data = [rec.model_dump() for rec in res.records]
-                    res_dict = {
-                        "success": True,
-                        "template_raw": res.template_raw,
-                        "template_fields": res.template_fields,
-                        "selected_files": res.selected_files,
-                        "records": records_data,
-                        "warnings": res.warnings,
-                        "source_evidence": res.source_evidence,
-                        "confidence": res.confidence,
-                        "execution_time_sec": res.execution_time_sec,
-                    }
-                    if "extraction_history" not in st.session_state:
-                        st.session_state["extraction_history"] = []
-                    st.session_state["extraction_history"].insert(0, res_dict)
-                    st.toast(f"Structured extraction complete! Generated {len(records_data)} records.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Structured extraction encountered an error: {e}")
+            task_id = InvestigationService.start_background_extraction(
+                selected_files=effective_files,
+                template_str=effective_template,
+            )
+            st.session_state["active_extraction_task_id"] = task_id
+            st.rerun()
 
-    # ── Step 6: Render Extraction Results ──────────────────────────────────────
+    # Monitor Active Background Extraction Task
     active_ext_id = st.session_state.get("active_extraction_task_id")
     if active_ext_id:
         task_info = InvestigationService.get_task_status(active_ext_id)
-        if task_info:
-            status = task_info.get("status")
-            if status == "running":
-                with st.status("Running deterministic AST extraction & template mapping...", expanded=True):
-                    logs = task_info.get("progress_log", [])
-                    for msg in logs:
-                        st.write(f"• {msg}")
-                time.sleep(0.5)
-                st.rerun()
-
-            elif status == "complete":
-                res = task_info.get("result")
-                if res:
-                    st.session_state["extraction_history"].insert(0, res)
-                st.session_state["active_extraction_task_id"] = None
-                InvestigationService.clear_task(active_ext_id)
-                st.toast("Structured extraction complete!")
-                st.rerun()
-
-            elif status == "error":
-                err_msg = task_info.get("error", "Unknown error")
-                st.error(f"Extraction failed: {err_msg}")
-                st.session_state["active_extraction_task_id"] = None
-                InvestigationService.clear_task(active_ext_id)
+        if not task_info:
+            st.session_state["active_extraction_task_id"] = None
+        elif task_info.get("status") == "running":
+            with st.status("🔍 Extracting structured metadata across sources...", expanded=True) as status_box:
+                for log in task_info.get("progress_log", []):
+                    status_box.write(f"• {log}")
+                st.caption("ℹ️ *Extraction is running in the background. You can freely switch pages without losing progress.*")
+                if st.button("Cancel Extraction", key="btn_cancel_active_ext"):
+                    st.session_state["active_extraction_task_id"] = None
+                    InvestigationService.clear_task(active_ext_id)
+                    st.rerun()
+            time.sleep(0.4)
+            st.rerun()
+        elif task_info.get("status") == "complete":
+            res = task_info.get("result")
+            if res and res.get("success"):
+                st.session_state.setdefault("extraction_history", []).insert(0, res)
+                st.toast(f"Structured extraction complete! Generated {len(res.get('records', []))} records.")
+            elif res:
+                st.error(f"Structured extraction failed: {res.get('error', 'Unknown error')}")
+            st.session_state["active_extraction_task_id"] = None
+            InvestigationService.clear_task(active_ext_id)
+            st.rerun()
+        elif task_info.get("status") == "error":
+            st.error(f"Structured extraction error: {task_info.get('error')}")
+            st.session_state["active_extraction_task_id"] = None
+            InvestigationService.clear_task(active_ext_id)
 
     # Step 6: Render Extraction Results
     history = st.session_state.get("extraction_history", [])

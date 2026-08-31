@@ -78,7 +78,106 @@ def render_sidebar() -> str:
         selected_page = page_keys.get(selected_label, "Investigation Agent")
         st.session_state["current_page"] = selected_page
 
-        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+        # Active background investigation notification
+        try:
+            from ui.services.investigation_service import InvestigationService
+            import html
+            active_inv_id = st.session_state.get("active_investigation_task_id")
+            if active_inv_id:
+                task_info = InvestigationService.get_task_status(active_inv_id)
+                if task_info and task_info.get("status") == "running":
+                    q_snippet = task_info.get("question", "Inquiry")[:36]
+                    st.markdown(
+                        f"""
+                        <div style="background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 8px; padding: 0.6rem 0.75rem; margin-top: 0.6rem; margin-bottom: 0.35rem;">
+                            <div style="font-size: 0.74rem; font-weight: 700; color: #0369A1; display: flex; align-items: center; gap: 0.4rem;">
+                                <span class="status-dot dot-green" style="animation: pulse 1.5s infinite;"></span>
+                                AI Investigation Running...
+                            </div>
+                            <div style="font-size: 0.7rem; color: #0284C7; margin-top: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic;">
+                                "{html.escape(q_snippet)}..."
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if selected_page != "Investigation Agent":
+                        if st.button("Open Live View →", key="btn_sidebar_view_running", use_container_width=True):
+                            st.session_state["navigate_to_page"] = "Investigation Agent"
+                            st.session_state["sidebar_navigation_radio"] = "Investigation Agent"
+                            st.rerun()
+                elif task_info and task_info.get("status") == "complete":
+                    # Proactively sync result into history
+                    res = task_info.get("result")
+                    if res:
+                        hist = st.session_state.setdefault("investigation_history", [])
+                        if not hist or hist[0].get("question") != res.get("question") or hist[0].get("answer") != res.get("answer"):
+                            hist.insert(0, res)
+                    st.markdown(
+                        """
+                        <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 0.6rem 0.75rem; margin-top: 0.6rem; margin-bottom: 0.35rem;">
+                            <div style="font-size: 0.74rem; font-weight: 700; color: #15803D; display: flex; align-items: center; gap: 0.4rem;">
+                                <span>✨</span> Answer Ready!
+                            </div>
+                            <div style="font-size: 0.7rem; color: #16A34A; margin-top: 0.2rem;">
+                                Investigation result is generated.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if selected_page != "Investigation Agent":
+                        if st.button("View Answer →", key="btn_sidebar_view_answer", use_container_width=True):
+                            st.session_state["navigate_to_page"] = "Investigation Agent"
+                            st.session_state["sidebar_navigation_radio"] = "Investigation Agent"
+                            st.rerun()
+                elif not task_info:
+                    st.session_state["active_investigation_task_id"] = None
+
+            # Active background extraction notification
+            active_ext_id = st.session_state.get("active_extraction_task_id")
+            if active_ext_id:
+                ext_info = InvestigationService.get_task_status(active_ext_id)
+                if ext_info and ext_info.get("status") == "running":
+                    st.markdown(
+                        """
+                        <div style="background: #FAF5FF; border: 1px solid #E9D5FF; border-radius: 8px; padding: 0.6rem 0.75rem; margin-top: 0.6rem; margin-bottom: 0.35rem;">
+                            <div style="font-size: 0.74rem; font-weight: 700; color: #7E22CE; display: flex; align-items: center; gap: 0.4rem;">
+                                <span class="status-dot dot-green" style="animation: pulse 1.5s infinite;"></span>
+                                AST Extraction Running...
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                elif ext_info and ext_info.get("status") == "complete":
+                    res_ext = ext_info.get("result")
+                    if res_ext and res_ext.get("success"):
+                        ext_hist = st.session_state.setdefault("extraction_history", [])
+                        if not ext_hist or ext_hist[0] != res_ext:
+                            ext_hist.insert(0, res_ext)
+                    st.markdown(
+                        """
+                        <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 0.6rem 0.75rem; margin-top: 0.6rem; margin-bottom: 0.35rem;">
+                            <div style="font-size: 0.74rem; font-weight: 700; color: #15803D; display: flex; align-items: center; gap: 0.4rem;">
+                                <span>✨</span> Extraction Ready!
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if selected_page != "Investigation Agent":
+                        if st.button("View Extraction →", key="btn_sidebar_view_ext", use_container_width=True):
+                            st.session_state["navigate_to_page"] = "Investigation Agent"
+                            st.session_state["sidebar_navigation_radio"] = "Investigation Agent"
+                            st.session_state["investigation_mode_selection"] = "User-Defined Structured Extraction"
+                            st.rerun()
+                elif not ext_info:
+                    st.session_state["active_extraction_task_id"] = None
+        except Exception:
+            pass
+
+        st.markdown("<div style='margin-top: 1.0rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # Backend Health Summary at sidebar bottom

@@ -7,10 +7,7 @@ code viewing, and new source registration across COBOL, SQL, and SSIS legacy sou
 from __future__ import annotations
 
 import html
-import importlib
 import streamlit as st
-import ui.services.source_service as _src_svc_mod
-importlib.reload(_src_svc_mod)
 from ui.services.source_service import SourceService
 from ui.services.analyze_service import AnalyzeService
 from ui.components.source_panel import render_source_metadata_card, render_code_viewer

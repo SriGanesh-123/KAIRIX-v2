@@ -23,11 +23,13 @@ from pathlib import Path
 
 from .agent import InvestigationAgent
 
-# Ensure UTF-8 console output on Windows
+# Ensure UTF-8 console I/O on Windows
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stdin, "reconfigure"):
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 
 
 def main():
