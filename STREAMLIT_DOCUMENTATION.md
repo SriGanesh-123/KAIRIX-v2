@@ -126,11 +126,12 @@ The platform integrates several specialized Python libraries to connect Streamli
   - Disk: ~2 GB free disk space for virtual environment, PyTorch wheels, and cached model weights.
 
 ### 4.2 External Service Dependencies
-1. **Neo4j Graph Database:**
-   - Default URI: `neo4j://127.0.0.1:7687` (Bolt port)
-   - HTTP Browser: `http://127.0.0.1:7474`
-2. **Qdrant Vector Database:**
-   - Default HTTP URL: `http://localhost:6335` (or standard `http://localhost:6333`)
+1. **Neo4j Graph Database (AuraDB Cloud):**
+   - Cloud URI: `neo4j+s://03f0aac2.databases.neo4j.io`
+   - Database: `03f0aac2`
+2. **Pinecone Vector Database (Serverless):**
+   - Cloud Index: `kairix-index`
+   - Metric: Cosine (dim: 384)
 3. **LLM Inference Provider:**
    - NVIDIA NIM (`NVIDIA_NIM_API_KEY` configured in `.env`) or OpenAI / Anthropic API.
 
@@ -142,14 +143,17 @@ NVIDIA_NIM_API_KEY=your_nim_api_key_here
 NIM_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 
-# Neo4j Graph Database
-NEO4J_URI=neo4j://127.0.0.1:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your_password
-NEO4J_DATABASE=neo4j
+# Neo4j Graph Database (AuraDB Cloud)
+NEO4J_URI=neo4j+s://03f0aac2.databases.neo4j.io
+NEO4J_USERNAME=03f0aac2
+NEO4J_PASSWORD=your_aura_password
+NEO4J_DATABASE=03f0aac2
+AURA_INSTANCEID=03f0aac2
+AURA_INSTANCENAME=KAIRIX
 
-# Qdrant Vector Database
-QDRANT_URL=http://localhost:6335
+# Pinecone Vector Database (Serverless)
+PINECONE_API_KEY=your_pinecone_api_key_here
+PINECONE_INDEX_NAME=kairix-index
 
 # Embedding Model Settings
 EMBEDDING_MODEL=all-MiniLM-L6-v2

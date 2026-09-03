@@ -115,10 +115,10 @@ def _cached_check_neo4j() -> Dict[str, Any]:
     port = parsed.port or 7687
 
     # Socket probe with adaptive timeout for cloud (AuraDB) vs local
-    timeout = 0.1 if host in ("127.0.0.1", "localhost") else 1.5
+    timeout = 0.1 if host in ("127.0.0.1", "localhost") else 2.5
     start = time.perf_counter()
     is_open = _fast_socket_check(host, port, timeout=timeout)
-    if not is_open:
+    if not is_open and host in ("127.0.0.1", "localhost"):
         latency = round((time.perf_counter() - start) * 1000, 1)
         return {
             "connected": False,

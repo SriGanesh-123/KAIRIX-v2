@@ -193,14 +193,15 @@ Provides an interactive console for natural language investigation:
    NIM_BASE_URL=https://integrate.api.nvidia.com/v1
    NIM_MODEL=meta/llama-3.1-70b-instruct
 
-   # Neo4j Graph Database
-   NEO4J_URI=bolt://localhost:7687
-   NEO4J_USERNAME=neo4j
-   NEO4J_PASSWORD=your_password
+   # Neo4j Graph Database (AuraDB Cloud)
+   NEO4J_URI=neo4j+s://03f0aac2.databases.neo4j.io
+   NEO4J_USERNAME=03f0aac2
+   NEO4J_PASSWORD=your_aura_password
+   NEO4J_DATABASE=03f0aac2
 
-   # Qdrant Vector Database
-   QDRANT_HOST=localhost
-   QDRANT_PORT=6333
+   # Pinecone Vector Database (Serverless)
+   PINECONE_API_KEY=pcsk_...
+   PINECONE_INDEX_NAME=kairix-index
 
    # Embeddings
    EMBEDDING_MODEL=all-MiniLM-L6-v2
