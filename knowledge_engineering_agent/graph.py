@@ -48,7 +48,35 @@ def init_services():
     }
 
 
-SERVICES = init_services()
+class _LazyServices(dict):
+    """
+    Lazy service container that initializes backend pipeline services on first access
+    rather than at module import time, preventing startup failures when API keys or
+    environment secrets are not yet loaded.
+    """
+    def __init__(self):
+        super().__init__()
+        self._initialized = False
+
+    def _ensure_init(self):
+        if not self._initialized:
+            self.update(init_services())
+            self._initialized = True
+
+    def __getitem__(self, key):
+        self._ensure_init()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._ensure_init()
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        self._ensure_init()
+        return super().__contains__(key)
+
+
+SERVICES = _LazyServices()
 
 
 # ============================================================

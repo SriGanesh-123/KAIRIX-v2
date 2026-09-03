@@ -21,6 +21,7 @@ qdrant-client>=1.9.0
 sentence-transformers>=3.0.0
 torch>=2.0.0
 huggingface-hub>=0.20.0
+pyarrow<25.0.0
 
 # KAIRIX UI Layer
 streamlit>=1.35.0

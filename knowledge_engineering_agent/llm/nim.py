@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from .base import LLMProvider
 from ..services.llm_client import OpenAICompatibleClient
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 
 @dataclass
@@ -17,12 +17,10 @@ class NIMProvider(LLMProvider):
 
     @classmethod
     def from_environment(cls) -> "NIMProvider":
-        api_key = os.getenv("NVIDIA_NIM_API_KEY")
-
-        if not api_key:
-            raise RuntimeError(
-                "NVIDIA_NIM_API_KEY is required for NVIDIA NIM."
-            )
+        api_key = (
+            os.getenv("NVIDIA_NIM_API_KEY", "")
+            or os.getenv("NIM_API_KEY", "")
+        ).strip()
 
         timeout = int(os.getenv("NIM_TIMEOUT", os.getenv("LLM_TIMEOUT", "180")))
 
@@ -47,6 +45,11 @@ class NIMProvider(LLMProvider):
         user_prompt: str,
         schema: dict[str, object],
     ) -> dict[str, object]:
+        if not self.client.api_key:
+            raise RuntimeError(
+                "NVIDIA_NIM_API_KEY is required for NVIDIA NIM. "
+                "Please configure NVIDIA_NIM_API_KEY in Streamlit Cloud Secrets or your environment."
+            )
         return self.client.json_completion(
             system_prompt=system_prompt,
             user_prompt=user_prompt,

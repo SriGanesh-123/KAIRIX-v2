@@ -403,11 +403,11 @@ def _render_structured_extraction() -> None:
                 st.rerun()
 
     default_tpl = active_presets[0] if active_presets else "| Schema | Database | Table | Columns |"
-    current_template = st.session_state.get("custom_template_input", default_tpl)
+    if "custom_template_input" not in st.session_state:
+        st.session_state["custom_template_input"] = default_tpl
 
     template_input = st.text_input(
         "Template headers (Markdown pipe table or comma-separated):",
-        value=current_template,
         key="custom_template_input",
         placeholder="| Schema | Database | Table | Columns |",
         help="Arbitrary user-defined columns, e.g., | Schema | Database | Table | Columns | or | Program | Section | Field Name | Data Type |",

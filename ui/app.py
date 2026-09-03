@@ -6,6 +6,7 @@ Run with:
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -14,7 +15,50 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# Cloud deployment defaults: suppress dynamic file watching & noisy warnings
+os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "none")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+# Load local .env if available
+from dotenv import load_dotenv
+load_dotenv(ROOT_DIR / ".env", override=False)
+
 import streamlit as st
+
+def _sync_secrets_to_env() -> None:
+    """
+    Synchronizes Streamlit Cloud secrets into os.environ so backend services,
+    LLM providers, and background processes can access them via os.getenv().
+    Supports both flat keys and nested TOML tables (e.g., [nim], [neo4j], [pinecone]).
+    """
+    try:
+        if not hasattr(st, "secrets"):
+            return
+        
+        def _set_env(k: str, v: object) -> None:
+            if isinstance(v, (str, int, float, bool)):
+                str_val = str(v).strip()
+                os.environ.setdefault(k, str_val)
+                os.environ.setdefault(k.upper(), str_val)
+
+        for key, val in st.secrets.items():
+            if isinstance(val, (str, int, float, bool)):
+                _set_env(key, val)
+            elif isinstance(val, dict) or hasattr(val, "items"):
+                for sub_k, sub_v in val.items():
+                    if isinstance(sub_v, (str, int, float, bool)):
+                        composite = f"{key}_{sub_k}"
+                        _set_env(composite, sub_v)
+                        _set_env(sub_k, sub_v)
+                        # Specific aliases
+                        if key.lower() == "nim" and sub_k.lower() in ("api_key", "nvidia_api_key"):
+                            _set_env("NVIDIA_NIM_API_KEY", sub_v)
+
+    except Exception:
+        pass
+
+_sync_secrets_to_env()
+
 from ui.components.sidebar import render_sidebar, PAGES
 from ui.views.investigation import render_investigation
 from ui.views.source_explorer import render_source_explorer

@@ -86,12 +86,16 @@ def _clean_cypher_query(raw: str) -> str:
 
 def _get_default_vector_client(silent: bool = True):
     if os.getenv("PINECONE_API_KEY"):
-        return PineconeWrapper(silent=silent)
+        try:
+            return PineconeWrapper(silent=silent)
+        except Exception:
+            pass
     try:
         from vector_layer.qdrant_client_wrapper import QdrantWrapper
         return QdrantWrapper(silent=silent)
     except Exception:
-        return PineconeWrapper(silent=silent)
+        pass
+    return None
 
 
 class InvestigationAgent:
@@ -468,6 +472,8 @@ class InvestigationAgent:
         self, question: str
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Embed question and search Pinecone namespaces."""
+        if not self.vector_client:
+            return [], []
         query_vec = self.embedder.embed_one(question)
         try:
             chunks = self.vector_client.search(

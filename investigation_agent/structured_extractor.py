@@ -432,32 +432,64 @@ class StructuredExtractionEngine:
         # 2. Extract Copybooks
         copybooks = re.findall(r"\bCOPY\s+([A-Za-z0-9\-]+)", raw_text, re.IGNORECASE)
 
-        # 3. Track active division/section & record groups
+        # 3. Extract COMPUTE formulas (handling multi-line expressions and ROUNDED keyword)
+        computes: List[Dict[str, str]] = []
+        compute_matches = re.finditer(
+            r"\bCOMPUTE\s+([A-Za-z0-9\-]+)(?:\s+ROUNDED)?\s*=\s*([\s\S]*?)(?=\.|\bCOMPUTE\b|\bMOVE\b|\bIF\b|\bPERFORM\b|\bELSE\b|\bEVALUATE\b|\bEND-[A-Z]+\b)",
+            raw_text,
+            re.IGNORECASE,
+        )
+        for cm in compute_matches:
+            target_var = cm.group(1).strip()
+            raw_expr = cm.group(2)
+            clean_parts = []
+            for el in raw_expr.splitlines():
+                el_s = el.strip()
+                if el_s and not (len(el) >= 7 and el[6] in ("*", "/")) and not el_s.startswith("/"):
+                    clean_parts.append(el_s)
+            expr = " ".join(" ".join(clean_parts).split()).strip().rstrip(".")
+            if expr:
+                computes.append({
+                    "alias": target_var,
+                    "expression": f"COMPUTE {target_var} = {expr}",
+                    "data_type": "COMPUTE Expression",
+                })
+
+        # 4. Extract MOVE statements (including multi-target MOVE)
+        move_matches = re.finditer(
+            r"\bMOVE\s+([^\s]+)\s+TO\s+([A-Za-z0-9\-\,\s]+?)(?=\.|\bCOMPUTE\b|\bMOVE\b|\bIF\b|\bPERFORM\b|\bELSE\b|\bEVALUATE\b|\bEND-[A-Z]+\b)",
+            raw_text,
+            re.IGNORECASE,
+        )
+        for mm in move_matches:
+            src_val = mm.group(1).strip()
+            tgt_vals = [t.strip().rstrip(".") for t in mm.group(2).split(",") if t.strip()]
+            for tgt_val in tgt_vals:
+                if tgt_val and not any(c["alias"] == tgt_val for c in computes):
+                    computes.append({
+                        "alias": tgt_val,
+                        "expression": f"MOVE {src_val} TO {tgt_val}",
+                        "data_type": "MOVE Statement",
+                    })
+
+        # 5. Track active division/section & record groups
         current_division = "IDENTIFICATION DIVISION"
         current_section = "GENERAL"
         current_01_group = "WS-ROOT-RECORD"
         group_fields: Dict[str, List[str]] = {}
         group_types: Dict[str, Dict[str, str]] = {}
         group_lines: Dict[str, int] = {}
-        computes: List[Dict[str, str]] = []
+        group_sections: Dict[str, str] = {}
+        group_divisions: Dict[str, str] = {}
 
         var_pattern = re.compile(
             r"^\s*(?:[0-9]{6})?\s*([0-9]{2})\s+([A-Za-z0-9\-]+)(?:\s+PIC(?:TURE)?\s+(?:IS\s+)?([^\s\.\,]+))?",
             re.IGNORECASE,
         )
 
-        compute_pattern = re.compile(
-            r"\bCOMPUTE\s+([A-Za-z0-9\-]+)\s*=\s*([^\.\n]+)",
-            re.IGNORECASE,
-        )
-        move_pattern = re.compile(
-            r"\bMOVE\s+([^\s]+)\s+TO\s+([A-Za-z0-9\-\,\s]+)",
-            re.IGNORECASE,
-        )
-
         for line_idx, line in enumerate(lines, start=1):
             clean_l = line.strip()
-            if not clean_l or clean_l.startswith("*") or clean_l.startswith("/"):
+            if not clean_l or (len(line) >= 7 and line[6] in ("*", "/")) or clean_l.startswith("/"):
                 continue
 
             # Check division / section changes
@@ -468,20 +500,6 @@ class StructuredExtractionEngine:
                 current_section = clean_l.split(".")[0].strip()
                 continue
 
-            # Parse COMPUTE formulas
-            c_match = compute_pattern.search(clean_l)
-            if c_match:
-                target_var = c_match.group(1).strip()
-                expr = c_match.group(2).strip().rstrip(".")
-                computes.append({"alias": target_var, "expression": f"COMPUTE {target_var} = {expr}", "data_type": "COMPUTE Expression"})
-
-            # Parse MOVE transformations
-            m_match = move_pattern.search(clean_l)
-            if m_match:
-                src_val = m_match.group(1).strip()
-                tgt_val = m_match.group(2).strip().rstrip(".")
-                computes.append({"alias": tgt_val, "expression": f"MOVE {src_val} TO {tgt_val}", "data_type": "MOVE Statement"})
-
             # Parse Variable declarations
             v_match = var_pattern.match(line)
             if v_match:
@@ -491,6 +509,8 @@ class StructuredExtractionEngine:
 
                 if lvl == "01" or lvl == "77":
                     current_01_group = var_name
+                    group_sections[current_01_group] = current_section or current_division
+                    group_divisions[current_01_group] = current_division
                     if current_01_group not in group_fields:
                         group_fields[current_01_group] = []
                         group_types[current_01_group] = {}
@@ -500,6 +520,8 @@ class StructuredExtractionEngine:
                         group_fields[current_01_group] = []
                         group_types[current_01_group] = {}
                         group_lines[current_01_group] = line_idx
+                        group_sections[current_01_group] = current_section or current_division
+                        group_divisions[current_01_group] = current_division
 
                     group_fields[current_01_group].append(var_name)
                     group_types[current_01_group][var_name] = f"PIC {pic_type}"
@@ -509,6 +531,7 @@ class StructuredExtractionEngine:
             group_fields[f"{program_id}-FIELDS"] = ["(Working-Storage Variables)"]
             group_types[f"{program_id}-FIELDS"] = {}
             group_lines[f"{program_id}-FIELDS"] = 1
+            group_sections[f"{program_id}-FIELDS"] = current_section or current_division
 
         for grp_name, f_list in group_fields.items():
             derived_for_group: List[Dict[str, str]] = []
@@ -522,12 +545,13 @@ class StructuredExtractionEngine:
                 })
 
             joins_list = [f"COPY {cb}" for cb in copybooks] if copybooks else []
+            sec_name = group_sections.get(grp_name, current_section or current_division)
 
             extracted_entities.append(
                 ExtractedTableInfo(
                     source_file=source_file,
                     table_name=grp_name,
-                    schema_name=current_section or current_division,
+                    schema_name=sec_name,
                     database_name=program_id,
                     alias=f"PROGRAM: {program_id}",
                     columns=f_list,

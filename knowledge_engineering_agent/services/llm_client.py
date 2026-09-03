@@ -35,6 +35,12 @@ class OpenAICompatibleClient(LLMProvider):
         user_prompt: str,
         schema: dict[str, object],
     ) -> dict[str, object]:
+        if not self.api_key:
+            raise LLMError(
+                "LLM API key is not configured. "
+                "Please configure NVIDIA_NIM_API_KEY in Streamlit Cloud Secrets or your environment."
+            )
+
         schema_text = json.dumps(
             schema,
             indent=2,
@@ -197,6 +203,12 @@ JSON Schema:
         Used by the Investigation Agent and Relationship Discovery Agent
         for intent classification, Cypher generation, and answer synthesis.
         """
+        if not self.api_key:
+            raise LLMError(
+                "LLM API key is not configured. "
+                "Please configure NVIDIA_NIM_API_KEY in Streamlit Cloud Secrets or your environment."
+            )
+
         models_to_try = [self.model]
         # Include known healthy fallback models if using NVIDIA NIM
         if "nvidia" in self.base_url or "nim" in self.base_url:
@@ -292,7 +304,7 @@ class LLMClient(OpenAICompatibleClient):
     def __init__(self, **kwargs):
         import os
         from dotenv import load_dotenv
-        load_dotenv()
+        load_dotenv(override=False)
 
         provider = os.getenv("LLM_PROVIDER", "nim").lower().strip()
         if provider == "groq":
