@@ -365,7 +365,7 @@ def render_pipeline() -> None:
 
     # 3. File Tracking Table (Expanded & Dynamic Layout)
     st.markdown("### Source Ingestion & File Tracking")
-    st.markdown("<p style='font-size:0.82rem; color:#64748B; margin-top:-0.4rem;'>Live tracking of all indexed legacy source files across COBOL, SQL, and SSIS.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.82rem; color:#64748B; margin-top:-0.4rem;'>Live tracking of all indexed enterprise source files across COBOL, SQL, and SSIS.</p>", unsafe_allow_html=True)
 
     all_files = SourceService.get_all_source_files()
     if all_files:

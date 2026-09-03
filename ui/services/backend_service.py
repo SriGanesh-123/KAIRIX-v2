@@ -96,13 +96,21 @@ def _cached_check_neo4j() -> Dict[str, Any]:
     """
     from urllib.parse import urlparse
     uri = os.getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
-    parsed = urlparse(uri.replace("neo4j://", "http://").replace("bolt://", "http://"))
+    normalized_uri = (
+        uri.replace("neo4j+s://", "http://")
+        .replace("neo4j+ssc://", "http://")
+        .replace("neo4j://", "http://")
+        .replace("bolt+s://", "http://")
+        .replace("bolt://", "http://")
+    )
+    parsed = urlparse(normalized_uri)
     host = parsed.hostname or "127.0.0.1"
     port = parsed.port or 7687
 
-    # Quick socket probe
+    # Socket probe with adaptive timeout for cloud (AuraDB) vs local
+    timeout = 0.1 if host in ("127.0.0.1", "localhost") else 1.5
     start = time.perf_counter()
-    is_open = _fast_socket_check(host, port, timeout=0.1)
+    is_open = _fast_socket_check(host, port, timeout=timeout)
     if not is_open:
         latency = round((time.perf_counter() - start) * 1000, 1)
         return {
@@ -110,7 +118,7 @@ def _cached_check_neo4j() -> Dict[str, Any]:
             "status": "offline",
             "uri": uri,
             "latency_ms": latency,
-            "message": f"Neo4j service port {port} is not reachable locally.",
+            "message": f"Neo4j service at {host}:{port} is not reachable.",
         }
 
     try:
@@ -162,6 +170,42 @@ def _cached_check_qdrant() -> Dict[str, Any]:
     """
     Ultra-fast Qdrant connectivity check with 50ms socket pre-check and 300s TTL.
     """
+    # If Pinecone is configured, check Pinecone
+    if os.getenv("PINECONE_API_KEY"):
+        start = time.perf_counter()
+        try:
+            from vector_layer.pinecone_client_wrapper import (
+                PineconeWrapper,
+                COLLECTION_CHUNKS,
+                COLLECTION_SUMMARIES,
+            )
+            pw = PineconeWrapper(silent=True)
+            chunks_count = pw.collection_count(COLLECTION_CHUNKS)
+            summaries_count = pw.collection_count(COLLECTION_SUMMARIES)
+            latency = round((time.perf_counter() - start) * 1000, 1)
+            return {
+                "connected": True,
+                "status": "connected",
+                "url": f"Pinecone Serverless ({pw.index_name})",
+                "latency_ms": latency,
+                "chunks_count": chunks_count,
+                "summaries_count": summaries_count,
+                "total_points": chunks_count + summaries_count,
+                "message": f"Connected to Pinecone ({chunks_count} chunks, {summaries_count} summaries)",
+            }
+        except Exception as e:
+            latency = round((time.perf_counter() - start) * 1000, 1)
+            return {
+                "connected": False,
+                "status": "error",
+                "url": "Pinecone Cloud",
+                "latency_ms": latency,
+                "chunks_count": 0,
+                "summaries_count": 0,
+                "total_points": 0,
+                "message": f"Pinecone connection error: {e}",
+            }
+
     from urllib.parse import urlparse
     url = os.getenv("QDRANT_URL", "http://localhost:6335")
     parsed = urlparse(url)

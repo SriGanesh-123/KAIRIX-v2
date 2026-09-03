@@ -44,8 +44,10 @@ def main() -> None:
     Main Streamlit application entry point and router.
     """
     # 1. Streamlit Page Configuration (Sidebar collapsed by default)
+    icon_path = Path(__file__).resolve().parent / "assets" / "kairix_emblem.png"
     st.set_page_config(
-        page_title="KAIRIX Investigation Agent — Legacy Workbench",
+        page_title="KAIRIX Investigation Agent — Enterprise Workbench",
+        page_icon=str(icon_path) if icon_path.exists() else "🦉",
         layout="wide",
         initial_sidebar_state="collapsed",
     )

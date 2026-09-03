@@ -25,7 +25,7 @@ def render_source_explorer() -> None:
             """
             <div style="margin-bottom: 0.4rem;">
                 <div style="font-size: 1.65rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2;">Source Explorer</div>
-                <div style="font-size: 0.88rem; color: #64748B; margin-top: 0.15rem;">Browse, upload, and inspect legacy source files, extracted entities, and business rules.</div>
+                <div style="font-size: 0.88rem; color: #64748B; margin-top: 0.15rem;">Browse, upload, and inspect enterprise source files, extracted entities, and business rules.</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -48,8 +48,8 @@ def render_source_explorer() -> None:
             st.markdown(
                 """
                 <div class="neo-panel" style="border-left: 4px solid #0284C7; padding: 1.25rem; margin: 0.75rem 0;">
-                    <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">Register New Legacy Source</div>
-                    <div style="font-size: 0.85rem; color: #64748B; margin-bottom: 0.75rem;">Upload or paste legacy code (COBOL, SQL, or SSIS DTSX) for deterministic parsing and knowledge extraction.</div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: #0F172A; margin-bottom: 0.25rem;">Register New Source</div>
+                    <div style="font-size: 0.85rem; color: #64748B; margin-bottom: 0.75rem;">Upload or paste enterprise code (COBOL, SQL, or SSIS DTSX) for deterministic parsing and knowledge extraction.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -75,7 +75,7 @@ def render_source_explorer() -> None:
                 uploaded_file = st.file_uploader(
                     "Upload Source File:",
                     type=["cbl", "cob", "cpy", "sql", "dtsx", "xml", "txt"],
-                    help="Upload a legacy source file from your local machine.",
+                    help="Upload a source file from your local machine.",
                     key="new_source_file_upload",
                 )
 

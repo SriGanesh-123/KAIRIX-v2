@@ -30,10 +30,17 @@ _CHUNK_SIZE = 50    # lines per chunk
 _CHUNK_OVERLAP = 10  # lines of overlap between chunks
 
 
+def _get_default_vector_store():
+    if os.getenv("PINECONE_API_KEY"):
+        from .pinecone_client_wrapper import PineconeWrapper
+        return PineconeWrapper()
+    return QdrantWrapper()
+
+
 class VectorIngestion:
     """
     Reads KnowledgePackage JSONs + raw source files + summaries,
-    then embeds and stores them in Qdrant.
+    then embeds and stores them in Pinecone / Qdrant.
 
     Usage:
         ingestion = VectorIngestion(
@@ -49,13 +56,13 @@ class VectorIngestion:
         knowledge_dir: str = "output/knowledge",
         source_dir: str = "source",
         summaries_dir: str = "output/summaries",
-        qdrant: Optional[QdrantWrapper] = None,
+        qdrant: Optional[Any] = None,
         embedder: Optional[Embedder] = None,
     ):
         self.knowledge_dir = Path(knowledge_dir)
         self.source_dir = Path(source_dir)
         self.summaries_dir = Path(summaries_dir)
-        self.qdrant = qdrant or QdrantWrapper()
+        self.qdrant = qdrant or _get_default_vector_store()
         self.embedder = embedder or Embedder()
 
     # ── Public API ─────────────────────────────────────────────────────────────

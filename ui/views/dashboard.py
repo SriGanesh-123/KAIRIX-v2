@@ -26,10 +26,10 @@ def render_dashboard() -> None:
         <div class="kairix-hero">
             <h1>KAIRIX</h1>
             <div style="font-size: 1.05rem; font-weight: 600; color: #0284C7; margin-bottom: 0.35rem;">
-                Legacy Intelligence & Reverse Engineering Platform
+                Enterprise Code Intelligence & Knowledge Engineering Platform
             </div>
             <p>
-                Understand and reverse-engineer legacy architectures through deterministic AST parsing,
+                Understand and analyze complex enterprise architectures through deterministic AST parsing,
                 interactive Neo4j knowledge graphs, Qdrant vector retrieval, and AI investigation.
             </p>
         </div>
@@ -138,7 +138,7 @@ def render_dashboard() -> None:
     col_q, col_btn = st.columns([5, 1.2])
     with col_q:
         quick_query = st.text_input(
-            "Ask a question about the legacy system:",
+            "Ask a question about the system:",
             placeholder="e.g., How is earned premium calculated? or Trace data flow from PREMCALC",
             label_visibility="collapsed",
             key="dashboard_quick_query_input",

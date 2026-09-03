@@ -11,6 +11,7 @@ ValueMomentum / KAIRIX Owl logo pinned to the top-left corner and the 4 core app
 from __future__ import annotations
 
 import base64
+import os
 from pathlib import Path
 import streamlit as st
 from ui.services.backend_service import BackendService
@@ -24,26 +25,31 @@ PAGES = [
 
 
 def _get_logo_html() -> str:
-    """Loads and encodes the official KAIRIX logo in base64."""
-    logo_png = Path(__file__).resolve().parent.parent / "assets" / "kairix_logo.png"
-    if logo_png.exists():
-        try:
-            b64 = base64.b64encode(logo_png.read_bytes()).decode("utf-8")
-            return f"""
-            <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.85rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
-                <img src="data:image/png;base64,{b64}" style="height: 48px; width: 48px; object-fit: contain; background: transparent; border: none; flex-shrink: 0;" alt="KAIRIX Logo" />
-                <div>
-                    <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em; line-height: 1.1;">KAIRIX</div>
-                    <div style="font-size: 0.68rem; color: #64748B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Legacy Workbench</div>
+    """Loads and encodes the official KAIRIX logo in base64 pinned to the top-left corner."""
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    for candidate in ["kairix_emblem_transparent.png", "kairix_emblem.png", "kairix_logo.png"]:
+        logo_path = assets_dir / candidate
+        if logo_path.exists():
+            try:
+                b64 = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
+                return f"""
+                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; margin-top: -2.4rem; margin-bottom: 0.95rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
+                    <div style="width: 42px; height: 42px; border-radius: 10px; background: #FFFFFF; border: 1px solid #D5DFEB; box-shadow: 0 2px 6px rgba(166, 180, 200, 0.25); display: flex; align-items: center; justify-content: center; padding: 4px; flex-shrink: 0;">
+                        <img src="data:image/png;base64,{b64}" style="width: 100%; height: 100%; object-fit: contain; display: block;" alt="KAIRIX Logo" />
+                    </div>
+                    <div style="display: flex; flex-direction: column; justify-content: center; text-align: left;">
+                        <div style="font-weight: 900; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.025em; line-height: 1.15;">KAIRIX</div>
+                        <div style="font-size: 0.68rem; color: #2563EB; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 1px;">Investigation Agent</div>
+                    </div>
                 </div>
-            </div>
-            """
-        except Exception:
-            pass
+                """
+            except Exception:
+                continue
 
     return """
-    <div style="margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB;">
-        <div style="font-weight: 800; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.02em;">KAIRIX</div>
+    <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
+        <div style="font-weight: 900; font-size: 1.25rem; color: #0F172A; letter-spacing: -0.025em; line-height: 1.15;">KAIRIX</div>
+        <div style="font-size: 0.68rem; color: #2563EB; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 1px;">Investigation Agent</div>
     </div>
     """
 
@@ -202,28 +208,28 @@ def render_sidebar() -> str:
             f"""
             <div class="neo-inset" style="padding: 0.75rem 0.85rem; border-radius: 9px; margin-bottom: 0.75rem;">
                 <div style="font-size: 0.8rem; color: #334155; display: flex; flex-direction: column; gap: 0.45rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 0.4rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;">
                             <span class="status-dot {neo4j_dot}"></span> Neo4j Graph
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{neo4j_info.get('latency_ms', 0)}ms</span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace; white-space: nowrap;">{neo4j_info.get('latency_ms', 0)}ms</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 0.4rem;">
-                            <span class="status-dot {qdrant_dot}"></span> Qdrant Vector
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;">
+                            <span class="status-dot {qdrant_dot}"></span> {"Pinecone DB" if os.getenv("PINECONE_API_KEY") else "Qdrant Vector"}
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{qdrant_info.get('latency_ms', 0)}ms</span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace; white-space: nowrap;">{qdrant_info.get('latency_ms', 0)}ms</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="display: flex; align-items: center; gap: 0.4rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
+                        <span style="display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;">
                             <span class="status-dot {llm_dot}"></span> LLM Provider
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace;">{llm_info.get('provider', 'NIM')}</span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace; white-space: nowrap;">{llm_info.get('provider', 'NIM')}</span>
                     </div>
                 </div>
             </div>
             <div style="font-size: 0.7rem; color: #94A3B8; text-align: center; margin-top: 0.5rem;">
-                KAIRIX Legacy Workbench v2.0
+                KAIRIX Enterprise Workbench v2.0
             </div>
             """,
             unsafe_allow_html=True,

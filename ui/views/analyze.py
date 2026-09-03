@@ -18,7 +18,7 @@ def render_analyze() -> None:
     """
     st.markdown("## Knowledge Engineering Pipeline")
     st.markdown(
-        "<p style='color: #64748B; margin-top: -0.5rem;'>Run deterministic parsing, AST extraction, multi-pass LLM review, and graph reconciliation on legacy code.</p>",
+        "<p style='color: #64748B; margin-top: -0.5rem;'>Run deterministic parsing, AST extraction, multi-pass LLM review, and graph reconciliation on enterprise source code.</p>",
         unsafe_allow_html=True,
     )
 

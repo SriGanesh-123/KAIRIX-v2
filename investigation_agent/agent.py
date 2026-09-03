@@ -14,6 +14,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+import os
 from pathlib import Path
 import re
 import time
@@ -83,6 +84,13 @@ def _clean_cypher_query(raw: str) -> str:
     return clean
 
 
+def _get_default_vector_client(silent: bool = True):
+    if os.getenv("PINECONE_API_KEY"):
+        from vector_layer.pinecone_client_wrapper import PineconeWrapper
+        return PineconeWrapper(silent=silent)
+    return QdrantWrapper(silent=silent)
+
+
 class InvestigationAgent:
     """
     Natural language Q&A over the KAIRIX Knowledge Graph + Vector DB.
@@ -97,7 +105,7 @@ class InvestigationAgent:
     def __init__(
         self,
         neo4j_client: Optional[Neo4jClient] = None,
-        qdrant: Optional[QdrantWrapper] = None,
+        qdrant: Optional[Any] = None,
         embedder: Optional[Embedder] = None,
         llm: Optional[LLMClient] = None,
         top_k_vectors: int = 5,
@@ -106,7 +114,7 @@ class InvestigationAgent:
     ):
         self.debug = debug
         self.neo4j = neo4j_client or Neo4jClient(silent=not debug)
-        self.qdrant = qdrant or QdrantWrapper(silent=not debug)
+        self.qdrant = qdrant or _get_default_vector_client(silent=not debug)
         self.embedder = embedder or Embedder(silent=not debug)
         self.llm = llm or LLMClient(debug=debug)
         self.top_k_vectors = top_k_vectors

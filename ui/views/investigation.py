@@ -86,9 +86,12 @@ def render_investigation() -> None:
     # 2. Hero Header
     st.markdown(
         """
-        <div style="text-align: center; margin-top: 1.0rem; margin-bottom: 1.2rem;">
-            <div style="font-size: 2.1rem; font-weight: 800; color: #0F172A; letter-spacing: -0.03em;">
-                Investigation Agent
+        <div style="text-align: center; margin-top: 1.1rem; margin-bottom: 1.3rem;">
+            <div style="font-size: 2.2rem; font-weight: 800; color: #0F172A; letter-spacing: -0.03em; line-height: 1.2;">
+                How can I help you?
+            </div>
+            <div style="font-size: 0.92rem; color: #64748B; margin-top: 0.35rem; font-weight: 500;">
+                Ask questions about system logic, trace calculations & lineage, or extract structured schemas.
             </div>
         </div>
         """,
@@ -255,7 +258,7 @@ def _render_structured_extraction() -> None:
                 Deterministic Multi-Source AST Structured Extraction
             </div>
             <div style="font-size: 0.84rem; color: #475569; line-height: 1.45;">
-                Select legacy source files across <strong>SQL, COBOL, or SSIS</strong>, define or import any custom tabular template (from <strong>CSV / Excel</strong> or Markdown), and extract verified tabular schemas with line-anchored provenance.
+                Select enterprise source files across <strong>SQL, COBOL, or SSIS</strong>, define or import any custom tabular template (from <strong>CSV / Excel</strong> or Markdown), and extract verified tabular schemas with line-anchored provenance.
             </div>
         </div>
         """,
@@ -598,15 +601,7 @@ def _show_fullscreen_table_modal(res: Dict[str, Any], idx: int) -> None:
     )
 
     # Search & Filter within Modal
-    col_s, col_m = st.columns([3, 1.5])
-    with col_s:
-        modal_search = st.text_input("Filter rows by keyword (table, column, schema):", key=f"modal_search_{idx}")
-    with col_m:
-        modal_view = st.selectbox(
-            "View Mode:",
-            ["Formatted Card Table", "Interactive Grid (st.dataframe)", "Granular Column Catalog"],
-            key=f"modal_vmode_{idx}",
-        )
+    modal_search = st.text_input("Filter rows by keyword (table, column, schema):", key=f"modal_search_{idx}")
 
     filtered_df = df.copy()
     if modal_search.strip():
@@ -665,34 +660,8 @@ def _show_fullscreen_table_modal(res: Dict[str, Any], idx: int) -> None:
 
     st.markdown("<div style='margin-top: 0.8rem;'></div>", unsafe_allow_html=True)
 
-    # Render Table in Modal
-    if modal_view == "Formatted Card Table":
-        _render_styled_table(filtered_df, max_height_px=550)
-    elif modal_view == "Interactive Grid (st.dataframe)":
-        st.dataframe(filtered_df, use_container_width=True, height=550)
-    else:
-        catalog_rows = []
-        for rec in records:
-            t_name = rec.get("table_name") or rec.get("values", {}).get("Table") or "Unknown"
-            s_name = rec.get("schema_name") or rec.get("values", {}).get("Schema") or "default"
-            db_name = rec.get("database_name") or rec.get("values", {}).get("Database") or "default"
-            src_file = rec.get("source_file") or ""
-            cols_str = rec.get("values", {}).get("Columns") or rec.get("values", {}).get("Column") or ""
-            col_items = [c.strip() for c in cols_str.split(",") if c.strip() and c != "Not specified in SQL"]
-            for c_idx, c_name in enumerate(col_items, start=1):
-                catalog_rows.append({
-                    "Order": c_idx,
-                    "Table": t_name,
-                    "Column": c_name,
-                    "Schema": s_name,
-                    "Database": db_name,
-                    "Source File": src_file,
-                })
-        cat_df = pd.DataFrame(catalog_rows)
-        if modal_search.strip():
-            q = modal_search.strip().lower()
-            cat_df = cat_df[cat_df.apply(lambda row: row.astype(str).str.lower().str.contains(q).any(), axis=1)]
-        _render_styled_table(cat_df, max_height_px=550)
+    # Render Formatted Card Table in Modal
+    _render_styled_table(filtered_df, max_height_px=550)
 
 
 @st.dialog("Table & Schema Inspector", width="large")
@@ -806,8 +775,8 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
 
         st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
 
-        # 2. Control Toolbar (Search, View Mode, Full Screen Button)
-        col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([3, 2, 1.3])
+        # 2. Control Toolbar (Search, Full Screen Button)
+        col_ctrl1, col_ctrl2 = st.columns([5.2, 1.4])
         with col_ctrl1:
             search_query = st.text_input(
                 "Filter records:",
@@ -816,14 +785,6 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
                 label_visibility="collapsed",
             )
         with col_ctrl2:
-            view_mode = st.segmented_control(
-                "View Mode",
-                options=["Formatted Cards", "Interactive Grid", "Column Catalog"],
-                default="Formatted Cards",
-                key=f"view_mode_seg_{idx}",
-                label_visibility="collapsed",
-            )
-        with col_ctrl3:
             if st.button("⛶ Full Screen", key=f"btn_fullscreen_{idx}", use_container_width=True, help="Open table in large full-screen modal"):
                 _show_fullscreen_table_modal(res, idx)
 
@@ -834,34 +795,8 @@ def _render_extraction_result_card(res: Dict[str, Any], idx: int) -> None:
             mask = filtered_df.apply(lambda row: row.astype(str).str.lower().str.contains(q).any(), axis=1)
             filtered_df = filtered_df[mask]
 
-        # 3. Main Table Rendering based on View Mode
-        if view_mode == "Formatted Cards":
-            _render_styled_table(filtered_df)
-        elif view_mode == "Interactive Grid":
-            st.dataframe(filtered_df, use_container_width=True, height=450)
-        elif view_mode == "Column Catalog":
-            catalog_rows = []
-            for rec in records:
-                t_name = rec.get("table_name") or rec.get("values", {}).get("Table") or "Unknown"
-                s_name = rec.get("schema_name") or rec.get("values", {}).get("Schema") or "default"
-                db_name = rec.get("database_name") or rec.get("values", {}).get("Database") or "default"
-                src_file = rec.get("source_file") or ""
-                cols_str = rec.get("values", {}).get("Columns") or rec.get("values", {}).get("Column") or ""
-                col_items = [c.strip() for c in cols_str.split(",") if c.strip() and c != "Not specified in SQL"]
-                for c_idx, c_name in enumerate(col_items, start=1):
-                    catalog_rows.append({
-                        "Order": c_idx,
-                        "Table": t_name,
-                        "Column": c_name,
-                        "Schema": s_name,
-                        "Database": db_name,
-                        "Source File": src_file,
-                    })
-            cat_df = pd.DataFrame(catalog_rows)
-            if search_query and search_query.strip():
-                q = search_query.strip().lower()
-                cat_df = cat_df[cat_df.apply(lambda row: row.astype(str).str.lower().str.contains(q).any(), axis=1)]
-            _render_styled_table(cat_df)
+        # 3. Main Table Rendering (Formatted Card Table)
+        _render_styled_table(filtered_df)
 
         # 4. Multi-Format Download Action Bar
         st.markdown(
