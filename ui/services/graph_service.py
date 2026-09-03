@@ -247,8 +247,10 @@ def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = Non
                         n_props["id"] = nid
                         nodes_dict[nid] = n_props
                     for r in val.relationships:
-                        src_id = str(r.start_node.get("id") or getattr(r.start_node, "element_id", ""))
-                        tgt_id = str(r.end_node.get("id") or getattr(r.end_node, "element_id", ""))
+                        src_node_dict = dict(r.start_node) if hasattr(r, "start_node") else {}
+                        tgt_node_dict = dict(r.end_node) if hasattr(r, "end_node") else {}
+                        src_id = str(src_node_dict.get("id") or src_node_dict.get("name") or getattr(r.start_node, "element_id", ""))
+                        tgt_id = str(tgt_node_dict.get("id") or tgt_node_dict.get("name") or getattr(r.end_node, "element_id", ""))
                         edge_key = f"{src_id}:{r.type}:{tgt_id}"
                         if edge_key not in seen_edges and src_id and tgt_id:
                             seen_edges.add(edge_key)
@@ -264,11 +266,16 @@ def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = Non
                     tgt_n = val.end_node
                     src_props = dict(src_n)
                     tgt_props = dict(tgt_n)
-                    src_id = str(src_props.get("id") or getattr(src_n, "element_id", ""))
-                    tgt_id = str(tgt_props.get("id") or getattr(tgt_n, "element_id", ""))
+                    src_id = str(src_props.get("id") or src_props.get("name") or getattr(src_n, "element_id", ""))
+                    tgt_id = str(tgt_props.get("id") or tgt_props.get("name") or getattr(tgt_n, "element_id", ""))
 
                     src_props["id"] = src_id
                     tgt_props["id"] = tgt_id
+                    if hasattr(src_n, "labels") and src_n.labels:
+                        src_props["_labels"] = list(src_n.labels)
+                    if hasattr(tgt_n, "labels") and tgt_n.labels:
+                        tgt_props["_labels"] = list(tgt_n.labels)
+
                     if src_id:
                         nodes_dict[src_id] = src_props
                     if tgt_id:
@@ -501,6 +508,107 @@ class GraphService:
         return _cached_trace_lineage(entity_name=entity_name, max_depth=max_depth)
 
     @staticmethod
+    def execute_custom_cypher(cypher: str, max_records: int = 150) -> Dict[str, Any]:
+        """
+        Executes an arbitrary Cypher query directly against the live Neo4j Aura database
+        and maps all returned Nodes, Relationships, and Paths into a visual graph payload.
+        """
+        nodes_dict: Dict[str, Dict[str, Any]] = {}
+        edges_list: List[Dict[str, Any]] = []
+        seen_edges: Set[str] = set()
+
+        client = _get_client()
+        if client is None:
+            return {"nodes": [], "edges": [], "error": "Neo4j Aura client is not connected.", "raw_records": 0}
+
+        clean_cypher = cypher.strip()
+        if "limit" not in clean_cypher.lower():
+            clean_cypher = f"{clean_cypher} LIMIT {max_records}"
+
+        try:
+            records = client.run_query(clean_cypher)
+            for row in records:
+                for val in row.values():
+                    if val is None:
+                        continue
+
+                    # Single Node
+                    if hasattr(val, "labels") and hasattr(val, "items"):
+                        node_props = dict(val)
+                        node_id = str(node_props.get("id") or node_props.get("name") or node_props.get("file_name") or getattr(val, "element_id", str(id(val))))
+                        node_props["id"] = node_id
+                        node_props["_labels"] = list(val.labels) if val.labels else ["Entity"]
+                        nodes_dict[node_id] = node_props
+
+                    # Path with nodes and relationships
+                    elif hasattr(val, "nodes") and hasattr(val, "relationships"):
+                        for n in val.nodes:
+                            n_props = dict(n)
+                            nid = str(n_props.get("id") or n_props.get("name") or n_props.get("file_name") or getattr(n, "element_id", str(id(n))))
+                            n_props["id"] = nid
+                            n_props["_labels"] = list(n.labels) if hasattr(n, "labels") and n.labels else ["Entity"]
+                            nodes_dict[nid] = n_props
+                        for r in val.relationships:
+                            src_node_dict = dict(r.start_node) if hasattr(r, "start_node") else {}
+                            tgt_node_dict = dict(r.end_node) if hasattr(r, "end_node") else {}
+                            src_id = str(src_node_dict.get("id") or src_node_dict.get("name") or getattr(r.start_node, "element_id", ""))
+                            tgt_id = str(tgt_node_dict.get("id") or tgt_node_dict.get("name") or getattr(r.end_node, "element_id", ""))
+                            edge_key = f"{src_id}:{r.type}:{tgt_id}"
+                            if edge_key not in seen_edges and src_id and tgt_id:
+                                seen_edges.add(edge_key)
+                                edges_list.append({
+                                    "source": src_id,
+                                    "target": tgt_id,
+                                    "type": r.type,
+                                    "properties": dict(r),
+                                })
+
+                    # Single Relationship
+                    elif hasattr(val, "type") and hasattr(val, "start_node") and hasattr(val, "end_node"):
+                        src_n = val.start_node
+                        tgt_n = val.end_node
+                        src_props = dict(src_n)
+                        tgt_props = dict(tgt_n)
+                        src_id = str(src_props.get("id") or src_props.get("name") or getattr(src_n, "element_id", ""))
+                        tgt_id = str(tgt_props.get("id") or tgt_props.get("name") or getattr(tgt_n, "element_id", ""))
+
+                        src_props["id"] = src_id
+                        tgt_props["id"] = tgt_id
+                        if hasattr(src_n, "labels") and src_n.labels:
+                            src_props["_labels"] = list(src_n.labels)
+                        if hasattr(tgt_n, "labels") and tgt_n.labels:
+                            tgt_props["_labels"] = list(tgt_n.labels)
+
+                        if src_id:
+                            nodes_dict[src_id] = src_props
+                        if tgt_id:
+                            nodes_dict[tgt_id] = tgt_props
+
+                        edge_key = f"{src_id}:{val.type}:{tgt_id}"
+                        if edge_key not in seen_edges and src_id and tgt_id:
+                            seen_edges.add(edge_key)
+                            edges_list.append({
+                                "source": src_id,
+                                "target": tgt_id,
+                                "type": val.type,
+                                "properties": dict(val),
+                            })
+
+            return {
+                "nodes": list(nodes_dict.values()),
+                "edges": edges_list,
+                "raw_records": len(records),
+                "error": None,
+            }
+        except Exception as e:
+            return {
+                "nodes": [],
+                "edges": [],
+                "raw_records": 0,
+                "error": str(e),
+            }
+
+    @staticmethod
     def render_pyvis_html(
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
@@ -645,7 +753,7 @@ class GraphService:
                 "keyboard": True,
                 "zoomView": True,
                 "dragView": True,
-                "dragNodes": False,
+                "dragNodes": True,
                 "tooltipDelay": 100,
             },
         }
@@ -712,6 +820,12 @@ class GraphService:
 </head>
 <body>
   <div id="mynetwork"></div>
+  <div style="position: absolute; bottom: 16px; right: 16px; z-index: 9999; display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 5px 8px; border-radius: 20px; border: 1px solid #CBD5E1; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); font-family: 'Inter', -apple-system, sans-serif;">
+    <button id="btn-fit" title="Fit to Screen (Center)" style="background: none; border: none; cursor: pointer; font-size: 15px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #334155; transition: background 0.15s;" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">⛶</button>
+    <button id="btn-zoomin" title="Zoom In (+)" style="background: none; border: none; cursor: pointer; font-size: 17px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #334155; font-weight: 700; transition: background 0.15s;" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">＋</button>
+    <button id="btn-zoomout" title="Zoom Out (-)" style="background: none; border: none; cursor: pointer; font-size: 17px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #334155; font-weight: 700; transition: background 0.15s;" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='none'">－</button>
+    <button id="btn-freeze" title="Toggle Live Physics" style="background: #0284C7; color: #FFFFFF; border: none; cursor: pointer; font-size: 12px; font-weight: 700; padding: 0 10px; height: 26px; border-radius: 13px; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.3);">⚡ Physics</button>
+  </div>
   {js_header}
   <script type="text/javascript">
     (function() {{
@@ -750,6 +864,38 @@ class GraphService:
           tooltip.style.visibility = 'hidden';
         }}
       }});
+
+      // Attach HUD controls
+      var fitBtn = document.getElementById('btn-fit');
+      if (fitBtn) {{
+        fitBtn.addEventListener('click', function() {{
+          network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
+        }});
+      }}
+      var zoomInBtn = document.getElementById('btn-zoomin');
+      if (zoomInBtn) {{
+        zoomInBtn.addEventListener('click', function() {{
+          var s = network.getScale();
+          network.moveTo({{ scale: s * 1.35, animation: {{ duration: 200, easingFunction: 'easeInOutQuad' }} }});
+        }});
+      }}
+      var zoomOutBtn = document.getElementById('btn-zoomout');
+      if (zoomOutBtn) {{
+        zoomOutBtn.addEventListener('click', function() {{
+          var s = network.getScale();
+          network.moveTo({{ scale: s * 0.75, animation: {{ duration: 200, easingFunction: 'easeInOutQuad' }} }});
+        }});
+      }}
+      var physicsActive = true;
+      var fBtn = document.getElementById('btn-freeze');
+      if (fBtn) {{
+        fBtn.addEventListener('click', function() {{
+          physicsActive = !physicsActive;
+          network.setOptions({{ physics: {{ enabled: physicsActive }} }});
+          fBtn.style.background = physicsActive ? '#0284C7' : '#64748B';
+          fBtn.innerText = physicsActive ? '⚡ Physics' : '⏸ Frozen';
+        }});
+      }}
 
       function handleStabilized() {{
         if (typeof network !== 'undefined' && network !== null) {{
