@@ -1,11 +1,11 @@
 """
-Investigation Agent — orchestrates Neo4j + Qdrant retrieval and LLM synthesis.
+Investigation Agent — orchestrates Neo4j + Pinecone retrieval and LLM synthesis.
 
 Flow for each question:
   1. Classify intent (lineage / semantic / combined)
   2. Concurrent retrieval:
      - Generate + run Cypher query against Neo4j
-     - Embed question + search Qdrant (chunks + summaries)
+     - Embed question + search Pinecone (chunks + summaries)
   3. Synthesise answer via LLM using all retrieved evidence
   4. Return InvestigationResult with full evidence trace and performance timing
 """
@@ -23,8 +23,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 from graph_layer.neo4j_client import Neo4jClient
-from vector_layer.qdrant_client_wrapper import (
-    QdrantWrapper,
+from vector_layer.pinecone_client_wrapper import (
+    PineconeWrapper,
     COLLECTION_CHUNKS,
     COLLECTION_SUMMARIES,
 )
@@ -86,14 +86,17 @@ def _clean_cypher_query(raw: str) -> str:
 
 def _get_default_vector_client(silent: bool = True):
     if os.getenv("PINECONE_API_KEY"):
-        from vector_layer.pinecone_client_wrapper import PineconeWrapper
         return PineconeWrapper(silent=silent)
-    return QdrantWrapper(silent=silent)
+    try:
+        from vector_layer.qdrant_client_wrapper import QdrantWrapper
+        return QdrantWrapper(silent=silent)
+    except Exception:
+        return PineconeWrapper(silent=silent)
 
 
 class InvestigationAgent:
     """
-    Natural language Q&A over the KAIRIX Knowledge Graph + Vector DB.
+    Natural language Q&A over the KAIRIX Knowledge Graph + Pinecone Vector DB.
 
     Usage:
         agent = InvestigationAgent()
@@ -105,6 +108,7 @@ class InvestigationAgent:
     def __init__(
         self,
         neo4j_client: Optional[Neo4jClient] = None,
+        vector_client: Optional[Any] = None,
         qdrant: Optional[Any] = None,
         embedder: Optional[Embedder] = None,
         llm: Optional[LLMClient] = None,
@@ -114,7 +118,8 @@ class InvestigationAgent:
     ):
         self.debug = debug
         self.neo4j = neo4j_client or Neo4jClient(silent=not debug)
-        self.qdrant = qdrant or _get_default_vector_client(silent=not debug)
+        self.vector_client = vector_client or qdrant or _get_default_vector_client(silent=not debug)
+        self.qdrant = self.vector_client
         self.embedder = embedder or Embedder(silent=not debug)
         self.llm = llm or LLMClient(debug=debug)
         self.top_k_vectors = top_k_vectors
@@ -190,13 +195,13 @@ class InvestigationAgent:
             logger.debug("Graph retrieval error: %s", e)
             records = []
 
-        # ── Step 3: Vector retrieval (Qdrant) ────────────────────────────────
+        # ── Step 3: Vector retrieval (Pinecone) ──────────────────────────────
         chunks: List[Dict[str, Any]] = []
         summaries: List[Dict[str, Any]] = []
         try:
             chunks, summaries = self._vector_retrieve(question)
             if on_progress:
-                on_progress("vector_done", f"3. Vector Space: Retrieved {len(chunks)} code chunks & {len(summaries)} summaries from Qdrant")
+                on_progress("vector_done", f"3. Vector Space: Retrieved {len(chunks)} code chunks & {len(summaries)} summaries from Pinecone")
         except Exception as e:
             logger.debug("Vector retrieval error: %s", e)
             chunks, summaries = [], []
@@ -461,17 +466,17 @@ class InvestigationAgent:
 
     def _vector_retrieve(
         self, question: str
-    ) -> Tuple[List[Dict], List[Dict]]:
-        """Embed question and search both Qdrant collections."""
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Embed question and search Pinecone namespaces."""
         query_vec = self.embedder.embed_one(question)
         try:
-            chunks = self.qdrant.search(
+            chunks = self.vector_client.search(
                 COLLECTION_CHUNKS, query_vec, top_k=self.top_k_vectors
             )
         except Exception:
             chunks = []
         try:
-            summaries = self.qdrant.search(
+            summaries = self.vector_client.search(
                 COLLECTION_SUMMARIES, query_vec, top_k=self.top_k_vectors
             )
         except Exception:

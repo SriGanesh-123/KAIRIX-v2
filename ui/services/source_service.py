@@ -406,7 +406,7 @@ class SourceService:
                         p.unlink()
                         deleted_paths.append(str(p))
 
-            # 5. Purge from Neo4j & Qdrant databases
+            # 5. Purge from Neo4j & Vector databases (Pinecone / Qdrant)
             try:
                 from ui.services.backend_service import BackendService
                 neo_client = BackendService.get_neo4j_client()
@@ -416,21 +416,26 @@ class SourceService:
                         {"fn": file_name}
                     )
                 
-                from vector_layer.qdrant_client_wrapper import QdrantWrapper, COLLECTION_CHUNKS, COLLECTION_SUMMARIES
-                from qdrant_client.http import models
-                qw = QdrantWrapper(silent=True)
-                for cname in [COLLECTION_CHUNKS, COLLECTION_SUMMARIES]:
-                    qw._client.delete(
-                        collection_name=cname,
-                        points_selector=models.FilterSelector(
-                            filter=models.Filter(
-                                should=[
-                                    models.FieldCondition(key="file_name", match=models.MatchValue(value=file_name)),
-                                    models.FieldCondition(key="source_file", match=models.MatchValue(value=file_name)),
-                                ]
+                if os.getenv("PINECONE_API_KEY"):
+                    from vector_layer.pinecone_client_wrapper import PineconeWrapper
+                    pw = PineconeWrapper(silent=True)
+                    pw.delete_by_file(file_name)
+                else:
+                    from vector_layer.qdrant_client_wrapper import QdrantWrapper, COLLECTION_CHUNKS, COLLECTION_SUMMARIES
+                    from qdrant_client.http import models
+                    qw = QdrantWrapper(silent=True)
+                    for cname in [COLLECTION_CHUNKS, COLLECTION_SUMMARIES]:
+                        qw._client.delete(
+                            collection_name=cname,
+                            points_selector=models.FilterSelector(
+                                filter=models.Filter(
+                                    should=[
+                                        models.FieldCondition(key="file_name", match=models.MatchValue(value=file_name)),
+                                        models.FieldCondition(key="source_file", match=models.MatchValue(value=file_name)),
+                                    ]
+                                )
                             )
                         )
-                    )
             except Exception as e:
                 logger.debug("Database cleanup note for '%s': %s", file_name, e)
 

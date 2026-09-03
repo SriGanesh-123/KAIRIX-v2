@@ -162,6 +162,18 @@ class PineconeWrapper:
             for h in hits
         ]
 
+    def delete_by_file(self, file_name: str) -> None:
+        """Deletes all vectors belonging to a specific file across namespaces."""
+        for ns in [COLLECTION_CHUNKS, COLLECTION_SUMMARIES]:
+            try:
+                self._index.delete(
+                    filter={"file_name": {"$eq": file_name}},
+                    namespace=ns,
+                )
+            except Exception as e:
+                if not self.silent:
+                    print(f"[Pinecone] Note deleting by file {file_name} in {ns}: {e}")
+
     def close(self) -> None:
         pass
 

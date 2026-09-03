@@ -4,7 +4,7 @@ Pipeline Control Center Page for KAIRIX UI.
 Provides dedicated controls to trigger and monitor the core KAIRIX pipeline layers:
   1. Run Layer 1: Knowledge Engineering Agent (python -m knowledge_engineering_agent source/ or individual file)
   2. Ingest / Update Neo4j Knowledge Graph (python -m graph_layer)
-  3. Ingest Qdrant Vector Store (python -m vector_layer)
+  3. Ingest Pinecone Vector Store (python -m vector_layer)
 
 Features asynchronous non-blocking background execution, live file tracking table,
 and real-time monospace terminal log viewer.
@@ -12,6 +12,7 @@ and real-time monospace terminal log viewer.
 from __future__ import annotations
 
 import html
+import os
 import time
 import streamlit as st
 from ui.services.pipeline_service import PipelineService
@@ -61,7 +62,7 @@ def _render_styled_log_terminal(logs: list[str], empty_msg: str, header_title: s
             styled_line = f'<div style="color:#F87171; font-weight:600;"><span style="color:#EF4444;">•</span> {clean_line}</div>'
         elif "[Neo4j]" in clean_line or "Neo4j" in clean_line:
             styled_line = f'<div style="color:#C084FC;"><span style="color:#A855F7;">•</span> {clean_line}</div>'
-        elif "[Qdrant]" in clean_line or "Qdrant" in clean_line:
+        elif "[Pinecone]" in clean_line or "Pinecone" in clean_line or "[Qdrant]" in clean_line or "Qdrant" in clean_line:
             styled_line = f'<div style="color:#34D399;"><span style="color:#10B981;">•</span> {clean_line}</div>'
         elif clean_line.startswith("- Purpose:") or clean_line.startswith("- Entities:") or clean_line.startswith("- Transformations:") or clean_line.startswith("- Relationships:"):
             styled_line = f'<div style="color:#94A3B8; padding-left:1.2rem; font-size:0.74rem;">- {clean_line}</div>'
@@ -97,7 +98,7 @@ def render_pipeline() -> None:
     """
     st.markdown("## Pipeline Execution & Control Center")
     st.markdown(
-        "<p style='color: #64748B; margin-top: -0.5rem;'>Trigger and monitor deterministic AST extraction, Neo4j Knowledge Graph ingestion, and Qdrant semantic vector indexing.</p>",
+        "<p style='color: #64748B; margin-top: -0.5rem;'>Trigger and monitor deterministic AST extraction, Neo4j Knowledge Graph ingestion, and Pinecone semantic vector indexing.</p>",
         unsafe_allow_html=True,
     )
 
@@ -240,7 +241,7 @@ def render_pipeline() -> None:
         if is_running2 and is_running3:
             badge_html2 = '<span class="badge-running-pulse"><span class="live-spinner-dot"></span> RUNNING (PARALLEL)</span>'
         elif is_running2 or is_running3:
-            running_which = "NEO4J" if is_running2 else "QDRANT"
+            running_which = "NEO4J" if is_running2 else ("PINECONE" if os.getenv("PINECONE_API_KEY") else "VECTOR")
             badge_html2 = f'<span class="badge-running-pulse"><span class="live-spinner-dot"></span> RUNNING ({running_which})</span>'
         elif stt2 == "COMPLETED" and stt3 == "COMPLETED":
             badge_html2 = '<span style="background:#D1FAE5; color:#047857; font-size:0.72rem; font-weight:700; padding:0.2rem 0.55rem; border-radius:12px;">COMPLETED</span>'
@@ -265,19 +266,20 @@ def render_pipeline() -> None:
             neo4j_badge = '<span style="color:#4338CA; font-weight:700; font-size:0.70rem; white-space:nowrap;">READY</span>'
             neo4j_body = '<div style="font-size:0.71rem; color:#4338CA; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">Builds schema & graph</div>'
 
-        # Qdrant Mini Panel Content
+        # Pinecone Mini Panel Content
+        vector_panel_label = "Pinecone Vector" if os.getenv("PINECONE_API_KEY") else "Vector Store"
         if is_running3:
-            qdrant_badge = f'<span style="color:#047857; font-weight:700; font-size:0.70rem; white-space:nowrap;">RUNNING ({pct3}%)</span>'
-            qdrant_body = f'<div class="pipeline-progress-bar-bg" style="margin-top:2px; margin-bottom:2px; width:100%; min-width:0;"><div class="pipeline-progress-bar-fill fill-green" style="width:{max(5, pct3)}%;"></div></div><div style="font-size:0.70rem; font-weight:700; color:#047857; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;" title="{html.escape(cur_step3)}">{html.escape(cur_step3)}</div>'
+            pinecone_badge = f'<span style="color:#047857; font-weight:700; font-size:0.70rem; white-space:nowrap;">RUNNING ({pct3}%)</span>'
+            pinecone_body = f'<div class="pipeline-progress-bar-bg" style="margin-top:2px; margin-bottom:2px; width:100%; min-width:0;"><div class="pipeline-progress-bar-fill fill-green" style="width:{max(5, pct3)}%;"></div></div><div style="font-size:0.70rem; font-weight:700; color:#047857; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;" title="{html.escape(cur_step3)}">{html.escape(cur_step3)}</div>'
         elif stt3 == "COMPLETED":
-            qdrant_badge = f'<span style="color:#15803D; font-weight:700; font-size:0.70rem; white-space:nowrap;">DONE{dur3}</span>'
-            qdrant_body = '<div style="font-size:0.72rem; font-weight:600; color:#15803D; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">✓ Vectors indexed</div>'
+            pinecone_badge = f'<span style="color:#15803D; font-weight:700; font-size:0.70rem; white-space:nowrap;">DONE{dur3}</span>'
+            pinecone_body = '<div style="font-size:0.72rem; font-weight:600; color:#15803D; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">✓ Vectors indexed in Pinecone</div>'
         elif stt3 == "STOPPED":
-            qdrant_badge = '<span style="color:#DC2626; font-weight:700; font-size:0.70rem; white-space:nowrap;">STOPPED</span>'
-            qdrant_body = '<div style="font-size:0.72rem; font-weight:600; color:#DC2626; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">⏹ Stopped by user</div>'
+            pinecone_badge = '<span style="color:#DC2626; font-weight:700; font-size:0.70rem; white-space:nowrap;">STOPPED</span>'
+            pinecone_body = '<div style="font-size:0.72rem; font-weight:600; color:#DC2626; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">⏹ Stopped by user</div>'
         else:
-            qdrant_badge = '<span style="color:#047857; font-weight:700; font-size:0.70rem; white-space:nowrap;">READY</span>'
-            qdrant_body = '<div style="font-size:0.71rem; color:#047857; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">Generates vector embeddings</div>'
+            pinecone_badge = '<span style="color:#047857; font-weight:700; font-size:0.70rem; white-space:nowrap;">READY</span>'
+            pinecone_body = '<div style="font-size:0.71rem; color:#047857; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; min-width:0;">Generates Pinecone vector embeddings</div>'
 
         status_box2 = (
             f'<div style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; height: 74px; width: 100%; min-width: 0; box-sizing: border-box;">'
@@ -290,10 +292,10 @@ def render_pipeline() -> None:
             f'</div>'
             f'<div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:10px; padding:0.45rem 0.65rem; display:flex; flex-direction:column; justify-content:center; min-width: 0; overflow: hidden; box-sizing: border-box;">'
             f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.15rem; min-width: 0;">'
-            f'<span style="font-size:0.72rem; font-weight:800; color:#047857; text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;">Qdrant Vector</span>'
-            f'{qdrant_badge}'
+            f'<span style="font-size:0.72rem; font-weight:800; color:#047857; text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;">{vector_panel_label}</span>'
+            f'{pinecone_badge}'
             f'</div>'
-            f'{qdrant_body}'
+            f'{pinecone_body}'
             f'</div>'
             f'</div>'
         )
@@ -309,7 +311,7 @@ def render_pipeline() -> None:
             f'<h4 style="margin:0; color:#0F172A; font-size:1.12rem; font-weight:800; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Layer 3: Knowledge Graph & Vector Store Ingestion</h4>'
             f'</div>'
             f'<div style="height:52px; font-size:0.84rem; color:#64748B; line-height:1.45; margin-bottom:0.5rem; overflow:hidden;">'
-            f'Loads canonical packages into Neo4j Knowledge Graph with cross-file lineage and embeds source chunks into Qdrant collections.'
+            f'Loads canonical packages into Neo4j Knowledge Graph with cross-file lineage and embeds source chunks into Pinecone namespaces.'
             f'</div>'
             f'</div>'
             f'{status_box2}'
@@ -320,9 +322,9 @@ def render_pipeline() -> None:
         st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
 
         l3_mode_options = [
-            "Ingest Both (Neo4j Graph + Qdrant Vector)",
+            "Ingest Both (Neo4j Graph + Pinecone Vector)",
             "Neo4j Knowledge Graph Only",
-            "Qdrant Vector Store Only",
+            "Pinecone Vector Store Only",
         ]
         selected_l3_mode = st.selectbox(
             "Layer 3 Ingestion Scope",
@@ -330,19 +332,19 @@ def render_pipeline() -> None:
             key="l3_ingestion_mode",
             disabled=is_layer3_running,
             label_visibility="collapsed",
-            help="Execute Neo4j Graph ingestion and Qdrant Vector indexing concurrently in parallel or selectively.",
+            help="Execute Neo4j Graph ingestion and Pinecone Vector indexing concurrently in parallel or selectively.",
         )
 
         col_chk2_a, col_chk2_b = st.columns(2)
         with col_chk2_a:
             discover2 = st.checkbox("Discover cross-file links", value=True, key="gl_discover_check", disabled=is_layer3_running)
         with col_chk2_b:
-            force3 = st.checkbox("Recreate vector collections", value=False, key="vl_force_check", disabled=is_layer3_running)
+            force3 = st.checkbox("Recreate Pinecone namespaces", value=False, key="vl_force_check", disabled=is_layer3_running)
 
         if is_layer3_running:
             col_b2, col_s2 = st.columns([2.8, 1.2])
             with col_b2:
-                running_txt = "Ingesting Neo4j & Qdrant..." if (is_running2 and is_running3) else ("Ingesting Neo4j..." if is_running2 else "Indexing Qdrant...")
+                running_txt = "Ingesting Neo4j & Pinecone..." if (is_running2 and is_running3) else ("Ingesting Neo4j..." if is_running2 else "Indexing Pinecone...")
                 st.button(running_txt, type="primary", use_container_width=True, disabled=True, key="btn_run_l3")
             with col_s2:
                 if st.button("🛑 Stop", use_container_width=True, key="btn_stop_l3"):
@@ -350,14 +352,14 @@ def render_pipeline() -> None:
                     st.rerun()
         else:
             if "Both" in selected_l3_mode:
-                l3_btn_text = "Run Layer 3 Ingestion (Neo4j & Qdrant)"
+                l3_btn_text = "Run Layer 3 Ingestion (Neo4j & Pinecone)"
             elif "Neo4j" in selected_l3_mode:
                 l3_btn_text = "Ingest Neo4j Knowledge Graph"
             else:
-                l3_btn_text = "Ingest Qdrant Vector Store"
+                l3_btn_text = "Ingest Pinecone Vector Store"
 
             if st.button(l3_btn_text, type="primary", use_container_width=True, key="btn_run_l3"):
-                mode_val = "both" if "Both" in selected_l3_mode else ("neo4j" if "Neo4j" in selected_l3_mode else "qdrant")
+                mode_val = "both" if "Both" in selected_l3_mode else ("neo4j" if "Neo4j" in selected_l3_mode else "pinecone")
                 PipelineService.run_layer_3_parallel(discover_neo4j=discover2, force_vector=force3, mode=mode_val)
                 st.rerun()
 
@@ -451,7 +453,7 @@ def render_pipeline() -> None:
 
     # 4. Expandable Real-Time Execution Logs
     st.markdown("### Execution Logs")
-    tabs_log = st.tabs(["Layer 2: Knowledge Engineering Logs", "Layer 3: Neo4j Graph Logs", "Layer 3: Qdrant Vector Logs"])
+    tabs_log = st.tabs(["Layer 2: Knowledge Engineering Logs", "Layer 3: Neo4j Graph Logs", "Layer 3: Pinecone Vector Logs"])
 
     with tabs_log[0]:
         logs1 = s1.get("logs", [])
@@ -473,8 +475,8 @@ def render_pipeline() -> None:
         logs3 = s3.get("logs", [])
         _render_styled_log_terminal(
             logs3,
-            empty_msg="No execution logs recorded for Qdrant Vector Store. Click 'Run Layer 3 Ingestion' above to execute.",
-            header_title="Layer 3 • Qdrant Vector Semantic Indexing",
+            empty_msg="No execution logs recorded for Pinecone Vector Store. Click 'Run Layer 3 Ingestion' above to execute.",
+            header_title="Layer 3 • Pinecone Vector Semantic Indexing",
         )
 
     # 5. Live Auto-Refresh while any background execution is in progress

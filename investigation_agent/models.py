@@ -33,7 +33,7 @@ class InvestigationResult(BaseModel):
     )
     vector_evidence: List[str] = Field(
         default_factory=list,
-        description="Relevant source code / summary excerpts from Qdrant",
+        description="Relevant source code / summary excerpts from Pinecone",
     )
     trace_path: List[str] = Field(
         default_factory=list,

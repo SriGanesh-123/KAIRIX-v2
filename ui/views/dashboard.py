@@ -30,7 +30,7 @@ def render_dashboard() -> None:
             </div>
             <p>
                 Understand and analyze complex enterprise architectures through deterministic AST parsing,
-                interactive Neo4j knowledge graphs, Qdrant vector retrieval, and AI investigation.
+                interactive Neo4j knowledge graphs, Pinecone vector retrieval, and AI investigation.
             </p>
         </div>
         """,
@@ -119,13 +119,13 @@ def render_dashboard() -> None:
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:0.85rem 1rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-weight:700; color:#0F172A; font-size:0.9rem; display:flex; align-items:center; gap:0.4rem;">
-                        <span>{icon_v}</span> Layer 3: Vector Layer (Qdrant)
+                        <span>{icon_v}</span> Layer 3: Vector Layer (Pinecone)
                     </span>
                     <span style="font-size:0.78rem; font-weight:700; color:#334155; display:flex; align-items:center; gap:0.3rem;">
                         <span class="status-dot {dot}"></span> {stt}{dur}
                     </span>
                 </div>
-                <div style="font-size:0.78rem; color:#64748B; margin-top:0.25rem;">Semantic search & chunk indexing</div>
+                <div style="font-size:0.78rem; color:#64748B; margin-top:0.25rem;">Semantic search & Pinecone chunk indexing</div>
             </div>
             """,
             unsafe_allow_html=True,

@@ -22,7 +22,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 
 from .embedder import Embedder
-from .qdrant_client_wrapper import QdrantWrapper, COLLECTION_CHUNKS, COLLECTION_SUMMARIES
+from .pinecone_client_wrapper import (
+    PineconeWrapper,
+    COLLECTION_CHUNKS,
+    COLLECTION_SUMMARIES,
+)
 
 load_dotenv()
 
@@ -32,15 +36,18 @@ _CHUNK_OVERLAP = 10  # lines of overlap between chunks
 
 def _get_default_vector_store():
     if os.getenv("PINECONE_API_KEY"):
-        from .pinecone_client_wrapper import PineconeWrapper
         return PineconeWrapper()
-    return QdrantWrapper()
+    try:
+        from .qdrant_client_wrapper import QdrantWrapper
+        return QdrantWrapper()
+    except Exception:
+        return PineconeWrapper()
 
 
 class VectorIngestion:
     """
     Reads KnowledgePackage JSONs + raw source files + summaries,
-    then embeds and stores them in Pinecone / Qdrant.
+    then embeds and stores them in Pinecone (or Qdrant fallback).
 
     Usage:
         ingestion = VectorIngestion(
@@ -56,13 +63,15 @@ class VectorIngestion:
         knowledge_dir: str = "output/knowledge",
         source_dir: str = "source",
         summaries_dir: str = "output/summaries",
+        vector_store: Optional[Any] = None,
         qdrant: Optional[Any] = None,
         embedder: Optional[Embedder] = None,
     ):
         self.knowledge_dir = Path(knowledge_dir)
         self.source_dir = Path(source_dir)
         self.summaries_dir = Path(summaries_dir)
-        self.qdrant = qdrant or _get_default_vector_store()
+        self.vector_store = vector_store or qdrant or _get_default_vector_store()
+        self.qdrant = self.vector_store
         self.embedder = embedder or Embedder()
 
     # ── Public API ─────────────────────────────────────────────────────────────

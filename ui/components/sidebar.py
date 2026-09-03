@@ -197,12 +197,13 @@ def render_sidebar() -> str:
         )
 
         neo4j_info = BackendService.check_neo4j_connection()
-        qdrant_info = BackendService.check_qdrant_connection()
+        vector_info = BackendService.check_vector_connection()
         llm_info = BackendService.check_llm_status()
 
         neo4j_dot = "dot-green" if neo4j_info.get("connected") else "dot-red"
-        qdrant_dot = "dot-green" if qdrant_info.get("connected") else "dot-red"
+        vector_dot = "dot-green" if vector_info.get("connected") else "dot-red"
         llm_dot = "dot-green" if llm_info.get("configured") else "dot-amber"
+        vector_label = "Pinecone DB" if os.getenv("PINECONE_API_KEY") else "Vector DB"
 
         st.markdown(
             f"""
@@ -216,9 +217,9 @@ def render_sidebar() -> str:
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
                         <span style="display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;">
-                            <span class="status-dot {qdrant_dot}"></span> {"Pinecone DB" if os.getenv("PINECONE_API_KEY") else "Qdrant Vector"}
+                            <span class="status-dot {vector_dot}"></span> {vector_label}
                         </span>
-                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace; white-space: nowrap;">{qdrant_info.get('latency_ms', 0)}ms</span>
+                        <span style="font-size: 0.72rem; color: #64748B; font-family: monospace; white-space: nowrap;">{vector_info.get('latency_ms', 0)}ms</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
                         <span style="display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;">

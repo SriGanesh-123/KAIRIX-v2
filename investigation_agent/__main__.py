@@ -3,7 +3,7 @@ Investigation Agent CLI — Layer 4 of KAIRIX Architecture.
 
 The Investigation Agent answers user/analyst questions about legacy code,
 business rules, data lineage, and system architecture by performing
-combined retrieval across the Neo4j Knowledge Graph and Qdrant Vector DB.
+combined retrieval across the Neo4j Knowledge Graph and Pinecone Vector DB.
 
 Usage:
     # Ask a single question:

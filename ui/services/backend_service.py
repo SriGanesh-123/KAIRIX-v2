@@ -53,8 +53,15 @@ def _get_cached_neo4j_client():
 @st.cache_resource(show_spinner=False)
 def _get_cached_qdrant_client():
     """
-    Singleton cached Qdrant client to avoid repeated HTTP client initialization.
+    Singleton cached Vector client (Pinecone or Qdrant fallback).
     """
+    if os.getenv("PINECONE_API_KEY"):
+        try:
+            from vector_layer.pinecone_client_wrapper import PineconeWrapper
+            return PineconeWrapper(silent=True)
+        except Exception as e:
+            logger.debug("PineconeWrapper init note: %s", e)
+            return None
     try:
         from vector_layer.qdrant_client_wrapper import QdrantWrapper
         return QdrantWrapper(silent=True)
@@ -412,7 +419,17 @@ class BackendService:
 
     @staticmethod
     def get_qdrant_client():
-        """Retrieve cached Qdrant client."""
+        """Retrieve cached Vector / Pinecone client."""
+        return _get_cached_qdrant_client()
+
+    @staticmethod
+    def get_vector_client():
+        """Retrieve cached Vector / Pinecone client."""
+        return _get_cached_qdrant_client()
+
+    @staticmethod
+    def get_pinecone_client():
+        """Retrieve cached Pinecone client."""
         return _get_cached_qdrant_client()
 
     @staticmethod
@@ -432,7 +449,17 @@ class BackendService:
 
     @staticmethod
     def check_qdrant_connection() -> Dict[str, Any]:
-        """Verify Qdrant vector database connectivity and return collection counts."""
+        """Verify Vector database connectivity (Pinecone or Qdrant) and return counts."""
+        return _cached_check_qdrant()
+
+    @staticmethod
+    def check_vector_connection() -> Dict[str, Any]:
+        """Verify Vector database connectivity (Pinecone or Qdrant)."""
+        return _cached_check_qdrant()
+
+    @staticmethod
+    def check_pinecone_connection() -> Dict[str, Any]:
+        """Verify Pinecone connectivity and return collection counts."""
         return _cached_check_qdrant()
 
     @staticmethod
@@ -490,6 +517,8 @@ class BackendService:
             "overall_status": overall_status,
             "neo4j": neo4j_info,
             "qdrant": qdrant_info,
+            "pinecone": qdrant_info,
+            "vector": qdrant_info,
             "llm": llm_info,
             "embedding": embed_info,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),

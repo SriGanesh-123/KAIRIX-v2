@@ -9,7 +9,7 @@ Renders structured Investigation Agent answers into distinct, high-clarity visua
 - CONTRIBUTING SOURCES (Color-coded technology pills)
 - RETRIEVAL INTENT & PERFORMANCE (Intent & latency badge)
 - KNOWLEDGE GAPS & UNVERIFIED ITEMS (Alert callout cards)
-- AUDIT EVIDENCE (Neo4j, Qdrant, and Agent trace tabs)
+- AUDIT EVIDENCE (Neo4j, Pinecone, and Agent trace tabs)
 """
 from __future__ import annotations
 

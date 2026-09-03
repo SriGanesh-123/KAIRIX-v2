@@ -1,5 +1,5 @@
 """
-Investigation Agent — natural language Q&A over Neo4j + Qdrant.
+Investigation Agent — natural language Q&A over Neo4j + Pinecone.
 
 Exposes:
   InvestigationAgent   — orchestrates graph + vector retrieval + LLM synthesis

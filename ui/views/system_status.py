@@ -6,8 +6,9 @@ without exposing credentials or sensitive environment variables in light mode.
 """
 from __future__ import annotations
 
-import sys
+import os
 import platform
+import sys
 import streamlit as st
 from ui.components.status_panel import render_service_health_card
 from ui.services.backend_service import BackendService
@@ -65,9 +66,11 @@ def render_system_status() -> None:
         )
 
     with col2:
+        vector_title = "Pinecone Vector Database" if os.getenv("PINECONE_API_KEY") else "Vector Database"
+        vector_status = health.get("pinecone") or health.get("vector") or health["qdrant"]
         render_service_health_card(
-            title="Qdrant Vector Database",
-            status_dict=health["qdrant"],
+            title=vector_title,
+            status_dict=vector_status,
             icon_name="database",
         )
 
@@ -111,13 +114,14 @@ def render_system_status() -> None:
         )
 
     with col_env3:
-        pts = format_metric(health['qdrant'].get('total_points', 0))
+        pts = format_metric(vector_status.get('total_points', 0))
+        vector_sublabel = f"Pinecone Namespaces ({vector_status.get('chunks_count', 0)} chunks, {vector_status.get('summaries_count', 0)} summaries)" if os.getenv("PINECONE_API_KEY") else "Chunks & Summaries (dim=384)"
         st.markdown(
             f"""
             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
                 <div style="font-size:0.75rem; color:#64748B; text-transform:uppercase; font-weight:700;">Vector Points</div>
                 <div style="font-size:1.1rem; font-weight:700; color:#059669; margin-top:0.2rem;">{pts} Indexed</div>
-                <div style="font-size:0.8rem; color:#64748B; margin-top:0.2rem;">Chunks & Summaries (dim=384)</div>
+                <div style="font-size:0.8rem; color:#64748B; margin-top:0.2rem;">{vector_sublabel}</div>
             </div>
             """,
             unsafe_allow_html=True,

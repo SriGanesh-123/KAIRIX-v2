@@ -80,7 +80,7 @@ Return ONLY the Cypher query, no explanation, no markdown.
 
 # ── Answer Synthesis ───────────────────────────────────────────────────────────
 ANSWER_SYNTHESIS_PROMPT = """You are a senior insurance legacy systems reverse-engineering specialist.
-You have been asked a question and retrieved evidence from a Neo4j knowledge graph and Qdrant vector database.
+You have been asked a question and retrieved evidence from a Neo4j knowledge graph and Pinecone vector database.
 
 Question:
 {question}

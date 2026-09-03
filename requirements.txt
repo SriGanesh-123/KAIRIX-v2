@@ -15,7 +15,8 @@ python-dotenv>=1.0.0
 # Knowledge Graph (Neo4j)
 neo4j>=5.0.0
 
-# Vector Database & Local Embeddings (Qdrant)
+# Vector Database & Local Embeddings (Pinecone / Qdrant)
+pinecone>=5.0.0
 qdrant-client>=1.9.0
 sentence-transformers>=3.0.0
 torch>=2.0.0

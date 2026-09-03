@@ -27,7 +27,7 @@ from .vector_ingestion import VectorIngestion
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="python -m vector_layer",
-        description="KAIRIX Layer 3: Qdrant Vector Store Ingestion",
+        description="KAIRIX Layer 3: Pinecone Vector Store Ingestion",
     )
     parser.add_argument(
         "--knowledge-dir",
@@ -52,14 +52,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print("\n━━━ Qdrant Vector Ingestion ━━━")
+    print("\n━━━ Pinecone Vector Ingestion ━━━")
     ingestion = VectorIngestion(
         knowledge_dir=args.knowledge_dir,
         source_dir=args.source_dir,
         summaries_dir=args.summaries_dir,
     )
     stats = ingestion.ingest_all(force=args.force)
-    print(f"[Qdrant] Ingestion complete: {stats}")
+    print(f"[Pinecone] Ingestion complete: {stats}")
 
 
 if __name__ == "__main__":

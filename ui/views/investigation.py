@@ -2,7 +2,7 @@
 Investigation Agent Page for KAIRIX UI — Dual Mode Experience.
 
 Provides:
-1. Inquiry & Lineage Investigation (Natural-language Q&A over Neo4j + Qdrant)
+1. Inquiry & Lineage Investigation (Natural-language Q&A over Neo4j + Pinecone)
 2.  Structured Template Extraction (Deterministic SQL AST mapping to user-defined templates)
 """
 from __future__ import annotations

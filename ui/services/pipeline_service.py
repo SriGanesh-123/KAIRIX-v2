@@ -61,9 +61,9 @@ _PIPELINE_STATES: Dict[str, Dict[str, Any]] = {
         "error": None,
     },
     "vector_layer": {
-        "name": "Layer 3: Qdrant Vector Store",
+        "name": "Layer 3: Pinecone Vector Store",
         "command_label": "python -m vector_layer",
-        "description": "Chunk source files, embed with SentenceTransformer, and ingest into Qdrant collections (chunks & summaries).",
+        "description": "Chunk source files, embed with SentenceTransformer, and ingest into Pinecone namespaces (chunks & summaries).",
         "status": "READY",
         "current_step": "Ready to execute",
         "progress_pct": 0,
@@ -215,14 +215,14 @@ class PipelineService:
         mode: str = "both",
     ) -> bool:
         """
-        Launches Neo4j Knowledge Graph ingestion and Qdrant Vector Store indexing
+        Launches Neo4j Knowledge Graph ingestion and Pinecone Vector Store indexing
         in parallel worker threads.
-        Mode can be 'both', 'neo4j', or 'qdrant'.
+        Mode can be 'both', 'neo4j', 'pinecone', or 'qdrant'.
         """
         ok = True
         if mode in ("both", "neo4j"):
             ok = cls.run_layer("graph_layer", force_refresh=discover_neo4j) and ok
-        if mode in ("both", "qdrant"):
+        if mode in ("both", "pinecone", "qdrant", "vector"):
             ok = cls.run_layer("vector_layer", force_refresh=force_vector) and ok
         return ok
 
@@ -244,7 +244,7 @@ class PipelineService:
         layer_names = {
             "knowledge_engineering": "Layer 2 — Knowledge Engineering Agent",
             "graph_layer": "Layer 3 — Neo4j Knowledge Graph Ingestion",
-            "vector_layer": "Layer 3 — Qdrant Semantic Vector Indexing",
+            "vector_layer": "Layer 3 — Pinecone Semantic Vector Indexing",
         }
         human_name = layer_names.get(layer_key, layer_key)
         logger.info("Starting pipeline execution for %s", human_name)
@@ -340,17 +340,24 @@ class PipelineService:
                                 elif "discovery" in line or "complete" in line.lower():
                                     stt["progress_pct"] = 90
 
-                            # 3. Vector layer events
-                            if "[Qdrant]" in line:
-                                clean_line = line.replace("[Qdrant]", "").strip()
+                            # 3. Vector layer events (Pinecone & Vector Ingestion)
+                            if any(k in line for k in ["[Pinecone]", "[VectorIngestion]", "[Qdrant]"]):
+                                clean_line = (
+                                    line.replace("[Pinecone]", "")
+                                    .replace("[VectorIngestion]", "")
+                                    .replace("[Qdrant]", "")
+                                    .strip()
+                                )
                                 stt["current_step"] = clean_line
-                                stt["active_item"] = "Qdrant Vector Store"
+                                stt["active_item"] = "Pinecone Vector Store"
                                 if "Connected" in line:
-                                    stt["progress_pct"] = 25
-                                elif "Ingesting chunks" in line:
-                                    stt["progress_pct"] = 50
-                                elif "Ingested" in line or "summaries" in line:
-                                    stt["progress_pct"] = 85
+                                    stt["progress_pct"] = 20
+                                elif "summaries" in line.lower():
+                                    stt["progress_pct"] = 45
+                                elif "chunks" in line.lower() or "Embedding" in line:
+                                    stt["progress_pct"] = 75
+                                elif "complete" in line.lower() or "Done" in line:
+                                    stt["progress_pct"] = 100
 
             process.wait()
             exit_code = process.returncode
