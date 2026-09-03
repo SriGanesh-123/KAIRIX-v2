@@ -248,6 +248,76 @@ def _render_normal_investigation(preloaded_query: str | None) -> None:
             st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
 
+def _extract_uploaded_template_headers(uploaded_template_file) -> List[str]:
+    """
+    Extracts column headers from uploaded CSV or Excel (.xlsx, .xls) files.
+    Tries pandas read_excel with openpyxl first, and falls back to a zero-dependency
+    zipfile + XML parser for .xlsx to ensure resilience across all environments.
+    """
+    fname = getattr(uploaded_template_file, "name", "").lower()
+
+    # 1. CSV files
+    if fname.endswith(".csv"):
+        df_hdr = pd.read_csv(uploaded_template_file, nrows=0)
+        return [str(c).strip() for c in df_hdr.columns if str(c).strip() and not str(c).startswith("Unnamed:")]
+
+    # 2. Try pandas read_excel with openpyxl
+    try:
+        import openpyxl  # check availability
+        uploaded_template_file.seek(0)
+        df_hdr = pd.read_excel(uploaded_template_file, nrows=0, engine="openpyxl")
+        cols = [str(c).strip() for c in df_hdr.columns if str(c).strip() and not str(c).startswith("Unnamed:")]
+        if cols:
+            return cols
+    except Exception:
+        pass
+
+    # 3. Resilient zero-dependency fallback for .xlsx files (zip archive with XML)
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+        uploaded_template_file.seek(0)
+        with zipfile.ZipFile(uploaded_template_file) as z:
+            shared_strings: List[str] = []
+            if "xl/sharedStrings.xml" in z.namelist():
+                sst_tree = ET.fromstring(z.read("xl/sharedStrings.xml"))
+                for si in sst_tree.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}si"):
+                    text_nodes = si.findall(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+                    shared_strings.append("".join(t.text or "" for t in text_nodes))
+
+            sheet_names = [n for n in z.namelist() if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
+            if sheet_names:
+                sheet_tree = ET.fromstring(z.read(sheet_names[0]))
+                first_row = sheet_tree.find(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}row")
+                if first_row is not None:
+                    cols = []
+                    for c in first_row.findall("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c"):
+                        t_attr = c.get("t")
+                        v_node = c.find("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v")
+                        txt = ""
+                        if v_node is not None and v_node.text is not None:
+                            if t_attr == "s":
+                                try:
+                                    idx = int(v_node.text)
+                                    if 0 <= idx < len(shared_strings):
+                                        txt = shared_strings[idx]
+                                except Exception:
+                                    pass
+                            else:
+                                txt = v_node.text
+                        if not txt:
+                            is_node = c.find(".//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}t")
+                            if is_node is not None and is_node.text:
+                                txt = is_node.text
+                        if txt and txt.strip() and not txt.strip().startswith("Unnamed:"):
+                            cols.append(txt.strip())
+                    if cols:
+                        return cols
+    except Exception:
+        pass
+
+    raise RuntimeError("Could not read column headers from Excel file. Please ensure 'openpyxl' is installed or upload as CSV.")
+
 
 def _render_structured_extraction() -> None:
     """Renders the user-defined structured template extraction workspace."""
@@ -361,12 +431,7 @@ def _render_structured_extraction() -> None:
 
     if uploaded_template_file is not None:
         try:
-            if uploaded_template_file.name.lower().endswith(".csv"):
-                df_hdr = pd.read_csv(uploaded_template_file, nrows=0)
-            else:
-                df_hdr = pd.read_excel(uploaded_template_file, nrows=0)
-
-            imported_cols = [str(c).strip() for c in df_hdr.columns if str(c).strip() and not str(c).startswith("Unnamed:")]
+            imported_cols = _extract_uploaded_template_headers(uploaded_template_file)
             if imported_cols:
                 pipe_template = "| " + " | ".join(imported_cols) + " |"
                 st.session_state["custom_template_input"] = pipe_template
@@ -498,11 +563,14 @@ def _render_structured_extraction() -> None:
 
 
 def _generate_excel_bytes(df: pd.DataFrame) -> bytes:
-    """Generates formatted Excel .xlsx bytes."""
+    """Generates formatted Excel .xlsx bytes with fallback."""
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Extraction_Result")
-    return output.getvalue()
+    try:
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Extraction_Result")
+        return output.getvalue()
+    except Exception:
+        return df.to_csv(index=False).encode("utf-8-sig")
 
 
 def _generate_markdown_table(df: pd.DataFrame) -> str:
