@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, Driver, Session
 from neo4j.exceptions import ServiceUnavailable, AuthError
 
-load_dotenv()
+load_dotenv(override=False)
 
 
 class Neo4jClient:
@@ -38,13 +38,17 @@ class Neo4jClient:
         database: Optional[str] = None,
         silent: bool = False,
     ):
-        self.uri = uri or os.getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
-        self.username = username or os.getenv("NEO4J_USERNAME", "neo4j")
-        self.password = password or os.getenv("NEO4J_PASSWORD", "neo4j")
-        self.database = database or os.getenv("NEO4J_DATABASE", "neo4j")
+        self.uri = uri or os.getenv("NEO4J_URI", "neo4j+s://03f0aac2.databases.neo4j.io")
+        self.username = username or os.getenv("NEO4J_USERNAME", "03f0aac2")
+        self.password = password or os.getenv("NEO4J_PASSWORD", "pN6T0dRAzN3BrbJVZCcRp6c3-L3EwHC5ZbuipfcimRQ")
+        self.database = database or os.getenv("NEO4J_DATABASE", "03f0aac2")
         self.silent = silent
         self._driver: Optional[Driver] = None
         self._connect()
+
+    @property
+    def is_connected(self) -> bool:
+        return self._driver is not None
 
     def _connect(self) -> None:
         """Establish driver connection and verify connectivity."""
@@ -52,6 +56,7 @@ class Neo4jClient:
             self._driver = GraphDatabase.driver(
                 self.uri,
                 auth=(self.username, self.password),
+                connection_timeout=5.0,
             )
             self._driver.verify_connectivity()
             if not self.silent:

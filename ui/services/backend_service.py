@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)
 logger = logging.getLogger("kairix.ui.backend_service")
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -102,7 +102,7 @@ def _cached_check_neo4j() -> Dict[str, Any]:
     Ultra-fast Neo4j connectivity check with 50ms socket pre-check and 300s TTL.
     """
     from urllib.parse import urlparse
-    uri = os.getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
+    uri = os.getenv("NEO4J_URI", "neo4j+s://03f0aac2.databases.neo4j.io")
     normalized_uri = (
         uri.replace("neo4j+s://", "http://")
         .replace("neo4j+ssc://", "http://")
@@ -348,12 +348,8 @@ def _cached_get_graph_statistics() -> Dict[str, Any]:
     Cached dynamic statistics with 300s TTL and local package fallback.
     """
     try:
-        is_open = _fast_socket_check("127.0.0.1", 7687, timeout=0.05)
-        if not is_open:
-            return _cached_get_local_packages_statistics()
-
         client = _get_cached_neo4j_client()
-        if client is None:
+        if client is None or not getattr(client, "is_connected", True):
             return _cached_get_local_packages_statistics()
 
         res_art = client.run_query("MATCH (a:Artifact) RETURN count(a) AS c")

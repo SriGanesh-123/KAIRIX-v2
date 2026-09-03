@@ -28,7 +28,7 @@ from .pinecone_client_wrapper import (
     COLLECTION_SUMMARIES,
 )
 
-load_dotenv()
+load_dotenv(override=False)
 
 _CHUNK_SIZE = 50    # lines per chunk
 _CHUNK_OVERLAP = 10  # lines of overlap between chunks

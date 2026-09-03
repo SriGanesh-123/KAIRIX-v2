@@ -19,7 +19,7 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=False)
 
 _VECTOR_DIM = 384
 

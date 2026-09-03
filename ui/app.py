@@ -29,17 +29,20 @@ def _sync_secrets_to_env() -> None:
     """
     Synchronizes Streamlit Cloud secrets into os.environ so backend services,
     LLM providers, and background processes can access them via os.getenv().
-    Supports both flat keys and nested TOML tables (e.g., [nim], [neo4j], [pinecone]).
+    Supports both flat keys and nested TOML tables (e.g., [nim], [neo4j], [pinecone], [qdrant]).
     """
     try:
         if not hasattr(st, "secrets"):
             return
-        
+
+        env_lines: list[str] = []
+
         def _set_env(k: str, v: object) -> None:
             if isinstance(v, (str, int, float, bool)):
                 str_val = str(v).strip()
-                os.environ.setdefault(k, str_val)
-                os.environ.setdefault(k.upper(), str_val)
+                os.environ[k] = str_val
+                os.environ[k.upper()] = str_val
+                env_lines.append(f"{k.upper()}={str_val}")
 
         for key, val in st.secrets.items():
             if isinstance(val, (str, int, float, bool)):
@@ -53,6 +56,45 @@ def _sync_secrets_to_env() -> None:
                         # Specific aliases
                         if key.lower() == "nim" and sub_k.lower() in ("api_key", "nvidia_api_key"):
                             _set_env("NVIDIA_NIM_API_KEY", sub_v)
+                        if key.lower() == "pinecone" and sub_k.lower() in ("api_key", "pinecone_api_key"):
+                            _set_env("PINECONE_API_KEY", sub_v)
+                        if key.lower() == "pinecone" and sub_k.lower() in ("index_name", "index"):
+                            _set_env("PINECONE_INDEX_NAME", sub_v)
+                        if key.lower() == "neo4j" and sub_k.lower() == "uri":
+                            _set_env("NEO4J_URI", sub_v)
+                        if key.lower() == "neo4j" and sub_k.lower() == "username":
+                            _set_env("NEO4J_USERNAME", sub_v)
+                        if key.lower() == "neo4j" and sub_k.lower() == "password":
+                            _set_env("NEO4J_PASSWORD", sub_v)
+                        if key.lower() == "neo4j" and sub_k.lower() == "database":
+                            _set_env("NEO4J_DATABASE", sub_v)
+
+        # Standard Neo4j Aura & Pinecone defaults
+        if "NEO4J_URI" not in os.environ:
+            _set_env("NEO4J_URI", "neo4j+s://03f0aac2.databases.neo4j.io")
+        if "NEO4J_USERNAME" not in os.environ:
+            _set_env("NEO4J_USERNAME", "03f0aac2")
+        if "NEO4J_PASSWORD" not in os.environ:
+            _set_env("NEO4J_PASSWORD", "pN6T0dRAzN3BrbJVZCcRp6c3-L3EwHC5ZbuipfcimRQ")
+        if "NEO4J_DATABASE" not in os.environ:
+            _set_env("NEO4J_DATABASE", "03f0aac2")
+        if "AURA_INSTANCEID" not in os.environ:
+            _set_env("AURA_INSTANCEID", "03f0aac2")
+        if "AURA_INSTANCENAME" not in os.environ:
+            _set_env("AURA_INSTANCENAME", "KAIRIX")
+
+        if "PINECONE_API_KEY" not in os.environ:
+            _set_env("PINECONE_API_KEY", "pcsk_5jR55M_3tHUKV3cR1uyptCj57DFocet6p7vwAjJc7ABczmkGjM2JL5M5w25XTeDuutEr4V")
+        if "PINECONE_INDEX_NAME" not in os.environ:
+            _set_env("PINECONE_INDEX_NAME", "kairix-index")
+
+        # Write out synchronized .env file if none exists on disk
+        dot_env_path = ROOT_DIR / ".env"
+        if not dot_env_path.exists() and env_lines:
+            try:
+                dot_env_path.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+            except Exception:
+                pass
 
     except Exception:
         pass

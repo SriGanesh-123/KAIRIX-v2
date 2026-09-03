@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 
 from .neo4j_client import Neo4jClient
 
-load_dotenv()
+load_dotenv(override=False)
 
 # ── LLM import (reuses existing KAIRIX LLM client) ────────────────────────────
 try:

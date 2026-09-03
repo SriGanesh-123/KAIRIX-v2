@@ -23,7 +23,7 @@ from qdrant_client.models import (
     MatchValue,
 )
 
-load_dotenv()
+load_dotenv(override=False)
 
 COLLECTION_CHUNKS = "kairix_chunks"
 COLLECTION_SUMMARIES = "kairix_summaries"
@@ -53,13 +53,45 @@ class QdrantWrapper:
         self.vector_dim = vector_dim
         self.silent = silent
 
-        kwargs: Dict[str, Any] = {"url": self.url}
-        if self.api_key:
-            kwargs["api_key"] = self.api_key
+        is_localhost = any(h in (self.url or "") for h in ("localhost", "127.0.0.1", "::1"))
+        connected = False
 
-        self._client = QdrantClient(**kwargs)
-        if not self.silent:
-            print(f"[Qdrant] Connected to {self.url}")
+        # 1. If explicit remote URL or API key is provided, try remote connection
+        if self.url and (not is_localhost or self.api_key):
+            try:
+                kwargs: Dict[str, Any] = {"url": self.url, "timeout": 4.0}
+                if self.api_key:
+                    kwargs["api_key"] = self.api_key
+                client = QdrantClient(**kwargs)
+                client.get_collections()
+                self._client = client
+                connected = True
+                if not self.silent:
+                    print(f"[Qdrant] Connected to remote Qdrant at {self.url}")
+            except Exception as e:
+                if not self.silent:
+                    print(f"[Qdrant] Remote connection to {self.url} failed: {e}. Falling back to embedded local storage.")
+
+        # 2. If localhost daemon is specified, attempt connection with a short timeout
+        if not connected and is_localhost and self.url:
+            try:
+                client = QdrantClient(url=self.url, timeout=1.5)
+                client.get_collections()
+                self._client = client
+                connected = True
+                if not self.silent:
+                    print(f"[Qdrant] Connected to local daemon at {self.url}")
+            except Exception:
+                pass
+
+        # 3. Fall back to embedded local filesystem vector store (pure Python/RocksDB, no server required)
+        if not connected:
+            from pathlib import Path
+            storage_path = Path("output/qdrant_db")
+            storage_path.mkdir(parents=True, exist_ok=True)
+            self._client = QdrantClient(path=str(storage_path))
+            if not self.silent:
+                print(f"[Qdrant] Using embedded local vector store at {storage_path}")
 
     # ── Collection management ──────────────────────────────────────────────────
 

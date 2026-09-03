@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
 
-load_dotenv()
+load_dotenv(override=False)
 
 COLLECTION_CHUNKS = "kairix_chunks"
 COLLECTION_SUMMARIES = "kairix_summaries"
@@ -35,7 +35,7 @@ class PineconeWrapper:
         vector_dim: int = _DEFAULT_VECTOR_DIM,
         silent: bool = False,
     ):
-        self.api_key = api_key or os.getenv("PINECONE_API_KEY")
+        self.api_key = api_key or os.getenv("PINECONE_API_KEY", "pcsk_5jR55M_3tHUKV3cR1uyptCj57DFocet6p7vwAjJc7ABczmkGjM2JL5M5w25XTeDuutEr4V")
         self.index_name = index_name or os.getenv("PINECONE_INDEX_NAME", "kairix-index")
         self.vector_dim = vector_dim
         self.silent = silent
