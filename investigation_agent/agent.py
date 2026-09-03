@@ -600,169 +600,57 @@ class InvestigationAgent:
 
         # Build fallback structured response
         sources_list = ", ".join(sorted(source_files)) if source_files else "COBOL, SQL & SSIS Evidence Sources"
-        q_lower = question.lower()
+        # Dynamic evidence-backed extraction from vector chunks, graph records, and summaries
+        extracted_excerpts = []
+        for ev in vector_evidence[:6]:
+            clean_ev = re.sub(r"\[.*?\]", "", ev).strip()
+            if clean_ev:
+                first_para = clean_ev.split("\n\n")[0]
+                extracted_excerpts.append(first_para[:350])
 
-        if "ssis" in q_lower and ("populate" in q_lower or "policycenter" in q_lower or "table" in q_lower or "package" in q_lower):
-            answer = (
-                "Guidewire PolicyCenter staging tables are populated by a dedicated suite of SSIS packages orchestrated by **Master_ETL_Guidewire.dtsx**. "
-                "Each SSIS package handles a specific domain boundary: **Extract_Policy.dtsx** extracts core policy metadata, **Extract_PolicyPeriod.dtsx** handles term effective and expiration dates, "
-                "**Extract_Account.dtsx** maps parent commercial accounts, **Extract_Coverage.dtsx** extracts coverage terms and limits, **Extract_Producer.dtsx** captures agent/agency commission entities, "
-                "and **Extract_Location.dtsx** extracts insured risk properties."
-            )
-            key_points = [
-                "**Master_ETL_Guidewire.dtsx** acts as the parent controller orchestrating sequential and parallel execution of domain-specific child extract packages.",
-                "**Extract_Policy.dtsx** and **Extract_PolicyPeriod.dtsx** populate `pc_policy` and `pc_policyperiod` with policy numbers, status, lines of business, and term dates.",
-                "**Extract_Account.dtsx** populates `pc_account` establishing parent-child relationships and billing account IDs.",
-                "**Extract_Coverage.dtsx** extracts coverage codes, deductibles, and per-occurrence limits into `pc_coverage`.",
-                "**Extract_Producer.dtsx** and **Extract_Location.dtsx** populate agent hierarchies (`pc_producer`) and risk addresses (`pc_policylocation`).",
-            ]
-            data_flow = "Source DB / COBOL Feeds → Master_ETL_Guidewire.dtsx → [Extract_Policy | Extract_PolicyPeriod | Extract_Account | Extract_Coverage | Extract_Producer | Extract_Location].dtsx → Staging Tables → PolicyCenter Data Warehouse"
-            formula = (
-                "- **Execution Order**: Master_ETL → Account & Location (Dim) → Policy & Period (Hub) → Coverage & Premium (Fact)\n"
-                "- **Incremental Change Detection**: `WHERE LastModifiedDate >= @[User::LastExtractWatermark]`\n"
-                "- **Data Integrity Rule**: Rejection of orphan child records missing valid `PolicyID` or `AccountID`"
-            )
-            gaps = (
-                "- Pre-requisite lookup tables (e.g. state code tables and producer commission tiers) are assumed pre-populated prior to ETL runtime."
-            )
-            sources_list = "Extract_Policy.dtsx, Extract_PolicyPeriod.dtsx, Extract_Account.dtsx, Extract_Coverage.dtsx, Extract_Producer.dtsx, Extract_Location.dtsx, Master_ETL_Guidewire.dtsx"
+        graph_rules = []
+        graph_entities = []
+        for rec_str in graph_evidence[:8]:
+            try:
+                r_dict = json.loads(rec_str)
+                rule_text = r_dict.get("rule") or r_dict.get("description") or r_dict.get("formula")
+                if rule_text and rule_text not in graph_rules:
+                    graph_rules.append(str(rule_text))
+                ent_name = r_dict.get("name") or r_dict.get("id")
+                if ent_name and ent_name not in graph_entities:
+                    graph_entities.append(str(ent_name))
+            except Exception:
+                pass
 
-        elif "trace" in q_lower and ("flow" in q_lower or "cobol" in q_lower or "kpi" in q_lower):
-            answer = (
-                "The end-to-end data flow begins with raw policy ingestion in **POLLOAD.CBL**, which validates schema and integrity before passing policies to **POLSTATUS.CBL** for status validation. "
-                "Validated policies feed into **PREMCALC.CBL**, which executes actuarial rating logic to compute written premiums. "
-                "**EARNPREM.CBL** calculates earned and unearned premiums on a pro-rata basis. "
-                "The resulting financial figures are extracted by **RPTEXTRACT.CBL** and aggregated in **KPICALC.CBL** to produce executive metrics (Loss Ratio, Underwriting Profit, Commission Ratio), "
-                "which are subsequently loaded into reporting marts via SSIS (**Extract_KPI_Aggregates.dtsx**)."
-            )
-            key_points = [
-                "**Stage 1 — Policy Ingestion**: `POLLOAD.CBL` reads raw policy files, validates mandatory headers, and sets initial pending states.",
-                "**Stage 2 — Status & Underwriting**: `POLSTATUS.CBL` verifies active status and effective date windows.",
-                "**Stage 3 — Rating & Written Premium**: `PREMCALC.CBL` applies Homeowners/Auto rating algorithms to calculate `PRI-WRITTEN-PREMIUM`.",
-                "**Stage 4 — Earnings Recognition**: `EARNPREM.CBL` derives `WS-EARNED` and `WS-UNEARNED` premiums using elapsed term days.",
-                "**Stage 5 — Financial Extraction**: `RPTEXTRACT.CBL` and `KPICALC.CBL` aggregate monthly figures for loss ratio and commission calculations.",
-                "**Stage 6 — Reporting Ingestion**: `Extract_KPI_Aggregates.dtsx` transforms and loads final metrics into SQL reporting tables (`PolicyCenter_CPP_Breakdown.sql`).",
-            ]
-            data_flow = "POLLOAD.CBL → POLSTATUS.CBL → PREMCALC.CBL → EARNPREM.CBL → RPTEXTRACT.CBL → KPICALC.CBL → Extract_KPI_Aggregates.dtsx → PolicyCenter_CPP_Breakdown.sql"
-            formula = (
-                "- **Written Premium**: `BaseRate * TerritoryFactor * VehicleFactor * CoverageMultiplier`\n"
-                "- **Earned Premium**: `WrittenPremium * EarnedDays / TermDays` (capped at written)\n"
-                "- **Loss Ratio**: `(TotalIncurredClaims / EarnedPremium) * 100`\n"
-                "- **Underwriting Profit**: `EarnedPremium - (IncurredClaims + Expenses + Commissions)`"
-            )
-            gaps = (
-                "- Real-time streaming between COBOL flat files and SSIS staging relies on batch overnight trigger schedules."
-            )
-            sources_list = "POLLOAD.CBL, POLSTATUS.CBL, PREMCALC.CBL, EARNPREM.CBL, RPTEXTRACT.CBL, KPICALC.CBL, Extract_KPI_Aggregates.dtsx, PolicyCenter_CPP_Breakdown.sql"
+        # Build dynamic summary
+        summary_snippets = []
+        for sf in source_files:
+            stem = sf.replace(".cbl", "").replace(".dtsx", "").replace(".sql", "").replace(".CBL", "").replace(".DTSX", "").replace(".SQL", "")
+            if stem in summaries_content:
+                s_text = summaries_content[stem]
+                match_purpose = re.search(r"(?:Purpose|Overview|Summary)[:\s]+([^\n]+)", s_text, re.IGNORECASE)
+                if match_purpose:
+                    summary_snippets.append(f"**{sf}**: {match_purpose.group(1).strip()}")
 
-        elif "consume" in q_lower and ("program" in q_lower or "output" in q_lower or "premium" in q_lower):
-            answer = (
-                "The premium output generated by **PREMCALC.CBL** is consumed downstream by several key programs and ETL tasks: "
-                "1. **EARNPREM.CBL** reads the written premium records to calculate daily earned and unearned premium. "
-                "2. **RPTEXTRACT.CBL** consumes premium files to generate formatted monthly accounting audit registers. "
-                "3. **KPICALC.CBL** ingests both written and earned premiums to compute portfolio loss ratios and expense margins. "
-                "4. **Extract_Premium.dtsx** and **Extract_KPI_Aggregates.dtsx** ingest the final outputs into SQL data warehouse marts for business intelligence reporting."
-            )
-            key_points = [
-                "**EARNPREM.CBL**: Direct primary consumer; matches each premium record to active policy dates to recognize earned revenue.",
-                "**RPTEXTRACT.CBL**: Secondary consumer; formats premium outputs for general ledger reconciliation.",
-                "**KPICALC.CBL**: Analytics consumer; calculates Loss Ratio (`Incurred / Earned`) and Commission Ratio (`Commission / Written`).",
-                "**Extract_Premium.dtsx**: ETL consumer; loads staging and analytical tables in SQL Server/Guidewire database.",
-            ]
-            data_flow = "PREMCALC.CBL (Producer) → [EARNPREM.CBL | RPTEXTRACT.CBL] → KPICALC.CBL → [Extract_Premium.dtsx | Extract_KPI_Aggregates.dtsx] → SQL Reporting Marts"
-            formula = (
-                "- **Reconciliation Check**: `| WrittenPremium - (EarnedPremium + UnearnedPremium) | <= 1.00`\n"
-                "- **Downstream Integrity**: Rejection of any premium transaction where `PolicyNumber` does not match active master policy file"
-            )
-            gaps = (
-                "- Direct API integrations to third-party general ledger systems outside the workbench scope."
-            )
-            sources_list = "PREMCALC.CBL, EARNPREM.CBL, RPTEXTRACT.CBL, KPICALC.CBL, Extract_Premium.dtsx, Extract_KPI_Aggregates.dtsx"
+        answer = (
+            f"Investigation of '{question}' across verified source files ({sources_list}):\n\n"
+            + ("\n".join(summary_snippets[:3]) + "\n\n" if summary_snippets else "")
+            + (" ".join(extracted_excerpts[:2]) if extracted_excerpts else f"Evidence retrieved from {sources_list}.")
+        )
 
-        elif "written premium" in q_lower or ("rating" in q_lower and "rule" in q_lower):
-            answer = (
-                "Written premium calculation is performed in **PREMCALC.CBL**. The program reads validated policies along with property, vehicle, and coverage records. "
-                "It applies product-specific rating constants (`WS-RATING-CONSTANTS`) for Homeowners and Commercial Auto, applying territory multipliers, driver risk factors, "
-                "and coverage deductible adjustments. The computed written premium is stamped with a unique `PREMIUM-ID` and written to `PREMIUM-OUT` for downstream earnings allocation."
-            )
-            key_points = [
-                "**Input Sources**: Validated policy records, vehicle attributes (age, use, class), and coverage selections (collision, comprehensive, liability).",
-                "**Rating Engine**: Multiplies base rates by territory factor (`WS-TERRITORY-FACTOR`), driver age factor, and coverage limit factors.",
-                "**Validation & Limits**: Enforces minimum premium threshold rules and rejects zero or negative coverage amounts (error `P004`).",
-            ]
-            data_flow = "Validated Policy / Coverage Files → PREMCALC.CBL (WS-RATING-CONSTANTS) → PREMIUM-OUT → EARNPREM.CBL"
-            formula = (
-                "- **Written Premium**: `BaseRate * TerritoryFactor * RiskFactor * LimitMultiplier - DeductibleDiscount`\n"
-                "- **Minimum Premium Threshold**: `IF WS-WRITTEN < 50.00 THEN SET WS-WRITTEN = 50.00`"
-            )
-            gaps = (
-                "- Actuarial territory factor tables are maintained in copybooks (`WS-RATING-CONSTANTS`)."
-            )
-            sources_list = "PREMCALC.CBL, POLLOAD.CBL, POLSTATUS.CBL, EARNPREM.CBL"
+        key_points = [
+            f"Verified source files matching inquiry: {sources_list}.",
+            f"Grounding evidence: {len(vector_evidence)} semantic code vectors & {len(graph_evidence)} knowledge graph facts.",
+        ]
+        if graph_entities:
+            key_points.append(f"Key Graph Entities: {', '.join(graph_entities[:6])}")
+        if graph_rules:
+            for gr in graph_rules[:3]:
+                key_points.append(f"Verified Business Rule: {gr}")
 
-        elif "premium" in q_lower or "earned" in q_lower or "calculate" in q_lower:
-            answer = (
-                "Premium calculation occurs in two distinct stages across separate COBOL programs. "
-                "**PREMCALC.CBL** computes the **written premium** (daily premium amount) by aggregating "
-                "property, vehicle, and coverage data and applying product-specific rating rules for Homeowners and Auto. "
-                "**EARNPREM.CBL** then derives **earned** and **unearned premium** from the written premium "
-                "using a pro-rata time allocation based on policy effective/expiration dates. "
-                "The system enforces strict reconciliation: written premium must equal earned + unearned (within a 0.01–1.00 tolerance), "
-                "and earned premium cannot exceed written premium."
-            )
-            key_points = [
-                "**PREMCALC.CBL** reads validated policies, property, vehicle, and coverage files; aggregates coverage limits/deductibles; applies rating constants (WS-RATING-CONSTANTS) for Homeowners and Auto; outputs written premium records with unique premium IDs.",
-                "**EARNPREM.CBL** matches each premium record to its policy, validates dates, and calculates earned premium as `written_premium * earned_days / term_days` (capped at written premium); unearned = `written - earned`.",
-                "Strict reconciliation rules exist in both EARNPREM.CBL and KPICALC.CBL: `written = earned + unearned` (tolerance 0.01–1.00), `earned ≤ written`, `written ≥ 0`; violations generate error codes (E001, K005).",
-            ]
-            data_flow = "Policy / Coverage Data → PREMCALC.CBL → Written Premium Records → EARNPREM.CBL → Earned / Unearned Premium → KPI Aggregates (Loss Ratio, Underwriting Profit, Commission Ratio)"
-            formula = (
-                "- **Earned Premium**: `WS-EARNED = PRI-WRITTEN-PREMIUM * WS-EARNED-DAYS / WS-TERM-DAYS` (rounded, capped at written premium)\n"
-                "- **Unearned Premium**: `WS-UNEARNED = PRI-WRITTEN-PREMIUM - WS-EARNED`\n"
-                "- **Reconciliation**: `| written_premium - (earned_premium + unearned_premium) | ≤ 1.00` (rounding tolerance)\n"
-                "- **Loss Ratio**: `(incurred_amount / earned_premium) * 100` (0 if earned_premium = 0)\n"
-                "- **Commission Ratio**: `(commission_amount / written_premium) * 100` (0 if written_premium = 0)"
-            )
-            gaps = (
-                "- Exact rating algorithms and constants (WS-RATING-CONSTANTS) inside PREMCALC.CBL for Homeowners and Auto are demo constants.\n"
-                "- Downstream consumers of the premium output beyond KPI aggregates require additional pipeline integration."
-            )
-            sources_list = "PREMCALC.CBL, EARNPREM.CBL, KPICALC.CBL, RPTEXTRACT.CBL"
-        else:
-            # Generic evidence-backed extraction from vector chunks, graph records, and summaries
-            extracted_excerpts = []
-            for ev in vector_evidence[:4]:
-                clean_ev = re.sub(r"\[.*?\]", "", ev).strip()
-                if clean_ev:
-                    first_para = clean_ev.split("\n\n")[0]
-                    extracted_excerpts.append(first_para[:250])
-
-            graph_rules = []
-            for rec_str in graph_evidence[:4]:
-                try:
-                    r_dict = json.loads(rec_str)
-                    rule_text = r_dict.get("rule") or r_dict.get("description") or r_dict.get("name")
-                    if rule_text:
-                        graph_rules.append(str(rule_text))
-                except Exception:
-                    pass
-
-            answer = (
-                f"Based on retrieved evidence from {len(vector_evidence)} semantic code chunks and {len(graph_evidence)} graph records, "
-                f"the legacy system implements functionality for '{question}' across {sources_list}. "
-                + (" ".join(extracted_excerpts[:2]) if extracted_excerpts else "")
-            )
-            key_points = [
-                f"Relevant logic and architecture are anchored across verified source files: {sources_list}.",
-                f"Retrieved {len(vector_evidence)} semantic evidence chunks and {len(graph_evidence)} graph facts from active databases.",
-            ]
-            if graph_rules:
-                for gr in graph_rules[:2]:
-                    key_points.append(f"Knowledge Graph Rule: {gr}")
-
-            data_flow = "Source Files → Parsing & Extraction Pipeline → Canonical Knowledge Graph & Vector Store"
-            formula = "- **Calculation / Logic**: Refer to exact source code anchors and transformations in the audit evidence tab below."
-            gaps = "- Synthesised directly from local vector & graph evidence."
+        data_flow = " → ".join(sorted(source_files)) if len(source_files) > 1 else f"{sources_list} (Self-Contained Module)"
+        formula = ("\n".join(f"- {gr}" for gr in graph_rules[:3])) if graph_rules else "- Refer to retrieved vector code chunks in the audit evidence tab below."
+        gaps = f"- Synthesized from Neo4j knowledge graph & Pinecone vector space (LLM fallback note: {error_msg})."
 
         formatted_result = (
             f"ANSWER\n{answer}\n\n"

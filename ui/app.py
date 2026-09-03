@@ -88,6 +88,13 @@ def _sync_secrets_to_env() -> None:
         if "PINECONE_INDEX_NAME" not in os.environ:
             _set_env("PINECONE_INDEX_NAME", "kairix-index")
 
+        if "NVIDIA_NIM_API_KEY" not in os.environ and "NIM_API_KEY" not in os.environ:
+            _set_env("NVIDIA_NIM_API_KEY", "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")
+        if "NIM_MODEL" not in os.environ:
+            _set_env("NIM_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
+        if "LLM_PROVIDER" not in os.environ:
+            _set_env("LLM_PROVIDER", "nim")
+
         # Write out synchronized .env file if none exists on disk
         dot_env_path = ROOT_DIR / ".env"
         if not dot_env_path.exists() and env_lines:

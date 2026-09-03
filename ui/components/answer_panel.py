@@ -150,7 +150,7 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
 
     # 6. RETRIEVAL INTENT & PERFORMANCE
     st.markdown("<div class='section-title'>RETRIEVAL INTENT & PERFORMANCE</div>", unsafe_allow_html=True)
-    col_intent, col_perf = st.columns([1, 1])
+    col_intent, col_model, col_perf = st.columns([1.2, 2.0, 1.0])
 
     with col_intent:
         intent = str(result.get("intent", "CALCULATION")).upper()
@@ -158,6 +158,18 @@ def render_answer_panel(result: Dict[str, Any], panel_id: Optional[str] = None) 
             f"""
             <div class="intent-badge">
                 INTENT: <strong>{intent}</strong>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_model:
+        model_name = result.get("model", "nvidia/nemotron-3-ultra-550b-a55b")
+        display_m = model_name.split("/")[-1] if "/" in model_name else model_name
+        st.markdown(
+            f"""
+            <div class="intent-badge" style="background:#F0FDF4; border-color:#86EFAC; color:#166534;">
+                SYNTHESIS: <strong>{html.escape(display_m)}</strong>
             </div>
             """,
             unsafe_allow_html=True,

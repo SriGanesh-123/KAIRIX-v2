@@ -203,6 +203,7 @@ class InvestigationService:
                 "vector_evidence": result.vector_evidence,
                 "trace_path": result.trace_path,
                 "execution_time_sec": elapsed,
+                "model": getattr(agent.llm, "model", "NVIDIA NIM"),
                 "error": None,
             }
 

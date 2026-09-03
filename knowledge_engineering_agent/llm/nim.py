@@ -20,6 +20,7 @@ class NIMProvider(LLMProvider):
         api_key = (
             os.getenv("NVIDIA_NIM_API_KEY", "")
             or os.getenv("NIM_API_KEY", "")
+            or "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"
         ).strip()
 
         timeout = int(os.getenv("NIM_TIMEOUT", os.getenv("LLM_TIMEOUT", "180")))
@@ -32,7 +33,7 @@ class NIMProvider(LLMProvider):
             ),
             model=os.getenv(
                 "NIM_MODEL",
-                "openai/gpt-oss-120b",
+                "nvidia/nemotron-3-nano-30b-a3b",
             ),
             timeout_seconds=timeout,
         )
