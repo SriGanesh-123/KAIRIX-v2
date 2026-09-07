@@ -189,16 +189,24 @@ def render_knowledge_graph() -> None:
             lbl = str(n.get("name") or n.get("file_name") or nid).split(":")[-1]
             node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
 
-        stored_select = st.session_state.get("canvas_node_inspect_select")
-        if stored_select and stored_select in node_labels_dict:
-            chosen_id = node_labels_dict[stored_select]
+        query_node_id = st.query_params.get("selected_node")
+        if query_node_id and any(str(n.get("id") or n.get("file_name") or n.get("name")) == query_node_id for n in nodes):
+            chosen_id = query_node_id
             focus_node_id = chosen_id
-        elif selected_node:
-            chosen_id = selected_node.get("id")
-            focus_node_id = chosen_id
+            matched_lbl = next((k for k, v in node_labels_dict.items() if v == chosen_id), None)
+            if matched_lbl:
+                st.session_state["canvas_node_inspect_select"] = matched_lbl
         else:
-            chosen_id = list(node_labels_dict.values())[0]
-            focus_node_id = None  # Fit entire graph on initial load
+            stored_select = st.session_state.get("canvas_node_inspect_select")
+            if stored_select and stored_select in node_labels_dict:
+                chosen_id = node_labels_dict[stored_select]
+                focus_node_id = chosen_id
+            elif selected_node:
+                chosen_id = selected_node.get("id")
+                focus_node_id = chosen_id
+            else:
+                chosen_id = list(node_labels_dict.values())[0]
+                focus_node_id = None  # Fit entire graph on initial load
 
         selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
         connected_edges = [

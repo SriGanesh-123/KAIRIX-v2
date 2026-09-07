@@ -953,6 +953,7 @@ class GraphService:
             added_node_ids.add(node_id)
 
         edges_payload: List[Dict[str, Any]] = []
+        is_many_edges = len(edges) > 150
         for e in edges:
             src = str(e.get("source", ""))
             tgt = str(e.get("target", ""))
@@ -960,31 +961,51 @@ class GraphService:
 
             if src in added_node_ids and tgt in added_node_ids:
                 cfg = EDGE_PALETTE.get(rel_type, EDGE_PALETTE["DEFAULT"])
-                edges_payload.append({
+                edge_item = {
+                    "id": f"{src}->{tgt}",
                     "from": src,
                     "to": tgt,
-                    "title": f"<b>{html.escape(rel_type)}</b>",
-                    "label": rel_type if len(edges) <= 30 else "",
+                    "title": f"<b>{html.escape(rel_type)}</b><br/><span style='color:#94A3B8'>{src.split(':')[-1]} ➔ {tgt.split(':')[-1]}</span>",
+                    "label": rel_type,
                     "color": {"color": cfg["color"], "highlight": "#0284C7", "hover": "#0284C7"},
-                    "arrows": {"to": {"enabled": True, "scaleFactor": 0.75}},
-                    "font": {"color": "#475569", "size": 9, "align": "middle", "strokeWidth": 2, "strokeColor": "#FFFFFF"},
+                    "arrows": {"to": {"enabled": True, "scaleFactor": 0.8}},
+                    "font": {
+                        "color": "#334155",
+                        "size": 9,
+                        "align": "middle",
+                        "strokeWidth": 3,
+                        "strokeColor": "#FFFFFF",
+                        "face": "JetBrains Mono, monospace, sans-serif",
+                    },
                     "width": cfg["width"],
-                    "smooth": {"enabled": True, "type": "continuous", "roundness": 0.2},
-                })
+                    "rel_type": rel_type,
+                    "source_name": src.split(":")[-1],
+                    "target_name": tgt.split(":")[-1],
+                }
+                if is_many_edges:
+                    edge_item["smooth"] = False
+                else:
+                    edge_item["smooth"] = {"enabled": True, "type": "continuous", "roundness": 0.2}
+                edges_payload.append(edge_item)
 
-        # Dynamic physics configuration with fast BarnesHut for large graphs
-        solver = "barnesHut" if len(nodes) > 200 else "forceAtlas2Based"
+        # Ultra-fast physics configuration: skip Kamada-Kawai layout on large graphs and auto-freeze
+        is_large = len(nodes) > 120
+        solver = "barnesHut" if is_large else "forceAtlas2Based"
         options = {
+            "layout": {
+                "improvedLayout": not is_large,
+                "randomSeed": 42,
+            },
             "physics": {
                 "enabled": True,
                 "solver": solver,
                 "barnesHut": {
-                    "gravitationalConstant": -4000,
-                    "centralGravity": 0.25,
-                    "springLength": 95,
-                    "springConstant": 0.04,
-                    "damping": 0.12,
-                    "avoidOverlap": 0.2,
+                    "gravitationalConstant": -1200 if is_large else -3000,
+                    "centralGravity": 0.35 if is_large else 0.25,
+                    "springLength": 65 if is_large else 90,
+                    "springConstant": 0.05,
+                    "damping": 0.25 if is_large else 0.15,
+                    "avoidOverlap": 0.3,
                 },
                 "forceAtlas2Based": {
                     "gravitationalConstant": -180,
@@ -994,12 +1015,13 @@ class GraphService:
                     "damping": 0.4,
                     "avoidOverlap": 0.8,
                 },
-                "maxVelocity": 40,
-                "minVelocity": 0.75,
+                "maxVelocity": 25,
+                "minVelocity": 1.0,
                 "stabilization": {
                     "enabled": True,
-                    "iterations": 80 if len(nodes) > 200 else 40,
-                    "updateInterval": 25,
+                    "iterations": 25 if is_large else 35,
+                    "updateInterval": 10,
+                    "fit": True,
                 },
             },
             "interaction": {
@@ -1011,7 +1033,9 @@ class GraphService:
                 "zoomView": True,
                 "dragView": True,
                 "dragNodes": True,
-                "tooltipDelay": 60,
+                "tooltipDelay": 40,
+                "hideEdgesOnDrag": is_large,
+                "hideEdgesOnZoom": is_large,
             },
         }
 
@@ -1073,50 +1097,10 @@ class GraphService:
       line-height: 1.45 !important;
       word-break: break-word !important;
     }}
-    /* Custom Scrollbar for in-canvas Drawer */
-    #drawer-body::-webkit-scrollbar {{
-      width: 5px;
-    }}
-    #drawer-body::-webkit-scrollbar-thumb {{
-      background: #334155;
-      border-radius: 3px;
-    }}
-    .prop-copy-btn {{
-      background: none !important;
-      border: none !important;
-      color: #64748B !important;
-      cursor: pointer !important;
-      font-size: 11px !important;
-      float: right !important;
-      padding: 0 3px !important;
-      margin-left: 4px !important;
-      transition: color 0.15s !important;
-    }}
-    .prop-copy-btn:hover {{
-      color: #38BDF8 !important;
-    }}
   </style>
 </head>
 <body>
   <div id="mynetwork"></div>
-
-  <!-- In-Canvas Neo4j Bloom Node Details Drawer Matching Image 2 -->
-  <div id="neo4j-node-drawer" style="display: none; position: absolute; top: 14px; right: 14px; width: 340px; max-height: calc(100% - 75px); background: #181C24; border: 1px solid #282E3B; border-radius: 12px; box-shadow: 0 10px 32px rgba(0,0,0,0.6); z-index: 9998; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; flex-direction: column;">
-    <!-- Panel Header -->
-    <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 14px; opacity: 0.9;">📄</span>
-        <span style="font-size: 13.5px; font-weight: 700; color: #FFFFFF;">Node details</span>
-      </div>
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <button id="drawer-copy-all" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px; cursor: pointer; transition: color 0.15s;">❐ Copy all</button>
-        <button id="drawer-close" title="Close inspector" style="background: none; border: none; color: #94A3B8; font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1;">✕</button>
-      </div>
-    </div>
-    <!-- Panel Body with Dynamic Key-Value Table -->
-    <div id="drawer-body" style="overflow-y: auto; padding: 12px 14px; max-height: 520px;">
-    </div>
-  </div>
 
   <!-- Bottom HUD controls -->
   <div style="position: absolute; bottom: 16px; right: 16px; z-index: 9997; display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 5px 8px; border-radius: 20px; border: 1px solid #CBD5E1; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); font-family: 'Inter', -apple-system, sans-serif;">
@@ -1178,41 +1162,63 @@ class GraphService:
 
       var network = new vis.Network(container, data, options);
 
-      // In-Canvas Neo4j Drawer Renderer
-      function renderNodeDetailsDrawer(nodeObj) {{
+      // Updates the Right-Side Node Inspector panel in the parent Streamlit window
+      function updateRightSideNodeDetails(nodeObj) {{
         if (!nodeObj || !nodeObj.raw_props) return;
         var p = nodeObj.raw_props;
-        var drawer = document.getElementById('neo4j-node-drawer');
-        var body = document.getElementById('drawer-body');
-        if (!drawer || !body) return;
+        var nid = String(nodeObj.id);
+
+        var parentDoc = null;
+        try {{
+          if (window.parent && window.parent.document) {{
+            parentDoc = window.parent.document;
+          }}
+        }} catch (e) {{}}
+
+        var targetCard = parentDoc ? parentDoc.getElementById('neo4j-node-details-card') : document.getElementById('neo4j-node-details-card');
+        if (!targetCard) return;
 
         var entityLabel = p.entity_label || 'Entity';
         var badgeBg = badgeColors[entityLabel] || badgeColors['Entity'] || '#A85A48';
 
         var html = '';
 
+        // Panel Header
+        html += '<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">';
+        html += '<div style="display: flex; align-items: center; gap: 8px;">';
+        html += '<span style="font-size: 15px; opacity: 0.85;">📄</span>';
+        html += '<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Node details</span>';
+        html += '</div>';
+        html += '<div style="display: flex; align-items: center; gap: 8px;">';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(p, null, 2)) + '" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;">❐ Copy all</button>';
+        html += '</div>';
+        html += '</div>';
+
         // Badge
-        html += '<div style="margin-bottom: 10px;">';
-        html += '<span style="background:' + badgeBg + '; color:#FFFFFF; font-size:11px; font-weight:700; padding:3px 12px; border-radius:14px; display:inline-block; letter-spacing:0.02em;">' + escapeHtml(entityLabel) + '</span>';
+        html += '<div style="padding: 12px 16px 8px 16px;">';
+        html += '<span style="background:' + badgeBg + '; color:#FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">' + escapeHtml(entityLabel) + '</span>';
         html += '</div>';
 
         // Dedicated Business Logic / Expression callout
         var expr = p.expression || p.formula || p.logic;
         if (expr) {{
-          html += '<div style="margin-bottom:12px; background:#0F172A; border:1px solid #F59E0B; border-left:3px solid #F59E0B; border-radius:6px; padding:8px 10px;">';
-          html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">';
-          html += '<span style="font-size:10px; font-weight:800; color:#F59E0B; text-transform:uppercase; letter-spacing:0.04em;">⚡ Business Logic / Expression ' + (p.rule_id ? '(' + escapeHtml(p.rule_id) + ')' : '') + '</span>';
-          if (p.rule_type) html += '<span style="font-size:9.5px; color:#94A3B8; font-weight:600;">' + escapeHtml(p.rule_type) + '</span>';
+          var rTag = p.rule_id ? '(' + escapeHtml(p.rule_id) + ')' : '';
+          var rTypeTag = p.rule_type ? escapeHtml(p.rule_type) : '';
+          html += '<div style="margin: 10px 14px 4px 14px; background: #0F172A; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 10px 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">';
+          html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">';
+          html += '<span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.04em;">⚡ Business Logic / Expression ' + rTag + '</span>';
+          html += '<span style="font-size: 10px; color: #94A3B8; font-weight: 600;">' + rTypeTag + '</span>';
           html += '</div>';
-          html += '<div style="font-family:monospace; font-size:12px; color:#FEF3C7; word-break:break-word; font-weight:600; line-height:1.4;">' + escapeHtml(expr) + '</div>';
+          html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12.5px; color: #FEF3C7; word-break: break-word; font-weight: 600; line-height: 1.45;">' + escapeHtml(expr) + '</div>';
           html += '</div>';
         }}
 
         // Key-Value Table matching Image 2
-        html += '<table style="width:100%; border-collapse:collapse; font-size:11.5px;">';
-        html += '<thead><tr style="border-bottom:1px solid #282E3B; color:#94A3B8; text-align:left;">';
-        html += '<th style="padding:6px; width:34%; font-weight:600; font-size:11.5px;">Key</th>';
-        html += '<th style="padding:6px; width:66%; font-weight:600; font-size:11.5px;">Value</th>';
+        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">';
+        html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
+        html += '<thead><tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">';
+        html += '<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>';
+        html += '<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>';
         html += '</tr></thead><tbody>';
 
         var keys = Object.keys(p).filter(function(k) {{ return k !== '<id>'; }}).sort();
@@ -1237,44 +1243,166 @@ class GraphService:
           }}
 
           var isLogicRow = (k === 'expression' || k === 'formula' || k === 'rule_id' || k === 'rule_type');
-          var rowBg = isLogicRow ? 'background: rgba(245,158,11,0.08);' : '';
-
-          html += '<tr style="border-bottom:1px solid #242B38; ' + rowBg + '">';
-          html += '<td style="padding:6px 8px; color:#F1F5F9; font-weight:700; vertical-align:top; font-size:11.5px;">' + escapeHtml(k) + '</td>';
-          html += '<td style="padding:6px 8px; color:' + valColor + '; font-family:monospace; vertical-align:top; word-break:break-word; line-height:1.4; font-size:11px;">';
+          var rowBg = isLogicRow ? 'background: rgba(245, 158, 11, 0.07);' : '';
+          html += '<tr style="border-bottom: 1px solid #242B38; ' + rowBg + '">';
+          html += '<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 12.5px;">' + escapeHtml(k) + '</td>';
+          html += '<td style="padding: 7px 8px; color: ' + valColor + '; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
           html += '<span>' + displayVal + '</span>';
-          html += '<button class="prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard">❐</button>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>';
           html += '</td></tr>';
         }});
 
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
 
-        body.innerHTML = html;
-        drawer.style.display = 'flex';
+        // Connected Relationships
+        var connEdges = edgesData.filter(function(e) {{ return String(e.from) === nid || String(e.to) === nid; }});
+        if (connEdges.length > 0) {{
+          html += '<div style="margin-top:0.75rem; border-top:1px solid #282E3B; padding:0.75rem 14px 4px 14px;">';
+          html += '<div style="font-size:0.74rem; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.4rem;">Connected Relationships (' + connEdges.length + ')</div>';
+          html += '<div style="max-height:160px; overflow-y:auto; padding-right:0.2rem;">';
+          connEdges.slice(0, 12).forEach(function(e) {{
+            var isOut = String(e.from) === nid;
+            var dirIcon = isOut ? '➔' : '⬅';
+            var otherId = isOut ? String(e.to) : String(e.from);
+            var otherName = otherId.split(':').pop();
+            var relType = e.label || 'RELATES_TO';
+            html += '<div style="background:#131720; border:1px solid #282E3B; border-radius:6px; padding:0.35rem 0.55rem; margin-bottom:0.3rem; font-size:0.75rem; display:flex; justify-content:space-between; align-items:center;">';
+            html += '<span style="background:#1E293B; color:#38BDF8; font-weight:700; font-size:0.68rem; padding:0.12rem 0.4rem; border-radius:4px; white-space:nowrap; font-family: JetBrains Mono, monospace;">' + dirIcon + ' ' + escapeHtml(relType) + '</span>';
+            html += '<span style="font-family: JetBrains Mono, monospace; color:#E2E8F0; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.75rem;" title="' + escapeHtml(otherName) + '">' + escapeHtml(otherName) + '</span>';
+            html += '</div>';
+          }});
+          html += '</div></div>';
+        }}
 
-        // Configure Copy All button
-        var copyAllBtn = document.getElementById('drawer-copy-all');
-        if (copyAllBtn) {{
-          copyAllBtn.onclick = function() {{
-            navigator.clipboard.writeText(JSON.stringify(p, null, 2));
-            copyAllBtn.innerText = '✓ Copied';
-            setTimeout(function() {{ copyAllBtn.innerText = '❐ Copy all'; }}, 1500);
-          }};
+        targetCard.innerHTML = html;
+
+        // Ensure delegated copy listeners are active on targetCard
+        if (targetCard && !targetCard.dataset.listenerAttached) {{
+          targetCard.dataset.listenerAttached = 'true';
+          targetCard.addEventListener('click', function(e) {{
+            var allBtn = e.target.closest('.st-copy-all-btn');
+            if (allBtn) {{
+              var val = allBtn.getAttribute('data-copy') || '';
+              navigator.clipboard.writeText(val);
+              allBtn.innerText = '✓ Copied';
+              setTimeout(function() {{ allBtn.innerText = '❐ Copy all'; }}, 1500);
+              return;
+            }}
+            var propBtn = e.target.closest('.st-prop-copy-btn');
+            if (propBtn) {{
+              var val = propBtn.getAttribute('data-copy') || '';
+              navigator.clipboard.writeText(val);
+              propBtn.innerText = '✓';
+              setTimeout(function() {{ propBtn.innerText = '❐'; }}, 1200);
+              return;
+            }}
+          }});
+        }}
+
+        // Update selectbox label in parent document if present
+        if (parentDoc) {{
+          try {{
+            var selBox = parentDoc.querySelector('[data-testid="stSelectbox"]');
+            if (selBox) {{
+              var labelEl = selBox.querySelector('[data-baseweb="select"] div[aria-selected="true"], [data-baseweb="select"] [class*="singleValue"], [data-baseweb="select"] span');
+              if (!labelEl) labelEl = selBox.querySelector('[data-baseweb="select"] div');
+              if (labelEl) {{
+                var cleanName = (p.name || p.file_name || nodeObj.id || '').split(':').pop();
+                labelEl.innerText = cleanName + ' (' + entityLabel + ')';
+              }}
+            }}
+          }} catch (e) {{}}
+
+          // Update URL query parameter silently so action buttons (Trace Lineage / Ask Agent) operate on clicked node
+          try {{
+            var pUrl = new URL(window.parent.location.href);
+            pUrl.searchParams.set('selected_node', nid);
+            window.parent.history.replaceState(null, '', pUrl.toString());
+          }} catch (e) {{}}
         }}
       }}
 
-      // Delegate property copy button clicks
-      var drawerElem = document.getElementById('neo4j-node-drawer');
-      if (drawerElem) {{
-        drawerElem.addEventListener('click', function(evt) {{
-          var btn = evt.target.closest('.prop-copy-btn');
-          if (btn) {{
-            var toCopy = btn.getAttribute('data-copy') || '';
-            navigator.clipboard.writeText(toCopy);
-            btn.innerText = '✓';
-            setTimeout(function() {{ btn.innerText = '❐'; }}, 1200);
+      // Updates the Right-Side Inspector when an edge (relationship) is clicked
+      function updateRightSideEdgeDetails(edgeObj) {{
+        if (!edgeObj) return;
+
+        var parentDoc = null;
+        try {{
+          if (window.parent && window.parent.document) {{
+            parentDoc = window.parent.document;
           }}
+        }} catch (e) {{}}
+
+        var targetCard = parentDoc ? parentDoc.getElementById('neo4j-node-details-card') : document.getElementById('neo4j-node-details-card');
+        if (!targetCard) return;
+
+        var relType = edgeObj.rel_type || edgeObj.label || 'RELATES_TO';
+        var fromName = edgeObj.source_name || String(edgeObj.from).split(':').pop();
+        var toName = edgeObj.target_name || String(edgeObj.to).split(':').pop();
+        var edgeId = edgeObj.id || (edgeObj.from + '->' + edgeObj.to);
+
+        var edgeProps = {{
+          '<id>': 'rel:' + edgeId,
+          'relationship_type': relType,
+          'from_node': fromName,
+          'to_node': toName,
+          'source_id': String(edgeObj.from),
+          'target_id': String(edgeObj.to)
+        }};
+
+        var html = '';
+
+        // Panel Header
+        html += '<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">';
+        html += '<div style="display: flex; align-items: center; gap: 8px;">';
+        html += '<span style="font-size: 15px; opacity: 0.85;">🔗</span>';
+        html += '<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Relationship details</span>';
+        html += '</div>';
+        html += '<div style="display: flex; align-items: center; gap: 8px;">';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(edgeProps, null, 2)) + '" title="Copy relationship details as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;">❐ Copy all</button>';
+        html += '</div>';
+        html += '</div>';
+
+        // Badge
+        html += '<div style="padding: 12px 16px 8px 16px;">';
+        html += '<span style="background: #6366F1; color: #FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">';
+        html += 'Relationship: ' + escapeHtml(relType);
+        html += '</span>';
+        html += '</div>';
+
+        // Flow Callout
+        html += '<div style="margin: 6px 14px 10px 14px; background: #0F172A; border: 1px solid #38BDF8; border-left: 4px solid #38BDF8; border-radius: 8px; padding: 10px 12px;">';
+        html += '<div style="font-size: 10.5px; font-weight: 700; color: #38BDF8; text-transform: uppercase; margin-bottom: 4px;">Connection Path</div>';
+        html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12px; color: #F1F5F9; word-break: break-word;">';
+        html += '<span style="color: #FCD34D;">' + escapeHtml(fromName) + '</span> ➔ <span style="background: #1E293B; color: #38BDF8; padding: 1px 6px; border-radius: 4px; font-weight: 700;">' + escapeHtml(relType) + '</span> ➔ <span style="color: #6EE7B7;">' + escapeHtml(toName) + '</span>';
+        html += '</div>';
+        html += '</div>';
+
+        // Properties Table
+        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">';
+        html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
+        html += '<thead><tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">';
+        html += '<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>';
+        html += '<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>';
+        html += '</tr></thead><tbody>';
+
+        var keys = Object.keys(edgeProps).filter(function(k) {{ return k !== '<id>'; }}).sort();
+        keys.unshift('<id>');
+
+        keys.forEach(function(k) {{
+          var v = edgeProps[k];
+          var valStr = String(v);
+          html += '<tr style="border-bottom: 1px solid #242B38;">';
+          html += '<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 12.5px;">' + escapeHtml(k) + '</td>';
+          html += '<td style="padding: 7px 8px; color: #38BDF8; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
+          html += '<span>"' + escapeHtml(valStr) + '"</span>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>';
+          html += '</td></tr>';
         }});
+
+        html += '</tbody></table></div>';
+
+        targetCard.innerHTML = html;
       }}
 
       // Listen for canvas node selection
@@ -1283,24 +1411,27 @@ class GraphService:
           var nid = params.nodes[0];
           var found = nodesData.find(function(n) {{ return String(n.id) === String(nid); }});
           if (found) {{
-            renderNodeDetailsDrawer(found);
+            updateRightSideNodeDetails(found);
           }}
         }}
       }});
 
-      // Close drawer handler
-      var closeBtn = document.getElementById('drawer-close');
-      if (closeBtn) {{
-        closeBtn.addEventListener('click', function() {{
-          document.getElementById('neo4j-node-drawer').style.display = 'none';
-        }});
-      }}
+      // Listen for canvas edge selection (shows Relationship details on right side)
+      network.on('selectEdge', function(params) {{
+        if ((!params.nodes || params.nodes.length === 0) && params.edges && params.edges.length > 0) {{
+          var eid = params.edges[0];
+          var foundEdge = edgesData.find(function(e) {{ return String(e.id) === String(eid); }});
+          if (foundEdge) {{
+            updateRightSideEdgeDetails(foundEdge);
+          }}
+        }}
+      }});
 
       // Attach HUD controls
       var fitBtn = document.getElementById('btn-fit');
       if (fitBtn) {{
         fitBtn.addEventListener('click', function() {{
-          network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
+          network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});
         }});
       }}
       var zoomInBtn = document.getElementById('btn-zoomin');
@@ -1317,9 +1448,12 @@ class GraphService:
           network.moveTo({{ scale: s * 0.75, animation: {{ duration: 200, easingFunction: 'easeInOutQuad' }} }});
         }});
       }}
-      var physicsActive = true;
+
+      var physicsActive = false;
       var fBtn = document.getElementById('btn-freeze');
       if (fBtn) {{
+        fBtn.style.background = '#64748B';
+        fBtn.innerText = '⏸ Frozen';
         fBtn.addEventListener('click', function() {{
           physicsActive = !physicsActive;
           network.setOptions({{ physics: {{ enabled: physicsActive }} }});
@@ -1328,32 +1462,39 @@ class GraphService:
         }});
       }}
 
-      function handleStabilized() {{
+      // Freeze physics once layout settles so 0% CPU is consumed and buffering stops completely
+      function freezeAndFit() {{
         if (typeof network !== 'undefined' && network !== null) {{
+          network.setOptions({{ physics: {{ enabled: false }} }});
+          physicsActive = false;
+          if (fBtn) {{
+            fBtn.style.background = '#64748B';
+            fBtn.innerText = '⏸ Frozen';
+          }}
+
           if (selNodeId) {{
             try {{
               network.focus(selNodeId, {{
                 scale: 1.0,
-                animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }}
+                animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }}
               }});
               network.selectNodes([selNodeId]);
               var foundSel = nodesData.find(function(n) {{ return String(n.id).toLowerCase() === String(selNodeId).toLowerCase(); }});
               if (foundSel) {{
-                renderNodeDetailsDrawer(foundSel);
+                updateRightSideNodeDetails(foundSel);
               }}
             }} catch (err) {{
-              network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
+              network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});
             }}
           }} else {{
-            network.fit({{ animation: {{ duration: 350, easingFunction: 'easeInOutQuad' }} }});
+            network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});
           }}
         }}
       }}
 
-      network.once('stabilizationIterationsDone', handleStabilized);
-      network.once('stabilized', handleStabilized);
-      setTimeout(handleStabilized, 250);
-      setTimeout(handleStabilized, 600);
+      network.once('stabilizationIterationsDone', freezeAndFit);
+      network.once('stabilized', freezeAndFit);
+      setTimeout(freezeAndFit, 400);
 
       function ensureCanvasRendered() {{
         if (typeof network !== 'undefined' && network !== null) {{
@@ -1364,7 +1505,7 @@ class GraphService:
         }}
       }}
       setTimeout(ensureCanvasRendered, 150);
-      setTimeout(ensureCanvasRendered, 500);
+      setTimeout(ensureCanvasRendered, 450);
 
       window.addEventListener('resize', function() {{
         if (typeof network !== 'undefined' && network !== null) {{
