@@ -954,43 +954,47 @@ class GraphService:
 
         edges_payload: List[Dict[str, Any]] = []
         is_many_edges = len(edges) > 150
-        for e in edges:
+        seen_edge_triplets: Set[Tuple[str, str, str]] = set()
+        for idx, e in enumerate(edges):
             src = str(e.get("source", ""))
             tgt = str(e.get("target", ""))
             rel_type = str(e.get("type", "RELATES_TO"))
 
             if src in added_node_ids and tgt in added_node_ids:
+                edge_triplet = (src, tgt, rel_type)
+                if edge_triplet in seen_edge_triplets:
+                    continue
+                seen_edge_triplets.add(edge_triplet)
+
                 cfg = EDGE_PALETTE.get(rel_type, EDGE_PALETTE["DEFAULT"])
+                unique_edge_id = f"{src}->{tgt}:{rel_type}:{len(edges_payload)}"
                 edge_item = {
-                    "id": f"{src}->{tgt}",
+                    "id": unique_edge_id,
                     "from": src,
                     "to": tgt,
                     "title": f"<b>{html.escape(rel_type)}</b><br/><span style='color:#94A3B8'>{src.split(':')[-1]} ➔ {tgt.split(':')[-1]}</span>",
                     "label": rel_type,
                     "color": {"color": cfg["color"], "highlight": "#0284C7", "hover": "#0284C7"},
-                    "arrows": {"to": {"enabled": True, "scaleFactor": 0.8}},
+                    "arrows": {"to": {"enabled": True, "scaleFactor": 0.75}},
                     "font": {
-                        "color": "#334155",
-                        "size": 9,
+                        "color": "#1E293B",
+                        "size": 10,
                         "align": "middle",
                         "strokeWidth": 3,
                         "strokeColor": "#FFFFFF",
+                        "background": "rgba(255, 255, 255, 0.90)",
                         "face": "JetBrains Mono, monospace, sans-serif",
                     },
                     "width": cfg["width"],
+                    "smooth": {"enabled": True, "type": "continuous", "roundness": 0.15},
                     "rel_type": rel_type,
                     "source_name": src.split(":")[-1],
                     "target_name": tgt.split(":")[-1],
                 }
-                if is_many_edges:
-                    edge_item["smooth"] = False
-                else:
-                    edge_item["smooth"] = {"enabled": True, "type": "continuous", "roundness": 0.2}
                 edges_payload.append(edge_item)
 
-        # Ultra-fast physics configuration: skip Kamada-Kawai layout on large graphs and auto-freeze
+        # Ultra-fast physics configuration: spacious Barnes-Hut layout to prevent congestion
         is_large = len(nodes) > 120
-        solver = "barnesHut" if is_large else "forceAtlas2Based"
         options = {
             "layout": {
                 "improvedLayout": not is_large,
@@ -998,28 +1002,20 @@ class GraphService:
             },
             "physics": {
                 "enabled": True,
-                "solver": solver,
+                "solver": "barnesHut",
                 "barnesHut": {
-                    "gravitationalConstant": -1200 if is_large else -3000,
-                    "centralGravity": 0.35 if is_large else 0.25,
-                    "springLength": 65 if is_large else 90,
-                    "springConstant": 0.05,
-                    "damping": 0.25 if is_large else 0.15,
-                    "avoidOverlap": 0.3,
-                },
-                "forceAtlas2Based": {
-                    "gravitationalConstant": -180,
-                    "centralGravity": 0.008,
-                    "springLength": 180,
-                    "springConstant": 0.05,
-                    "damping": 0.4,
-                    "avoidOverlap": 0.8,
+                    "gravitationalConstant": -4500 if is_large else -3000,
+                    "centralGravity": 0.06 if is_large else 0.15,
+                    "springLength": 180 if is_large else 120,
+                    "springConstant": 0.025 if is_large else 0.04,
+                    "damping": 0.18,
+                    "avoidOverlap": 0.90,
                 },
                 "maxVelocity": 25,
                 "minVelocity": 1.0,
                 "stabilization": {
                     "enabled": True,
-                    "iterations": 25 if is_large else 35,
+                    "iterations": 35,
                     "updateInterval": 10,
                     "fit": True,
                 },
@@ -1063,6 +1059,7 @@ class GraphService:
     html, body {{
       width: 100% !important;
       height: 100% !important;
+      min-height: 680px !important;
       overflow: hidden !important;
       background: #F8FAFC !important;
     }}
@@ -1462,6 +1459,37 @@ class GraphService:
         }});
       }}
 
+      function findMatchingNode(targetId) {{
+        if (!targetId) return null;
+        var sTarget = String(targetId).toLowerCase().trim();
+        // 1. Exact match by id
+        var found = nodesData.find(function(n) {{ return String(n.id).toLowerCase() === sTarget; }});
+        if (found) return found;
+        // 2. Match without prefix (e.g. PROCEDURE:1000-INITIALIZE matches 1000-INITIALIZE)
+        found = nodesData.find(function(n) {{
+          var idPart = String(n.id).split(':').pop().toLowerCase();
+          return idPart === sTarget;
+        }});
+        if (found) return found;
+        // 3. Match if target has prefix or vice versa
+        found = nodesData.find(function(n) {{
+          var targetPart = sTarget.split(':').pop();
+          var idPart = String(n.id).split(':').pop().toLowerCase();
+          return idPart === targetPart;
+        }});
+        if (found) return found;
+        // 4. Match by name or label
+        found = nodesData.find(function(n) {{
+          var name = (n.raw_props && (n.raw_props.name || n.raw_props.rule_id || n.raw_props.file_name)) || '';
+          return String(name).toLowerCase() === sTarget || String(n.label).toLowerCase() === sTarget;
+        }});
+        return found || null;
+      }}
+
+      var userInteracted = false;
+      network.on('dragStart', function() {{ userInteracted = true; }});
+      network.on('zoom', function() {{ userInteracted = true; }});
+
       // Freeze physics once layout settles so 0% CPU is consumed and buffering stops completely
       function freezeAndFit() {{
         if (typeof network !== 'undefined' && network !== null) {{
@@ -1473,20 +1501,15 @@ class GraphService:
           }}
 
           if (selNodeId) {{
-            try {{
-              network.focus(selNodeId, {{
-                scale: 1.0,
-                animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }}
-              }});
-              network.selectNodes([selNodeId]);
-              var foundSel = nodesData.find(function(n) {{ return String(n.id).toLowerCase() === String(selNodeId).toLowerCase(); }});
-              if (foundSel) {{
-                updateRightSideNodeDetails(foundSel);
-              }}
-            }} catch (err) {{
-              network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});
+            var matchedNode = findMatchingNode(selNodeId);
+            if (matchedNode) {{
+              try {{
+                network.selectNodes([matchedNode.id]);
+                updateRightSideNodeDetails(matchedNode);
+              }} catch (err) {{}}
             }}
-          }} else {{
+          }}
+          if (!userInteracted) {{
             network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});
           }}
         }}
@@ -1494,18 +1517,20 @@ class GraphService:
 
       network.once('stabilizationIterationsDone', freezeAndFit);
       network.once('stabilized', freezeAndFit);
-      setTimeout(freezeAndFit, 400);
+      setTimeout(function() {{
+        if (physicsActive) {{
+          freezeAndFit();
+        }}
+      }}, 3500);
 
       function ensureCanvasRendered() {{
-        if (typeof network !== 'undefined' && network !== null) {{
+        if (!userInteracted && typeof network !== 'undefined' && network !== null) {{
           network.redraw();
-          if (!selNodeId) {{
-            network.fit();
-          }}
+          network.fit();
         }}
       }}
-      setTimeout(ensureCanvasRendered, 150);
-      setTimeout(ensureCanvasRendered, 450);
+      setTimeout(ensureCanvasRendered, 300);
+      setTimeout(ensureCanvasRendered, 800);
 
       window.addEventListener('resize', function() {{
         if (typeof network !== 'undefined' && network !== null) {{

@@ -15,8 +15,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# Cloud deployment defaults: suppress dynamic file watching & noisy warnings
-os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "none")
+# File watching enabled for dynamic development updates
+os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "auto")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 # Load local .env if available
@@ -145,8 +145,15 @@ def main() -> None:
         initial_sidebar_state="collapsed",
     )
 
-    # Check for pending programmatic navigation request BEFORE sidebar widget renders
-    if "navigate_to_page" in st.session_state:
+    # Check for pending programmatic navigation request or query parameter BEFORE sidebar widget renders
+    query_page = st.query_params.get("page")
+    if query_page:
+        for lbl, k in PAGES:
+            if query_page.lower() in lbl.lower() or query_page.lower() in k.lower():
+                st.session_state["sidebar_navigation_radio"] = lbl
+                st.session_state["current_page"] = k
+                break
+    elif "navigate_to_page" in st.session_state:
         target_page = st.session_state.pop("navigate_to_page")
         # Match target_page to label if needed
         matching_label = next((lbl for lbl, k in PAGES if k == target_page or lbl == target_page), target_page)
