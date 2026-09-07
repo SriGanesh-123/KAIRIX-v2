@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   RotateCw, 
@@ -12,38 +12,44 @@ import {
   Code
 } from 'lucide-react';
 import { SOURCE_FILES } from '../data/mockData';
+import { ApiService } from '../services/api';
 
 export default function SourceExplorerView({ onNavigateToInvestigate }) {
-  const [selectedFileId, setSelectedFileId] = useState('cbl-1');
+  const [fileOptions, setFileOptions] = useState(SOURCE_FILES);
+  const [selectedFileId, setSelectedFileId] = useState(SOURCE_FILES[0].id);
   const [filterType, setFilterType] = useState('ALL');
   const [activeCodeTab, setActiveCodeTab] = useState('code');
+  const [liveDetail, setLiveDetail] = useState(null);
 
-  // Multi-file datasets matching the counts from screenshot
-  const fileOptions = [
-    { id: 'cbl-1', name: 'EARNPREM.CBL', type: 'COBOL', lines: 320, entities: 69, relationships: 35, rules: 11,
-      purpose: "Calculate earned and unearned premium amounts for each premium record by matching it to a policy, validating dates, applying the earned-premium formula, and writing the results or error records."
-    },
-    { id: 'cbl-2', name: 'PREMCALC.CBL', type: 'COBOL', lines: 480, entities: 94, relationships: 42, rules: 16,
-      purpose: "Core rating algorithm computing base rate factors, driver surcharges, and discount credits for multi-line auto policies."
-    },
-    { id: 'cbl-3', name: 'POLSTATUS.CBL', type: 'COBOL', lines: 210, entities: 38, relationships: 19, rules: 7,
-      purpose: "Batch status transition processor validating effective date intervals and updating status flags from InForce to Expired."
-    },
-    { id: 'sql-1', name: 'PolicyCenter_Monoline.sql', type: 'SQL', lines: 184, entities: 52, relationships: 28, rules: 8,
-      purpose: "Analytical query aggregating earned premium across active commercial monoline policies, joining pc_policy and coverage records."
-    },
-    { id: 'ssis-1', name: 'Extract_Policy.dtsx', type: 'SSIS', lines: 412, entities: 76, relationships: 31, rules: 11,
-      purpose: "Guidewire operational store ETL pipeline extracting policy revisions and staging into reporting warehouse dimension tables."
+  useEffect(() => {
+    ApiService.getSources().then(files => {
+      if (files && files.length > 0) {
+        setFileOptions(files);
+        setSelectedFileId(files[0].id);
+      }
+    });
+  }, []);
+
+  const visibleFiles = filterType === 'ALL' 
+    ? fileOptions 
+    : fileOptions.filter(f => f.type.toUpperCase() === filterType.toUpperCase());
+
+  const currentFile = visibleFiles.find(f => f.id === selectedFileId || f.name === selectedFileId) || visibleFiles[0] || fileOptions[0];
+
+  useEffect(() => {
+    if (currentFile?.name) {
+      ApiService.getSourceDetail(currentFile.name).then(data => {
+        if (data) setLiveDetail(data);
+      });
     }
-  ];
-
-  const currentFile = fileOptions.find(f => f.id === selectedFileId) || fileOptions[0];
+  }, [currentFile?.name]);
 
   const handleFilterChange = (type) => {
     setFilterType(type);
-    if (type === 'COBOL') setSelectedFileId('cbl-1');
-    else if (type === 'SQL') setSelectedFileId('sql-1');
-    else if (type === 'SSIS') setSelectedFileId('ssis-1');
+    const firstMatch = type === 'ALL' 
+      ? fileOptions[0] 
+      : fileOptions.find(f => f.type.toUpperCase() === type.toUpperCase());
+    if (firstMatch) setSelectedFileId(firstMatch.id);
   };
 
   return (
@@ -76,7 +82,7 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
           <span className="radio-circle">
             {filterType === 'ALL' && <span className="radio-dot" />}
           </span>
-          <span>All Files (21)</span>
+          <span>All Files ({fileOptions.length})</span>
         </label>
 
         <label 
@@ -86,7 +92,7 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
           <span className="radio-circle">
             {filterType === 'COBOL' && <span className="radio-dot" />}
           </span>
-          <span>COBOL (6)</span>
+          <span>COBOL ({fileOptions.filter(f => f.type === 'COBOL').length})</span>
         </label>
 
         <label 
@@ -96,7 +102,7 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
           <span className="radio-circle">
             {filterType === 'SQL' && <span className="radio-dot" />}
           </span>
-          <span>SQL (4)</span>
+          <span>SQL ({fileOptions.filter(f => f.type === 'SQL').length})</span>
         </label>
 
         <label 
@@ -106,7 +112,7 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
           <span className="radio-circle">
             {filterType === 'SSIS' && <span className="radio-dot" />}
           </span>
-          <span>SSIS Packages (11)</span>
+          <span>SSIS Packages ({fileOptions.filter(f => f.type === 'SSIS').length})</span>
         </label>
       </div>
 
@@ -190,13 +196,13 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
             className={`inner-tab-btn ${activeCodeTab === 'rules' ? 'inner-tab-active' : ''}`}
             onClick={() => setActiveCodeTab('rules')}
           >
-            Business Rules ({currentFile.rules})
+            Business Rules ({currentFile.rules || currentFile.business_rules?.length || 0})
           </button>
           <button 
             className={`inner-tab-btn ${activeCodeTab === 'dependencies' ? 'inner-tab-active' : ''}`}
             onClick={() => setActiveCodeTab('dependencies')}
           >
-            Dependencies ({currentFile.relationships})
+            Dependencies ({currentFile.relationships || (currentFile.inputs?.length || 0) + (currentFile.outputs?.length || 0)})
           </button>
         </div>
 
@@ -204,31 +210,7 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
         {activeCodeTab === 'code' && (
           <div className="code-viewer-container">
             <pre className="code-display-block font-mono">
-{`000100 IDENTIFICATION DIVISION.
-000200 PROGRAM-ID. ${currentFile.name.replace('.CBL', '')}.
-000300 ENVIRONMENT DIVISION.
-000400 DATA DIVISION.
-000500 WORKING-STORAGE SECTION.
-000600 01  WS-POLICY-RECORD.
-000700     05 WS-POL-NUM         PIC X(10).
-000800     05 WS-POL-EFF-DATE    PIC 9(8).
-000900     05 WS-POL-EXP-DATE    PIC 9(8).
-001000     05 WS-WRITTEN-PREM    PIC 9(9)V99.
-001100     05 WS-EARNED-PREM     PIC 9(9)V99.
-001200     05 WS-DAYS-IN-FORCE   PIC 9(4).
-001300     05 WS-TERM-DAYS       PIC 9(4).
-001400 PROCEDURE DIVISION.
-001500 0000-MAIN-LOGIC.
-001600     PERFORM 1000-CALC-EARNED-PREM.
-001700     GOBACK.
-001800 1000-CALC-EARNED-PREM.
-001900     COMPUTE WS-DAYS-IN-FORCE = FUNCTION CURRENT-DATE(1:8) - WS-POL-EFF-DATE
-002000     COMPUTE WS-TERM-DAYS = WS-POL-EXP-DATE - WS-POL-EFF-DATE
-002100     IF WS-DAYS-IN-FORCE > WS-TERM-DAYS
-002200         MOVE WS-TERM-DAYS TO WS-DAYS-IN-FORCE
-002300     END-IF.
-002400     COMPUTE WS-EARNED-PREM ROUNDED = 
-002500         (WS-DAYS-IN-FORCE / WS-TERM-DAYS) * WS-WRITTEN-PREM.`}
+{currentFile?.raw_code || liveDetail?.raw_code || "No source code available for this artifact."}
             </pre>
           </div>
         )}
@@ -236,29 +218,85 @@ export default function SourceExplorerView({ onNavigateToInvestigate }) {
         {/* Business Rules Viewer */}
         {activeCodeTab === 'rules' && (
           <div className="rules-viewer-container">
-            <div className="rule-item-box">
-              <span className="badge badge-amber">Rule 300</span>
-              <strong>Earned Premium Calculation Formula</strong>
-              <p className="rule-desc font-mono">
-                WS-EARNED-PREM = (WS-DAYS-IN-FORCE / WS-TERM-DAYS) * WS-WRITTEN-PREM
-              </p>
-              <span className="text-muted text-xs">Anchored at EARNPREM.CBL: Lines 19–25</span>
-            </div>
+            {((currentFile?.business_rules && currentFile.business_rules.length > 0)
+              ? currentFile.business_rules 
+              : (liveDetail?.knowledge_package?.business_rules || [])
+            ).length > 0 ? (
+              (currentFile?.business_rules && currentFile.business_rules.length > 0
+                ? currentFile.business_rules 
+                : liveDetail.knowledge_package.business_rules
+              ).map((r, i) => (
+                <div key={i} className="rule-item-box" style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span className="badge badge-amber">{r.rule_id || `Rule ${i + 1}`}</span>
+                    <strong>{r.name || r.rule_name || `Business Rule #${i + 1}`}</strong>
+                  </div>
+                  <p className="rule-desc font-mono" style={{ margin: '4px 0' }}>
+                    {r.formula || r.logic || r.description || r.statement || JSON.stringify(r)}
+                  </p>
+                  {r.line_range && <span className="text-muted text-xs">Lines {r.line_range}</span>}
+                </div>
+              ))
+            ) : (
+              <div className="rule-item-box" style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+                No explicit business rules cataloged for this component in the AST knowledge base.
+              </div>
+            )}
           </div>
         )}
 
         {/* Dependencies Viewer */}
         {activeCodeTab === 'dependencies' && (
-          <div className="dependencies-viewer-container">
-            <div className="dep-row">
-              <span className="dep-label">Inputs (Reads From):</span>
-              <span className="dep-pill font-mono">POLICY_MASTER</span>
-              <span className="dep-pill font-mono">CPY_PREMCALC</span>
+          <div className="dependencies-viewer-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="dep-row" style={{ alignItems: 'flex-start' }}>
+              <span className="dep-label" style={{ minWidth: '160px' }}>Inputs (Reads From):</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {currentFile?.inputs && currentFile.inputs.length > 0 ? (
+                  currentFile.inputs.map((inp, idx) => (
+                    <span key={idx} className="dep-pill font-mono">{inp}</span>
+                  ))
+                ) : (
+                  <span className="text-muted text-xs font-mono">No direct input tables/files</span>
+                )}
+              </div>
             </div>
-            <div className="dep-row">
-              <span className="dep-label">Outputs (Writes To):</span>
-              <span className="dep-pill font-mono text-blue">STG_EARNED_PREM</span>
+
+            <div className="dep-row" style={{ alignItems: 'flex-start' }}>
+              <span className="dep-label" style={{ minWidth: '160px' }}>Outputs (Writes To):</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {currentFile?.outputs && currentFile.outputs.length > 0 ? (
+                  currentFile.outputs.map((out, idx) => (
+                    <span key={idx} className="dep-pill font-mono text-blue">{out}</span>
+                  ))
+                ) : (
+                  <span className="text-muted text-xs font-mono">No direct output tables/files</span>
+                )}
+              </div>
             </div>
+
+            {currentFile?.transformations && currentFile.transformations.length > 0 && (
+              <div className="dep-row" style={{ alignItems: 'flex-start' }}>
+                <span className="dep-label" style={{ minWidth: '160px' }}>Transformations:</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  {currentFile.transformations.map((t, idx) => (
+                    <div key={idx} className="rule-item-box font-mono text-xs" style={{ padding: '8px 12px', margin: 0 }}>
+                      • {t}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {currentFile?.dependencies && currentFile.dependencies.length > 0 && (
+              <div className="dep-row" style={{ alignItems: 'flex-start' }}>
+                <span className="dep-label" style={{ minWidth: '160px' }}>Dependencies:</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {currentFile.dependencies.map((dep, idx) => (
+                    <span key={idx} className="dep-pill font-mono text-secondary">{dep}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

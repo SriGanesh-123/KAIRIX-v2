@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileCode, 
   Binary, 
@@ -15,37 +15,46 @@ import {
 } from 'lucide-react';
 import SpatialCard from '../components/SpatialCard';
 import { SYSTEM_METRICS, PIPELINE_LAYERS, SOURCE_FILES, INVESTIGATION_SAMPLES } from '../data/mockData';
+import { ApiService } from '../services/api';
 
 export default function DashboardView({ onNavigate, onLaunchQuery }) {
+  const [metrics, setMetrics] = useState(SYSTEM_METRICS);
+
+  useEffect(() => {
+    ApiService.getStatus().then(data => {
+      if (data) setMetrics(data);
+    });
+  }, []);
+
   const kpis = [
     {
       title: "Analyzed Artifacts",
-      value: SYSTEM_METRICS.totalFiles,
-      breakdown: `${SYSTEM_METRICS.cobolPrograms} COBOL • ${SYSTEM_METRICS.sqlScripts} SQL • ${SYSTEM_METRICS.ssisPackages} SSIS`,
+      value: metrics.totalFiles,
+      breakdown: `${metrics.cobolPrograms} COBOL • ${metrics.sqlScripts} SQL • ${metrics.ssisPackages} SSIS`,
       icon: FileCode,
       color: "var(--cyan-neon)",
       glow: "var(--cyan-glow)"
     },
     {
       title: "Knowledge Graph Entities",
-      value: SYSTEM_METRICS.graphEntities.toLocaleString(),
-      breakdown: `${SYSTEM_METRICS.graphRelationships.toLocaleString()} Lineage Connections in Neo4j Aura`,
+      value: (metrics.graphEntities || 0).toLocaleString(),
+      breakdown: `${(metrics.graphRelationships || 0).toLocaleString()} Lineage Connections in Neo4j Aura`,
       icon: Database,
       color: "#a78bfa",
       glow: "var(--purple-glow)"
     },
     {
       title: "Extracted Business Rules",
-      value: SYSTEM_METRICS.businessRules,
-      breakdown: `${SYSTEM_METRICS.transformations} AST Data Mappings Reconciled`,
+      value: metrics.businessRules,
+      breakdown: `${metrics.transformations || 0} AST Data Mappings Reconciled`,
       icon: ShieldCheck,
       color: "var(--emerald-neon)",
       glow: "var(--emerald-glow)"
     },
     {
       title: "Vector Embeddings",
-      value: SYSTEM_METRICS.pineconeChunks.toLocaleString(),
-      breakdown: `Pinecone Serverless (${SYSTEM_METRICS.embeddingDimension}-dim MiniLM)`,
+      value: (metrics.pineconeChunks || 1400).toLocaleString(),
+      breakdown: `Pinecone Serverless (${metrics.embeddingDimension || 384}-dim MiniLM)`,
       icon: Zap,
       color: "var(--amber-neon)",
       glow: "var(--amber-glow)"
