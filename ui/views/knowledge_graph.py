@@ -206,15 +206,19 @@ def render_knowledge_graph() -> None:
             if str(e.get("source")) == chosen_id or str(e.get("target")) == chosen_id
         ]
 
-    # Layout: Graph Canvas on Left (70%), Node Details on Right (30%)
-    col_canvas, col_details = st.columns([70, 30])
+    # Layout: Graph Canvas on Left (67%), Node Details on Right (33%)
+    col_canvas, col_details = st.columns([67, 33], gap="medium")
 
     with col_canvas:
         st.markdown(
             f"""
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-                <span style="font-size:0.85rem; color:#334155; font-weight:600;">Canvas: <b style="color:#0284C7;">{len(nodes)}</b> Nodes • <b style="color:#7C3AED;">{len(edges)}</b> Relationships</span>
-                <span style="font-size:0.75rem; color:#64748B;">Drag nodes to reposition • Scroll to zoom • Pan canvas</span>
+            <div style="height:32px; display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <span style="font-size:0.86rem; color:#1E293B; font-weight:700;">
+                    Canvas: <b style="color:#0284C7;">{len(nodes)}</b> Nodes • <b style="color:#7C3AED;">{len(edges)}</b> Relationships
+                </span>
+                <span style="font-size:0.75rem; color:#64748B;">
+                    Drag nodes to reposition • Scroll to zoom • Pan canvas
+                </span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -223,15 +227,20 @@ def render_knowledge_graph() -> None:
         render_graph_canvas(
             nodes=nodes,
             edges=edges,
-            height=700,
+            height=720,
             selected_node_id=focus_node_id,
         )
 
     with col_details:
         st.markdown(
             """
-            <div style="font-size:1.05rem; font-weight:800; color:#0F172A; margin-bottom:0.3rem;">
-                Node Inspector
+            <div style="height:32px; display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                <span style="font-size:0.95rem; font-weight:800; color:#0F172A; display:flex; align-items:center; gap:6px;">
+                    <span>🔍</span> Node Inspector
+                </span>
+                <span style="font-size:0.75rem; color:#64748B; font-weight:500;">
+                    Interactive Schema & Logic
+                </span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -262,10 +271,10 @@ def render_knowledge_graph() -> None:
         if selected_node:
             node_name = selected_node.get("name") or selected_node.get("file_name") or ""
             if node_name:
-                st.markdown("<div style='margin-top: 0.5rem;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: 0.35rem;'></div>", unsafe_allow_html=True)
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
-                    if st.button("Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
+                    if st.button("⚡ Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
                         lineage_graph = GraphService.trace_lineage(node_name)
                         if lineage_graph.get("nodes"):
                             st.session_state["graph_override_subgraph"] = lineage_graph
@@ -273,9 +282,10 @@ def render_knowledge_graph() -> None:
                         else:
                             st.info("No extended lineage edges found.")
                 with col_b2:
-                    if st.button("Ask Agent", use_container_width=True, key="btn_ask_agent"):
+                    if st.button("💬 Ask Agent", use_container_width=True, key="btn_ask_agent"):
                         st.session_state["pending_investigation_query"] = f"Explain the dependencies and business logic associated with graph node {node_name}"
                         st.session_state["navigate_to_page"] = "Investigation Agent"
                         st.rerun()
+
 
 

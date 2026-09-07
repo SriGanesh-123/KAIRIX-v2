@@ -972,35 +972,46 @@ class GraphService:
                     "smooth": {"enabled": True, "type": "continuous", "roundness": 0.2},
                 })
 
-        # Live dynamic force-directed physics configuration
+        # Dynamic physics configuration with fast BarnesHut for large graphs
+        solver = "barnesHut" if len(nodes) > 200 else "forceAtlas2Based"
         options = {
             "physics": {
                 "enabled": True,
-                "solver": "forceAtlas2Based",
+                "solver": solver,
+                "barnesHut": {
+                    "gravitationalConstant": -4000,
+                    "centralGravity": 0.25,
+                    "springLength": 95,
+                    "springConstant": 0.04,
+                    "damping": 0.12,
+                    "avoidOverlap": 0.2,
+                },
                 "forceAtlas2Based": {
                     "gravitationalConstant": -180,
                     "centralGravity": 0.008,
                     "springLength": 180,
                     "springConstant": 0.05,
                     "damping": 0.4,
-                    "avoidOverlap": 0.9,
+                    "avoidOverlap": 0.8,
                 },
-                "maxVelocity": 45,
+                "maxVelocity": 40,
                 "minVelocity": 0.75,
                 "stabilization": {
-                    "enabled": False,
+                    "enabled": True,
+                    "iterations": 80 if len(nodes) > 200 else 40,
+                    "updateInterval": 25,
                 },
             },
             "interaction": {
                 "hover": True,
                 "hoverConnectedEdges": True,
                 "selectConnectedEdges": True,
-                "navigationButtons": True,
+                "navigationButtons": False,
                 "keyboard": True,
                 "zoomView": True,
                 "dragView": True,
                 "dragNodes": True,
-                "tooltipDelay": 80,
+                "tooltipDelay": 60,
             },
         }
 
@@ -1070,6 +1081,20 @@ class GraphService:
       background: #334155;
       border-radius: 3px;
     }}
+    .prop-copy-btn {{
+      background: none !important;
+      border: none !important;
+      color: #64748B !important;
+      cursor: pointer !important;
+      font-size: 11px !important;
+      float: right !important;
+      padding: 0 3px !important;
+      margin-left: 4px !important;
+      transition: color 0.15s !important;
+    }}
+    .prop-copy-btn:hover {{
+      color: #38BDF8 !important;
+    }}
   </style>
 </head>
 <body>
@@ -1127,11 +1152,6 @@ class GraphService:
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
-      }}
-
-      function escapeJsString(str) {{
-        if (!str) return '';
-        return String(str).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'").replace(/"/g, '&quot;');
       }}
 
       // Convert HTML title strings into actual DOM elements so vis-network renders rich HTML
@@ -1223,7 +1243,7 @@ class GraphService:
           html += '<td style="padding:6px 8px; color:#F1F5F9; font-weight:700; vertical-align:top; font-size:11.5px;">' + escapeHtml(k) + '</td>';
           html += '<td style="padding:6px 8px; color:' + valColor + '; font-family:monospace; vertical-align:top; word-break:break-word; line-height:1.4; font-size:11px;">';
           html += '<span>' + displayVal + '</span>';
-          html += '<button onclick="navigator.clipboard.writeText(\'' + escapeJsString(valStr) + '\'); this.innerText=\'✓\'; var self=this; setTimeout(function(){{ self.innerText=\'❐\'; }}, 1200);" title="Copy value" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:11px; float:right; padding:0 3px; margin-left:4px;" onmouseover="this.style.color=\'#38BDF8\'" onmouseout="this.style.color=\'#64748B\'">❐</button>';
+          html += '<button class="prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard">❐</button>';
           html += '</td></tr>';
         }});
 
@@ -1241,6 +1261,20 @@ class GraphService:
             setTimeout(function() {{ copyAllBtn.innerText = '❐ Copy all'; }}, 1500);
           }};
         }}
+      }}
+
+      // Delegate property copy button clicks
+      var drawerElem = document.getElementById('neo4j-node-drawer');
+      if (drawerElem) {{
+        drawerElem.addEventListener('click', function(evt) {{
+          var btn = evt.target.closest('.prop-copy-btn');
+          if (btn) {{
+            var toCopy = btn.getAttribute('data-copy') || '';
+            navigator.clipboard.writeText(toCopy);
+            btn.innerText = '✓';
+            setTimeout(function() {{ btn.innerText = '❐'; }}, 1200);
+          }}
+        }});
       }}
 
       // Listen for canvas node selection
@@ -1318,9 +1352,23 @@ class GraphService:
 
       network.once('stabilizationIterationsDone', handleStabilized);
       network.once('stabilized', handleStabilized);
+      setTimeout(handleStabilized, 250);
+      setTimeout(handleStabilized, 600);
+
+      function ensureCanvasRendered() {{
+        if (typeof network !== 'undefined' && network !== null) {{
+          network.redraw();
+          if (!selNodeId) {{
+            network.fit();
+          }}
+        }}
+      }}
+      setTimeout(ensureCanvasRendered, 150);
+      setTimeout(ensureCanvasRendered, 500);
 
       window.addEventListener('resize', function() {{
         if (typeof network !== 'undefined' && network !== null) {{
+          network.redraw();
           network.fit();
         }}
       }});

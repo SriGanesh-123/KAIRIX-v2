@@ -220,21 +220,21 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
             val_display = html.escape(str(v))
             val_color = "#E2E8F0"
 
-        # Safe string for clipboard
-        safe_copy_val = html.escape(str(v).replace("\\", "\\\\").replace("'", "\\'").replace('"', '&quot;'), quote=True)
+        safe_copy_val = html.escape(str(v), quote=True)
 
         is_logic_prop = k in ("expression", "formula", "rule_id", "rule_type")
         row_bg = "background: rgba(245, 158, 11, 0.07);" if is_logic_prop else ""
 
-        table_rows.append(f"""
-        <tr style="border-bottom: 1px solid #242B38; transition: background 0.15s; {row_bg}" onmouseover="this.style.background='#222834'" onmouseout="this.style.background='{'rgba(245, 158, 11, 0.07)' if is_logic_prop else 'transparent'}'">
-            <td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12.5px;">{html.escape(k)}</td>
-            <td style="padding: 7px 8px; color: {val_color}; vertical-align: top; width: 66%; word-break: break-word; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; position: relative; line-height: 1.45;">
-                <span>{val_display}</span>
-                <button onclick="navigator.clipboard.writeText('{safe_copy_val}'); this.innerText='✓'; setTimeout(()=>this.innerText='❐', 1200);" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;" onmouseover="this.style.color='#38BDF8'" onmouseout="this.style.color='#64748B'">❐</button>
-            </td>
-        </tr>
-        """)
+        row_hover_bg = "rgba(245, 158, 11, 0.07)" if is_logic_prop else "transparent"
+        table_rows.append(
+            f'<tr style="border-bottom: 1px solid #242B38; transition: background 0.15s; {row_bg}" onmouseover="this.style.background=\'#222834\'" onmouseout="this.style.background=\'{row_hover_bg}\'">'
+            f'<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 12.5px;">{html.escape(k)}</td>'
+            f'<td style="padding: 7px 8px; color: {val_color}; vertical-align: top; width: 66%; word-break: break-word; font-family: \'JetBrains Mono\', monospace; font-size: 11.5px; position: relative; line-height: 1.45;">'
+            f'<span>{val_display}</span>'
+            f'<button class="st-prop-copy-btn" data-copy="{safe_copy_val}" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>'
+            f'</td>'
+            f'</tr>'
+        )
 
     table_rows_html = "".join(table_rows)
 
@@ -245,17 +245,18 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
     rule_type_val = props_dict.get("rule_type", "")
 
     if expression_val:
-        business_logic_html = f"""
-        <div style="margin: 10px 14px 4px 14px; background: #0F172A; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 10px 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.04em;">⚡ Business Logic / Expression {f'({html.escape(rule_id_val)})' if rule_id_val else ''}</span>
-                <span style="font-size: 10px; color: #94A3B8; font-weight: 600;">{html.escape(rule_type_val)}</span>
-            </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #FEF3C7; word-break: break-word; font-weight: 600; line-height: 1.45;">
-                {html.escape(str(expression_val))}
-            </div>
-        </div>
-        """
+        r_id_tag = f"({html.escape(rule_id_val)})" if rule_id_val else ""
+        business_logic_html = (
+            f'<div style="margin: 10px 14px 4px 14px; background: #0F172A; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 10px 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">'
+            f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">'
+            f'<span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.04em;">⚡ Business Logic / Expression {r_id_tag}</span>'
+            f'<span style="font-size: 10px; color: #94A3B8; font-weight: 600;">{html.escape(rule_type_val)}</span>'
+            f'</div>'
+            f'<div style="font-family: \'JetBrains Mono\', monospace; font-size: 12.5px; color: #FEF3C7; word-break: break-word; font-weight: 600; line-height: 1.45;">'
+            f'{html.escape(str(expression_val))}'
+            f'</div>'
+            f'</div>'
+        )
 
     # Connected Edges section
     edges_html = ""
@@ -284,50 +285,73 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         )
 
     # Encode all properties to JSON for copy all
-    encoded_json = html.escape(json.dumps(props_dict, indent=2).replace("'", "\\'").replace('"', '&quot;'), quote=True)
+    encoded_json = html.escape(json.dumps(props_dict, indent=2), quote=True)
 
-    # Full Authentic Neo4j Node details panel
-    neo4j_panel_html = f"""
-    <div style="background: #181C24; border: 1px solid #282E3B; border-radius: 12px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.35); margin-bottom: 1rem;">
-        <!-- Panel Header -->
-        <div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 15px; opacity: 0.85;">📄</span>
-                <span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Node details</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <button onclick="navigator.clipboard.writeText('{encoded_json}'); this.innerText='✓ Copied'; setTimeout(()=>this.innerText='❐ Copy all', 1500);" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;" onmouseover="this.style.color='#FFFFFF'; this.style.borderColor='#0284C7'" onmouseout="this.style.color='#94A3B8'; this.style.borderColor='#334155'">❐ Copy all</button>
-            </div>
-        </div>
+    # Full Authentic Neo4j Node details panel - zero leading indentation to prevent markdown code block bugs
+    neo4j_panel_html = (
+        f'<div id="neo4j-node-details-card" style="background: #181C24; border: 1px solid #282E3B; border-radius: 12px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.35); margin-bottom: 0.75rem;">\n'
+        f'<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">\n'
+        f'<div style="display: flex; align-items: center; gap: 8px;">\n'
+        f'<span style="font-size: 15px; opacity: 0.85;">📄</span>\n'
+        f'<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Node details</span>\n'
+        f'</div>\n'
+        f'<div style="display: flex; align-items: center; gap: 8px;">\n'
+        f'<button class="st-copy-all-btn" data-copy="{encoded_json}" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;" onmouseover="this.style.color=\'#FFFFFF\'; this.style.borderColor=\'#0284C7\'" onmouseout="this.style.color=\'#94A3B8\'; this.style.borderColor=\'#334155\'">❐ Copy all</button>\n'
+        f'</div>\n'
+        f'</div>\n'
+        f'<div style="padding: 12px 16px 8px 16px;">\n'
+        f'<span style="background: {b_style["bg"]}; color: {b_style["color"]}; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">\n'
+        f'{html.escape(str(entity_label))}\n'
+        f'</span>\n'
+        f'</div>\n'
+        f'{business_logic_html}\n'
+        f'<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">\n'
+        f'<table style="width: 100%; border-collapse: collapse; font-size: 12px;">\n'
+        f'<thead>\n'
+        f'<tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">\n'
+        f'<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>\n'
+        f'<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>\n'
+        f'</tr>\n'
+        f'</thead>\n'
+        f'<tbody>\n'
+        f'{table_rows_html}\n'
+        f'</tbody>\n'
+        f'</table>\n'
+        f'</div>\n'
+        f'{edges_html}\n'
+        f'<script>\n'
+        f'(function() {{\n'
+        f'  var panel = document.getElementById("neo4j-node-details-card");\n'
+        f'  if (panel && !panel.dataset.listenerAttached) {{\n'
+        f'    panel.dataset.listenerAttached = "true";\n'
+        f'    panel.addEventListener("click", function(e) {{\n'
+        f'      var allBtn = e.target.closest(".st-copy-all-btn");\n'
+        f'      if (allBtn) {{\n'
+        f'        var val = allBtn.getAttribute("data-copy") || "";\n'
+        f'        navigator.clipboard.writeText(val);\n'
+        f'        allBtn.innerText = "✓ Copied";\n'
+        f'        setTimeout(function() {{ allBtn.innerText = "❐ Copy all"; }}, 1500);\n'
+        f'        return;\n'
+        f'      }}\n'
+        f'      var propBtn = e.target.closest(".st-prop-copy-btn");\n'
+        f'      if (propBtn) {{\n'
+        f'        var val = propBtn.getAttribute("data-copy") || "";\n'
+        f'        navigator.clipboard.writeText(val);\n'
+        f'        propBtn.innerText = "✓";\n'
+        f'        setTimeout(function() {{ propBtn.innerText = "❐"; }}, 1200);\n'
+        f'        return;\n'
+        f'      }}\n'
+        f'    }});\n'
+        f'  }}\n'
+        f'}})();\n'
+        f'</script>\n'
+        f'</div>'
+    )
 
-        <!-- Node Label Badge -->
-        <div style="padding: 12px 16px 8px 16px;">
-            <span style="background: {b_style['bg']}; color: {b_style['color']}; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">
-                {html.escape(str(entity_label))}
-            </span>
-        </div>
-
-        <!-- Dedicated Business Logic if present -->
-        {business_logic_html}
-
-        <!-- Properties Table (Key | Value) Matching Image 2 -->
-        <div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                <thead>
-                    <tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">
-                        <th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>
-                        <th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {table_rows_html}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Connected Relationships -->
-        {edges_html}
-    </div>
-    """
-
-    st.markdown(neo4j_panel_html, unsafe_allow_html=True)
+    try:
+        if hasattr(st, "html"):
+            st.html(neo4j_panel_html, unsafe_allow_javascript=True)
+        else:
+            st.markdown(neo4j_panel_html, unsafe_allow_html=True)
+    except TypeError:
+        st.html(neo4j_panel_html)
