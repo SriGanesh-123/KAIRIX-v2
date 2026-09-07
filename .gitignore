@@ -8,3 +8,5 @@ __pycache__/
 .idea/
 *.log
 .pytest_cache/
+node_modules/
+Frontend/dist/

@@ -1,0 +1,739 @@
+/* ==========================================================================
+   KAIRIX ENTERPRISE WORKBENCH — TRUE NEUMORPHISM (SOFT UI MORPHISM)
+   ========================================================================== */
+
+/* App Shell (2-Column Architecture: Left Sidebar + Main Content) */
+.app-shell-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--neu-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ==========================================================================
+   LEFT SIDEBAR (NEUMORPHIC)
+   ========================================================================== */
+.app-sidebar {
+  width: 260px;
+  background-color: var(--neu-base);
+  padding: 26px 20px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(205, 213, 224, 0.45);
+  box-shadow: 4px 0 16px rgba(184, 195, 211, 0.15);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* Brand Header */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 30px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sidebar-logo-box {
+  width: 46px;
+  height: 46px;
+  background: var(--neu-base);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Neumorphic Extrusion */
+  box-shadow: 4px 4px 8px var(--neu-shadow-dark), -4px -4px 8px var(--neu-shadow-light);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  transition: all 0.2s ease;
+}
+
+.sidebar-logo-box:hover {
+  box-shadow: 6px 6px 12px var(--neu-shadow-darker), -6px -6px 12px var(--neu-shadow-light);
+}
+
+.sidebar-logo-img {
+  height: 32px;
+  width: 32px;
+  object-fit: contain;
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-brand-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.sidebar-brand-subtitle {
+  font-size: 10px;
+  font-weight: 800;
+  color: #2563eb;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Sidebar Nav Buttons (Extruded Neumorphic Pills) */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebar-nav-btn {
+  width: 100%;
+  padding: 13px 20px;
+  background: var(--neu-base);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  /* Soft Neumorphic Lift */
+  box-shadow: 4px 4px 9px var(--neu-shadow-dark), -4px -4px 9px var(--neu-shadow-light);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-nav-btn:hover {
+  color: #0f172a;
+  box-shadow: 6px 6px 14px var(--neu-shadow-darker), -6px -6px 14px var(--neu-shadow-light);
+  transform: translateY(-1px);
+}
+
+.sidebar-nav-btn:active {
+  box-shadow: var(--neu-inset);
+  transform: translateY(1px);
+}
+
+/* Active Nav Button (Vibrant Blue Pill with Tactile Inset Depth) */
+.sidebar-nav-btn-active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 
+    inset 2px 2px 4px rgba(255, 255, 255, 0.35), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.2), 
+    4px 4px 14px rgba(37, 99, 235, 0.38) !important;
+  font-weight: 700;
+}
+
+/* Sidebar Divider */
+.sidebar-divider {
+  height: 2px;
+  background: transparent;
+  box-shadow: inset 0 1px 1px var(--neu-shadow-dark), 0 1px 1px var(--neu-shadow-light);
+  margin: 30px 0;
+  border: none;
+}
+
+/* Sidebar Footer & Backend Services (Sunken Debossed Card) */
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.services-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.services-card {
+  background: var(--neu-base);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Sunken Inset Shadow */
+  box-shadow: var(--neu-inset);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.service-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.service-name {
+  display: flex;
+  align-items: center;
+  color: #334155;
+  font-weight: 600;
+}
+
+.status-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.dot-green {
+  background-color: #16a34a;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
+}
+
+.service-latency {
+  color: #64748b;
+  font-size: 11.5px;
+}
+
+.sidebar-version-tag {
+  font-size: 10.5px;
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 20px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   MAIN CONTENT AREA & TOP UTILITY BAR
+   ========================================================================== */
+.app-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background-color: var(--neu-base);
+}
+
+.top-utility-bar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 36px;
+}
+
+.top-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.top-action-btn {
+  background: var(--neu-base);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  transition: all 0.15s;
+}
+
+.top-action-btn:hover {
+  color: #0f172a;
+  box-shadow: 3px 3px 7px var(--neu-shadow-darker), -3px -3px 7px var(--neu-shadow-light);
+}
+
+.top-action-btn:active {
+  box-shadow: var(--neu-inset);
+}
+
+.top-icon-btn {
+  width: 32px;
+  height: 32px;
+  background: var(--neu-base);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  transition: all 0.15s;
+}
+
+.top-icon-btn:hover {
+  color: #0f172a;
+  box-shadow: 3px 3px 7px var(--neu-shadow-darker), -3px -3px 7px var(--neu-shadow-light);
+}
+
+.top-icon-btn:active {
+  box-shadow: var(--neu-inset);
+}
+
+.app-content-container {
+  flex: 1;
+  padding: 8px 36px 48px;
+  max-width: 1240px;
+}
+
+/* Graceful Spatial Page Transition */
+.page-transition-wrapper {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.22s ease-out, transform 0.24s ease-out;
+  will-change: opacity, transform;
+}
+
+.page-transition-exiting {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+.page-transition-entering {
+  animation: pageFadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pageFadeSlideIn {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   SOURCE EXPLORER VIEW (TRUE NEUMORPHIC LAYOUT)
+   ========================================================================== */
+.source-explorer-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.source-explorer-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.source-explorer-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.source-explorer-subtitle {
+  font-size: 13.5px;
+  color: #475569;
+}
+
+.source-explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Extruded Green Button with Inset Pressed State */
+.btn-add-source {
+  background: #059669;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 11px 20px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 4px 4px 10px rgba(5, 150, 105, 0.35), -2px -2px 6px rgba(255, 255, 255, 0.4);
+  transition: all 0.18s ease;
+}
+
+.btn-add-source:hover {
+  background: #047857;
+  transform: translateY(-1px);
+  box-shadow: 6px 6px 14px rgba(5, 150, 105, 0.45);
+}
+
+.btn-add-source:active {
+  box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.3);
+  transform: translateY(1px);
+}
+
+/* Neumorphic Refresh Button */
+.btn-refresh {
+  background: var(--neu-base);
+  color: #334155;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 3px 3px 8px var(--neu-shadow-dark), -3px -3px 8px var(--neu-shadow-light);
+  transition: all 0.18s ease;
+}
+
+.btn-refresh:hover {
+  color: #0f172a;
+  box-shadow: 5px 5px 12px var(--neu-shadow-darker), -5px -5px 12px var(--neu-shadow-light);
+}
+
+.btn-refresh:active {
+  box-shadow: var(--neu-inset);
+}
+
+/* Filter Segmented Bar (Sunken Inset Tray with Raised Active Pill) */
+.filter-segmented-bar {
+  display: inline-flex;
+  align-items: center;
+  background: var(--neu-base);
+  border-radius: 16px;
+  padding: 6px 8px;
+  box-shadow: var(--neu-inset);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  margin-bottom: 26px;
+  width: fit-content;
+  gap: 8px;
+}
+
+.filter-radio-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.filter-radio-pill:hover {
+  color: #0f172a;
+}
+
+/* Active Filter Pill pops out with convex Neumorphic lift */
+.filter-radio-pill-active {
+  background: var(--neu-base);
+  color: #0f172a;
+  font-weight: 700;
+  box-shadow: 3px 3px 7px var(--neu-shadow-dark), -3px -3px 7px var(--neu-shadow-light);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.radio-circle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--neu-base);
+  box-shadow: var(--neu-inset);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.filter-radio-pill-active .radio-circle {
+  box-shadow: none;
+  background: #2563eb;
+}
+
+.radio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* Select Source File Row */
+.select-file-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 26px;
+}
+
+.select-file-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.custom-select-wrapper {
+  position: relative;
+  width: 440px;
+}
+
+/* Sunken Inset Neumorphic Select Input */
+.source-file-select {
+  width: 100%;
+  padding: 12px 18px;
+  background: var(--neu-base);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  appearance: none;
+  cursor: pointer;
+  box-shadow: var(--neu-inset);
+  transition: all 0.15s;
+}
+
+.source-file-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: var(--neu-inset-deep);
+}
+
+.select-chevron {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #64748b;
+}
+
+.select-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Raised Neumorphic Action Buttons */
+.btn-pill-action {
+  padding: 11px 24px;
+  background: var(--neu-base);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  box-shadow: 4px 4px 9px var(--neu-shadow-dark), -4px -4px 9px var(--neu-shadow-light);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-pill-action:hover {
+  box-shadow: 6px 6px 13px var(--neu-shadow-darker), -6px -6px 13px var(--neu-shadow-light);
+  transform: translateY(-1px);
+}
+
+.btn-pill-action:active {
+  box-shadow: var(--neu-inset);
+  transform: translateY(1px);
+}
+
+/* Main Detail File Card (Large Neumorphic Extruded Slab) */
+.source-detail-card {
+  background: var(--neu-base);
+  border-radius: 20px;
+  border-top: 4px solid #2563eb;
+  box-shadow: var(--neu-flat-large);
+  padding: 34px;
+  border-left: 1px solid rgba(255, 255, 255, 0.7);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.source-type-badge-pill {
+  display: inline-block;
+  padding: 5px 14px;
+  background: var(--neu-base);
+  color: #2563eb;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 16px;
+  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.source-detail-filename {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 24px;
+}
+
+/* 4 Metric Cards Row (Extruded Neumorphic Tiles) */
+.source-metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.source-stat-card {
+  background: var(--neu-base);
+  border-radius: 14px;
+  padding: 18px 22px;
+  box-shadow: var(--neu-flat);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  transition: all 0.2s ease;
+}
+
+.source-stat-card:hover {
+  box-shadow: var(--neu-flat-hover);
+  transform: translateY(-2px);
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.text-black { color: #0f172a; }
+.text-blue { color: #2563eb; }
+.text-green { color: #16a34a; }
+.text-orange { color: #ea580c; }
+
+/* Purpose Alert Box (Debossed Inset Container) */
+.purpose-callout-box {
+  background: rgba(239, 246, 255, 0.7);
+  border-left: 4px solid #2563eb;
+  padding: 16px 22px;
+  border-radius: 0 12px 12px 0;
+  font-size: 14px;
+  color: #1e3a8a;
+  line-height: 1.6;
+  margin-bottom: 28px;
+  box-shadow: inset 2px 2px 5px rgba(191, 219, 254, 0.6), inset -2px -2px 5px #ffffff;
+}
+
+/* Inner Tabs */
+.source-inner-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid transparent;
+  box-shadow: 0 2px 1px var(--neu-shadow-light);
+  padding-bottom: 14px;
+  margin-bottom: 22px;
+}
+
+.inner-tab-btn {
+  padding: 9px 18px;
+  background: var(--neu-base);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.inner-tab-btn:hover {
+  color: #0f172a;
+}
+
+.inner-tab-active {
+  color: #2563eb !important;
+  font-weight: 700;
+  box-shadow: 3px 3px 6px var(--neu-shadow-dark), -3px -3px 6px var(--neu-shadow-light);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.code-viewer-container {
+  background: #0f172a;
+  border-radius: 14px;
+  padding: 20px;
+  max-height: 380px;
+  overflow-y: auto;
+  box-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.5), 4px 4px 10px var(--neu-shadow-dark);
+}
+
+.code-display-block {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #f1f5f9;
+  line-height: 1.65;
+}
+
+.rules-viewer-container {
+  padding: 20px;
+  background: var(--neu-base);
+  border-radius: 14px;
+  box-shadow: var(--neu-inset);
+}
+
+.rule-item-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-desc {
+  background: var(--neu-base);
+  box-shadow: var(--neu-flat);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.dependencies-viewer-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  background: var(--neu-base);
+  border-radius: 14px;
+  box-shadow: var(--neu-inset);
+}
+
+.dep-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dep-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  width: 140px;
+}
+
+.dep-pill {
+  padding: 5px 12px;
+  background: var(--neu-base);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #0f172a;
+  box-shadow: 2px 2px 5px var(--neu-shadow-dark), -2px -2px 5px var(--neu-shadow-light);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}

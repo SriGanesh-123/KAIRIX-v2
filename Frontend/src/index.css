@@ -1,0 +1,91 @@
+/* ==========================================================================
+   KAIRIX NEUMORPHIC DESIGN SYSTEM TOKENS (SOFT UI / NEO-MORPHISM)
+   ========================================================================== */
+
+:root {
+  /* Neumorphic Soft Background (Exact hue needed for dual-shadow contrast) */
+  --bg-void: #e8edf4;
+  --neu-base: #e8edf4;
+  --neu-surface: #e8edf4;
+  --neu-surface-elevated: #e8edf4;
+
+  /* Neumorphic Shadows (Light source from top-left: Light highlight top-left, dark shadow bottom-right) */
+  --neu-shadow-light: #ffffff;
+  --neu-shadow-dark: #cdd5e0;
+  --neu-shadow-darker: #b8c3d3;
+
+  /* Extruded / Convex Shadows (Raised Elements) */
+  --neu-flat: 5px 5px 12px var(--neu-shadow-dark), -5px -5px 12px var(--neu-shadow-light);
+  --neu-flat-hover: 7px 7px 16px var(--neu-shadow-darker), -7px -7px 16px var(--neu-shadow-light);
+  --neu-flat-card: 8px 8px 20px var(--neu-shadow-dark), -8px -8px 20px var(--neu-shadow-light);
+  --neu-flat-large: 12px 12px 28px var(--neu-shadow-dark), -12px -12px 28px var(--neu-shadow-light);
+
+  /* Debossed / Inset Shadows (Sunken / Pressed / Inputs) */
+  --neu-inset: inset 3px 3px 6px var(--neu-shadow-dark), inset -3px -3px 6px var(--neu-shadow-light);
+  --neu-inset-deep: inset 4px 4px 8px var(--neu-shadow-darker), inset -4px -4px 8px var(--neu-shadow-light);
+
+  /* Vibrant Accents */
+  --cyan-neon: #2563eb;        /* Royal Blue 600 */
+  --cyan-light: #dbeafe;
+  --cyan-glow: rgba(37, 99, 235, 0.28);
+
+  --purple-neon: #7c3aed;
+  --purple-light: #f3e8ff;
+
+  --emerald-neon: #059669;
+  --emerald-light: #d1fae5;
+
+  --amber-neon: #d97706;
+  --amber-light: #fef3c7;
+
+  /* Typography */
+  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Space Grotesk', var(--font-sans);
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Text Colors */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  background-color: var(--neu-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom Neumorphic Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--neu-base);
+  box-shadow: var(--neu-inset);
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
