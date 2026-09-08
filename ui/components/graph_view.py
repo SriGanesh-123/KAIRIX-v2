@@ -323,11 +323,11 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
             row_mouseout_bg = "#F8FAFD" if idx % 2 == 1 else "#FFFFFF"
 
         table_rows.append(
-            f'<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; {row_bg}" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'{row_mouseout_bg}\'">'
+            f'<tr class="kairix-inspector-row" style="border-bottom: 1px solid #EDF2F7; {row_bg}">'
             f'<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">{html.escape(k)}</td>'
             f'<td style="padding: 7px 10px; color: {val_color}; vertical-align: top; width: 66%; word-break: break-word; font-family: \'JetBrains Mono\', monospace; font-size: 11.5px; position: relative; line-height: 1.45;">'
             f'<span>{val_display}</span>'
-            f'<button class="st-prop-copy-btn" data-copy="{safe_copy_val}" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>'
+            f'<button class="st-prop-copy-btn" data-copy="{safe_copy_val}" title="Copy value to clipboard">❐</button>'
             f'</td>'
             f'</tr>'
         )
@@ -372,7 +372,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         f'<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>\n'
         f'</div>\n'
         f'<div style="display: flex; align-items: center; gap: 8px;">\n'
-        f'<button class="st-copy-all-btn" data-copy="{encoded_json}" title="Copy all properties as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>\n'
+        f'<button class="st-copy-all-btn" data-copy="{encoded_json}" title="Copy all properties as JSON">❐ Copy all</button>\n'
         f'</div>\n'
         f'</div>\n'
         f'<div style="padding: 12px 16px 6px 16px;">\n'

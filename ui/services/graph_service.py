@@ -1241,7 +1241,7 @@ class GraphService:
         html += '<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>';
         html += '</div>';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(p, null, 2)) + '" title="Copy all properties as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(p, null, 2)) + '" title="Copy all properties as JSON">❐ Copy all</button>';
         html += '</div>';
         html += '</div>';
 
@@ -1315,13 +1315,12 @@ class GraphService:
           }}
 
           var rowBg = isLogicProp ? 'background-color: #FFFBEB; border-left: 3px solid #D97706;' : ((idx % 2 === 1) ? 'background-color: #F8FAFD;' : 'background-color: #FFFFFF;');
-          var rowMouseoutBg = isLogicProp ? '#FFFBEB' : ((idx % 2 === 1) ? '#F8FAFD' : '#FFFFFF');
 
-          html += '<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; ' + rowBg + '" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'' + rowMouseoutBg + '\'">';
+          html += '<tr class="kairix-inspector-row" style="border-bottom: 1px solid #EDF2F7; ' + rowBg + '">';
           html += '<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">' + escapeHtml(k) + '</td>';
           html += '<td style="padding: 7px 10px; color: ' + valColor + '; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
           html += '<span>' + displayVal + '</span>';
-          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard">❐</button>';
           html += '</td></tr>';
         }});
 
@@ -1432,7 +1431,7 @@ class GraphService:
         html += '<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Relationship details</span>';
         html += '</div>';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(edgeProps, null, 2)) + '" title="Copy relationship details as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(edgeProps, null, 2)) + '" title="Copy relationship details as JSON">❐ Copy all</button>';
         html += '</div>';
         html += '</div>';
 
@@ -1466,12 +1465,11 @@ class GraphService:
           var v = edgeProps[k];
           var valStr = String(v);
           var rowBg = (idx % 2 === 1) ? 'background-color: #F8FAFD;' : 'background-color: #FFFFFF;';
-          var rowMouseoutBg = (idx % 2 === 1) ? '#F8FAFD' : '#FFFFFF';
-          html += '<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; ' + rowBg + '" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'' + rowMouseoutBg + '\'">';
+          html += '<tr class="kairix-inspector-row" style="border-bottom: 1px solid #EDF2F7; ' + rowBg + '">';
           html += '<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">' + escapeHtml(k) + '</td>';
           html += '<td style="padding: 7px 10px; color: #0284C7; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
           html += '<span>"' + escapeHtml(valStr) + '"</span>';
-          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard">❐</button>';
           html += '</td></tr>';
         }});
 

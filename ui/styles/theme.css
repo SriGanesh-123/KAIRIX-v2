@@ -2217,3 +2217,56 @@ div[data-testid="stStatusWidget"][data-state="error"] {
   padding-top: 0.45rem;
   border-top: 1px dashed #E2E8F0;
 }
+
+/* ====================================================================
+   Neo4j Node & Relationship Details Inspector (Light Neumorphic Design)
+   ==================================================================== */
+#neo4j-node-details-card .st-copy-all-btn {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+
+#neo4j-node-details-card .st-copy-all-btn:hover {
+  color: #2563EB;
+  border-color: #2563EB;
+  background: #EFF6FF;
+}
+
+#neo4j-node-details-card .st-prop-copy-btn {
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  color: #64748B;
+  cursor: pointer;
+  font-size: 11px;
+  float: right;
+  padding: 2px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  transition: all 0.15s ease;
+}
+
+#neo4j-node-details-card .st-prop-copy-btn:hover {
+  color: #2563EB;
+  border-color: #93C5FD;
+  background: #EFF6FF;
+}
+
+#neo4j-node-details-card tr.kairix-inspector-row {
+  transition: background-color 0.15s ease;
+}
+
+#neo4j-node-details-card tr.kairix-inspector-row:hover {
+  background-color: #EFF6FF !important;
+}
+
