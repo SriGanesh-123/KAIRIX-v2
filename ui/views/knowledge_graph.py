@@ -11,7 +11,6 @@ from __future__ import annotations
 import html
 import os
 import time
-import urllib.parse
 import streamlit as st
 from ui.components.graph_view import (
     render_graph_canvas,
@@ -66,31 +65,6 @@ def render_knowledge_graph() -> None:
     st.markdown("## Knowledge Graph Explorer")
     st.markdown(
         "<p style='color: #64748B; margin-top: -0.5rem;'>Interactive Neo4j graph mapping COBOL programs, SSIS ETL pipelines, SQL schemas, business rules, and cross-system data lineage.</p>",
-        unsafe_allow_html=True,
-    )
-
-    # 1. Neo4j AuraDB Active Connection & Workspace Launch Bar
-    aura_uri = os.getenv("NEO4J_URI", "neo4j+s://03f0aac2.databases.neo4j.io")
-    aura_instance = os.getenv("AURA_INSTANCEID", "03f0aac2")
-    aura_workspace_url = f"https://workspace.neo4j.io/workspace/explore?connectURL={urllib.parse.quote(aura_uri)}"
-
-    st.markdown(
-        f"""
-        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); border-radius: 14px; padding: 0.85rem 1.25rem; margin-bottom: 1.15rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; box-shadow: 0 4px 14px rgba(0,0,0,0.15); border: 1px solid #334155;">
-            <div style="display:flex; align-items:center; gap:0.75rem;">
-                <span style="width:12px; height:12px; border-radius:50%; background:#22C55E; box-shadow:0 0 10px #22C55E; display:inline-block;"></span>
-                <div>
-                    <div style="color:#FFFFFF; font-weight:700; font-size:0.92rem; letter-spacing:0.02em;">Neo4j AuraDB Cloud Active</div>
-                    <div style="color:#94A3B8; font-size:0.75rem; font-family:'JetBrains Mono', monospace;">Instance: {aura_instance} • 1,400 Nodes • 2,822 Relationships • {aura_uri}</div>
-                </div>
-            </div>
-            <div>
-                <a href="{aura_workspace_url}" target="_blank" style="background:#0284C7; color:#FFFFFF; font-weight:700; font-size:0.82rem; padding:0.45rem 1.0rem; border-radius:8px; text-decoration:none; display:inline-flex; align-items:center; gap:0.45rem; box-shadow:0 2px 6px rgba(2,132,199,0.4); transition:background 0.2s;">
-                    <span>🚀</span> Open Neo4j Aura Workspace (Bloom & Browser) ↗
-                </a>
-            </div>
-        </div>
-        """,
         unsafe_allow_html=True,
     )
 
@@ -249,12 +223,25 @@ def render_knowledge_graph() -> None:
             node_labels_dict[f"{lbl} ({ent_type})"] = nid
 
         query_node_id = st.query_params.get("selected_node")
+        last_synced_query_node = st.session_state.get("last_synced_query_node")
+
         if query_node_id and any(str(n.get("id") or n.get("file_name") or n.get("name")) == query_node_id for n in nodes):
-            chosen_id = query_node_id
-            focus_node_id = chosen_id
-            matched_lbl = next((k for k, v in node_labels_dict.items() if v == chosen_id), None)
-            if matched_lbl:
-                st.session_state["canvas_node_inspect_select"] = matched_lbl
+            if query_node_id != last_synced_query_node:
+                # User clicked a new node on canvas
+                chosen_id = query_node_id
+                focus_node_id = chosen_id
+                matched_lbl = next((k for k, v in node_labels_dict.items() if v == chosen_id), None)
+                if matched_lbl:
+                    st.session_state["canvas_node_inspect_select"] = matched_lbl
+                st.session_state["last_synced_query_node"] = query_node_id
+            else:
+                stored_select = st.session_state.get("canvas_node_inspect_select")
+                if stored_select and stored_select in node_labels_dict:
+                    chosen_id = node_labels_dict[stored_select]
+                    focus_node_id = chosen_id
+                else:
+                    chosen_id = query_node_id
+                    focus_node_id = chosen_id
         else:
             stored_select = st.session_state.get("canvas_node_inspect_select")
             if stored_select and stored_select in node_labels_dict:
@@ -302,6 +289,7 @@ def render_knowledge_graph() -> None:
                 if "selected_node" in st.query_params:
                     del st.query_params["selected_node"]
                 st.session_state.pop("canvas_node_inspect_select", None)
+                st.session_state.pop("last_synced_query_node", None)
                 st.rerun()
 
     # Layout: Graph Canvas on Left (67%), Node Details on Right (33%)
@@ -358,6 +346,7 @@ def render_knowledge_graph() -> None:
             )
             chosen_id = node_labels_dict.get(chosen_label, nodes[0].get("id"))
             selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
+            st.session_state["last_synced_query_node"] = chosen_id
 
             connected_edges = [
                 e for e in edges
@@ -381,6 +370,7 @@ def render_knowledge_graph() -> None:
                             st.session_state["lineage_root_name"] = node_name
                             st.session_state["lineage_root_id"] = node_id or node_name
                             st.session_state.pop("canvas_node_inspect_select", None)
+                            st.session_state.pop("last_synced_query_node", None)
                             if "selected_node" in st.query_params:
                                 del st.query_params["selected_node"]
                             st.rerun()

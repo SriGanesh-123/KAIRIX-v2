@@ -83,7 +83,6 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         st.markdown(
             '''
             <div style="background:#181C24; border:1px solid #2B3240; border-radius:12px; padding:2.5rem 1.5rem; text-align:center; color:#94A3B8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-                <div style="font-size:1.8rem; margin-bottom:0.6rem; opacity:0.6;">📄</div>
                 <div style="font-weight:700; font-size:1rem; color:#F1F5F9; margin-bottom:0.4rem;">No Node Selected</div>
                 <div style="font-size:0.8rem; color:#64748B;">Click any node on the graph canvas or select from the dropdown above to inspect full Neo4j properties and business logic.</div>
             </div>
@@ -107,7 +106,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
     )
 
     # Gather all node properties into a clean dictionary
-    props_dict: Dict[str, Any] = {"<id>": elem_id}
+    props_dict: Dict[str, Any] = {}
 
     # Ensure canonical fields are included
     props_dict["id"] = raw_id
@@ -168,8 +167,6 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         props_dict["data_type"] = node.get("data_type")
     if node.get("line_number"):
         props_dict["line_number"] = node.get("line_number")
-    if node.get("confidence"):
-        props_dict["confidence"] = node.get("confidence")
     if node.get("business_domain"):
         props_dict["business_domain"] = node.get("business_domain")
 
@@ -190,7 +187,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
 
     # Ingest any other custom properties on the node dict
     excluded_keys = {
-        "<id>", "_labels", "size", "color", "font", "shape", "x", "y", "title",
+        "<id>", "confidence", "_labels", "size", "color", "font", "shape", "x", "y", "title",
         "borderWidth", "borderWidthSelected", "highlight", "hover", "name",
         "entity_type", "purpose", "source_type"
     }
@@ -285,7 +282,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         )
 
     # Build Key-Value table rows matching KAIRIX Light Neumorphic theme
-    sorted_keys = ["<id>"] + sorted([k for k in props_dict.keys() if k != "<id>"])
+    sorted_keys = sorted([k for k in props_dict.keys() if k not in ("<id>", "confidence")])
     table_rows = []
 
     for idx, k in enumerate(sorted_keys):
@@ -297,10 +294,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         )
 
         # Format display value
-        if k == "<id>":
-            val_display = html.escape(str(v))
-            val_color = "#475569"
-        elif isinstance(v, str):
+        if isinstance(v, str):
             val_display = f'"{html.escape(v)}"'
             val_color = "#B45309" if is_logic_prop else "#1E293B"
         elif isinstance(v, (int, float)):
@@ -368,7 +362,6 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         f'<div id="neo4j-node-details-card" style="background: #FFFFFF; border: 1px solid #D5DFEB; border-radius: 14px; overflow: hidden; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, sans-serif; box-shadow: 6px 6px 18px rgba(166, 180, 200, 0.35), -6px -6px 18px rgba(255, 255, 255, 0.95); margin-bottom: 0.75rem;">\n'
         f'<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);">\n'
         f'<div style="display: flex; align-items: center; gap: 8px;">\n'
-        f'<span style="font-size: 15px;">📄</span>\n'
         f'<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>\n'
         f'</div>\n'
         f'<div style="display: flex; align-items: center; gap: 8px;">\n'

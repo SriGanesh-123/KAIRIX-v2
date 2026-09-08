@@ -316,6 +316,89 @@ def _get_local_packages_subgraph(
     return {"nodes": list(nodes_dict.values()), "edges": edges_list, "error": None}
 
 
+def _get_local_lineage_subgraph(target_identifier: Optional[str]) -> Dict[str, Any]:
+    """Extracts targeted lineage for a single node from local packages without returning unrelated nodes."""
+    if not target_identifier:
+        return {"nodes": [], "edges": [], "error": None}
+    full_local = _get_local_packages_subgraph(max_nodes=5000)
+    all_nodes = {str(n.get("id")): n for n in full_local.get("nodes", [])}
+    target_clean = str(target_identifier).strip().lower()
+
+    matched_id = None
+    for nid, node in all_nodes.items():
+        if (
+            nid.lower() == target_clean
+            or str(node.get("name", "")).lower() == target_clean
+            or str(node.get("file_name", "")).lower() == target_clean
+            or nid.lower().endswith(":" + target_clean)
+        ):
+            matched_id = nid
+            break
+
+    if not matched_id:
+        return {"nodes": [], "edges": [], "error": None}
+
+    lineage_node_ids = {matched_id}
+    lineage_edges = []
+    edges = full_local.get("edges", [])
+    valid_rel_types = {
+        "READS_FROM", "WRITES_TO", "TRANSFORMS", "USES", "FEEDS_INTO",
+        "INPUT_TO", "OUTPUT_TO", "DERIVES_FROM", "CALCULATES", "CALLS",
+        "HAS_RULE", "HAS_TRANSFORMATION", "SEMANTICALLY_EQUIVALENT_TO"
+    }
+
+    # Downstream
+    curr = {matched_id}
+    for _ in range(3):
+        next_curr = set()
+        for e in edges:
+            src = str(e.get("source"))
+            tgt = str(e.get("target"))
+            rel = str(e.get("type", ""))
+            if src in curr and rel in valid_rel_types:
+                lineage_node_ids.add(tgt)
+                next_curr.add(tgt)
+                lineage_edges.append(e)
+        curr = next_curr
+        if not curr:
+            break
+
+    # Upstream
+    curr = {matched_id}
+    for _ in range(3):
+        next_curr = set()
+        for e in edges:
+            src = str(e.get("source"))
+            tgt = str(e.get("target"))
+            rel = str(e.get("type", ""))
+            if tgt in curr and rel in valid_rel_types:
+                lineage_node_ids.add(src)
+                next_curr.add(src)
+                lineage_edges.append(e)
+        curr = next_curr
+        if not curr:
+            break
+
+    # 1-hop parent container
+    for e in edges:
+        if str(e.get("target")) == matched_id and str(e.get("type")) == "CONTAINS":
+            src = str(e.get("source"))
+            lineage_node_ids.add(src)
+            lineage_edges.append(e)
+
+    # Direct children if container
+    tgt_node = all_nodes.get(matched_id, {})
+    if any(lbl in ["Artifact", "Program", "Package"] for lbl in [tgt_node.get("entity_label"), tgt_node.get("entity_type")]):
+        for e in edges:
+            if str(e.get("source")) == matched_id and str(e.get("type")) in ["CONTAINS", "HAS_RULE", "HAS_TRANSFORMATION"]:
+                tgt = str(e.get("target"))
+                lineage_node_ids.add(tgt)
+                lineage_edges.append(e)
+
+    result_nodes = [all_nodes[nid] for nid in lineage_node_ids if nid in all_nodes]
+    return {"nodes": result_nodes, "edges": lineage_edges, "error": None}
+
+
 def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Helper to execute Cypher and build node and edge dicts with automatic local fallback."""
     nodes_dict: Dict[str, Dict[str, Any]] = {}
@@ -325,10 +408,14 @@ def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = Non
     try:
         client = _get_client()
         if client is None:
+            if params and params.get("is_lineage"):
+                return _get_local_lineage_subgraph(params.get("node_id") or params.get("name"))
             return _get_local_packages_subgraph(params.get("file_name") if params else None)
 
         records = client.run_query(cypher, params or {})
         if not records:
+            if params and params.get("is_lineage"):
+                return _get_local_lineage_subgraph(params.get("node_id") or params.get("name"))
             return _get_local_packages_subgraph(params.get("file_name") if params else None)
 
         for row in records:
@@ -583,7 +670,7 @@ def _cached_get_node_neighborhood(node_id: str, hops: int = 1, max_nodes: int = 
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def _cached_trace_lineage(entity_name: str, node_id: Optional[str] = None, max_depth: int = 2) -> Dict[str, Any]:
+def _cached_trace_lineage(entity_name: str, node_id: Optional[str] = None, max_depth: int = 3) -> Dict[str, Any]:
     clean_name = str(entity_name or "").strip()
     clean_id = str(node_id or "").strip()
     if not clean_name and not clean_id:
@@ -591,23 +678,41 @@ def _cached_trace_lineage(entity_name: str, node_id: Optional[str] = None, max_d
 
     cypher = f"""
     MATCH (start)
-    WHERE (start.id = $node_id AND $node_id <> '')
-       OR toLower(start.id) = toLower($node_id)
-       OR toLower(start.name) = toLower($name)
-       OR start.id = $name
-       OR toLower(start.file_name) = toLower($name)
-       OR start.id = 'ARTIFACT:' + $name
-       OR start.id = 'ENTITY:' + $name
-       OR (start.name IS NOT NULL AND toLower(start.name) = toLower(split($node_id, ':')[-1]))
+    WHERE ($node_id <> '' AND start.id = $node_id)
+       OR ($node_id <> '' AND toLower(start.id) = toLower($node_id))
+       OR ($name <> '' AND start.id = $name)
+       OR ($name <> '' AND toLower(start.name) = toLower($name))
+       OR ($name <> '' AND toLower(start.file_name) = toLower($name))
+       OR ($name <> '' AND start.id = 'ARTIFACT:' + $name)
+       OR ($name <> '' AND start.id = 'ENTITY:' + $name)
     WITH start LIMIT 1
-    OPTIONAL MATCH path = (start)-[r*1..{max_depth}]-(m)
-    WHERE all(rel in relationships(path) WHERE type(rel) IN [
+
+    // 1. Directed downstream data lineage
+    OPTIONAL MATCH down_path = (start)-[r_down*1..{max_depth}]->(m_down)
+    WHERE all(rel in relationships(down_path) WHERE type(rel) IN [
         'READS_FROM', 'WRITES_TO', 'TRANSFORMS', 'USES', 'FEEDS_INTO', 
         'INPUT_TO', 'OUTPUT_TO', 'DERIVES_FROM', 'CALCULATES', 'CALLS', 
-        'HAS_RULE', 'HAS_TRANSFORMATION', 'CONTAINS'
+        'HAS_RULE', 'HAS_TRANSFORMATION', 'SEMANTICALLY_EQUIVALENT_TO'
     ])
-    RETURN start, path
-    LIMIT 40
+
+    // 2. Directed upstream data lineage
+    OPTIONAL MATCH up_path = (m_up)-[r_up*1..{max_depth}]->(start)
+    WHERE all(rel in relationships(up_path) WHERE type(rel) IN [
+        'READS_FROM', 'WRITES_TO', 'TRANSFORMS', 'USES', 'FEEDS_INTO', 
+        'INPUT_TO', 'OUTPUT_TO', 'DERIVES_FROM', 'CALCULATES', 'CALLS', 
+        'HAS_RULE', 'HAS_TRANSFORMATION', 'SEMANTICALLY_EQUIVALENT_TO'
+    ])
+
+    // 3. Direct 1-hop parent container (where start belongs, without traversing to siblings)
+    OPTIONAL MATCH (parent:Artifact)-[r_cont:CONTAINS]->(start)
+
+    // 4. Direct contents if start is itself a container file/artifact
+    OPTIONAL MATCH (start)-[r_child]->(child)
+    WHERE ('Artifact' IN labels(start) OR 'Program' IN labels(start) OR 'Package' IN labels(start))
+      AND type(r_child) IN ['CONTAINS', 'HAS_RULE', 'HAS_TRANSFORMATION']
+
+    RETURN start, down_path, up_path, parent, r_cont, child, r_child
+    LIMIT 60
     """
     params = {
         "name": clean_name,
@@ -1211,7 +1316,9 @@ class GraphService:
       // Updates the Right-Side Node Inspector panel in the parent Streamlit window
       function updateRightSideNodeDetails(nodeObj) {{
         if (!nodeObj || !nodeObj.raw_props) return;
-        var p = nodeObj.raw_props;
+        var p = Object.assign({{}}, nodeObj.raw_props);
+        delete p['<id>'];
+        delete p['confidence'];
         var nid = String(nodeObj.id);
 
         var parentDoc = null;
@@ -1237,7 +1344,6 @@ class GraphService:
         // Light Neumorphic Panel Header
         html += '<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);">';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<span style="font-size: 15px;">📄</span>';
         html += '<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>';
         html += '</div>';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
@@ -1292,8 +1398,7 @@ class GraphService:
         html += '<th style="padding: 8px 10px; font-weight: 800; width: 66%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Value</th>';
         html += '</tr></thead><tbody>';
 
-        var keys = Object.keys(p).filter(function(k) {{ return k !== '<id>'; }}).sort();
-        keys.unshift('<id>');
+        var keys = Object.keys(p).filter(function(k) {{ return k !== '<id>' && k !== 'confidence'; }}).sort();
 
         keys.forEach(function(k, idx) {{
           var v = p[k];
@@ -1303,10 +1408,7 @@ class GraphService:
           var isLogicProp = (k === 'expression' || k === 'formula' || k === 'logic' || k === 'rule_statement' || k === 'rule_id' || k === 'rule_type' || k === 'rule_index' || (isBusinessRule && k === 'description'));
           var valColor = isLogicProp ? '#B45309' : '#1E293B';
 
-          if (k === '<id>') {{
-            displayVal = escapeHtml(valStr);
-            valColor = '#475569';
-          }} else if (typeof v === 'string') {{
+          if (typeof v === 'string') {{
             displayVal = '"' + escapeHtml(valStr) + '"';
           }} else if (typeof v === 'number') {{
             valColor = '#0284C7';
@@ -1390,6 +1492,7 @@ class GraphService:
             var pUrl = new URL(window.parent.location.href);
             pUrl.searchParams.set('selected_node', nid);
             window.parent.history.replaceState(null, '', pUrl.toString());
+            window.parent.dispatchEvent(new Event('popstate'));
           }} catch (e) {{}}
         }}
       }}
