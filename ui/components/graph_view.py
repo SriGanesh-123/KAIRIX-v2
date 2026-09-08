@@ -173,6 +173,21 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
     if node.get("business_domain"):
         props_dict["business_domain"] = node.get("business_domain")
 
+    # Check entity types
+    raw_label_str = str(entity_label).lower()
+    raw_id_str = str(raw_id).lower()
+    is_business_rule = (
+        raw_label_str == "businessrule"
+        or "rule:" in raw_id_str
+        or props_dict.get("rule_index") is not None
+        or props_dict.get("entity_type") == "BusinessRule"
+    )
+    is_transformation = (
+        raw_label_str == "transformation"
+        or "transformation:" in raw_id_str
+        or props_dict.get("entity_type") == "Transformation"
+    )
+
     # Ingest any other custom properties on the node dict
     excluded_keys = {
         "<id>", "_labels", "size", "color", "font", "shape", "x", "y", "title",
@@ -185,7 +200,7 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
 
     # Neo4j badge colors
     badge_colors = {
-        "Entity": {"bg": "#A85A48", "color": "#FFFFFF"},          # Salmon/terracotta like Image 2
+        "Entity": {"bg": "#A85A48", "color": "#FFFFFF"},          # Terracotta
         "Transformation": {"bg": "#EA580C", "color": "#FFFFFF"},    # Orange
         "BusinessRule": {"bg": "#D97706", "color": "#FFFFFF"},      # Amber
         "Table": {"bg": "#6D28D9", "color": "#FFFFFF"},             # Purple
@@ -196,67 +211,128 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
     }
     b_style = badge_colors.get(str(entity_label), badge_colors["Entity"])
 
-    # Build Key-Value table rows matching Image 2
+    # Dedicated Business Logic / Expression callout extraction
+    expression_val = (
+        props_dict.get("expression")
+        or props_dict.get("formula")
+        or props_dict.get("logic")
+    )
+    if not expression_val and is_business_rule:
+        cand_rule = (
+            props_dict.get("rule_statement")
+            or props_dict.get("statement")
+            or props_dict.get("rule_text")
+            or props_dict.get("description")
+        )
+        if cand_rule and cand_rule != "No detailed description recorded." and not (
+            isinstance(cand_rule, str) and cand_rule.startswith("Enterprise legacy system")
+        ):
+            expression_val = cand_rule
+
+    rule_id_val = (
+        props_dict.get("rule_id")
+        or (f"Rule {props_dict.get('rule_index')}" if props_dict.get("rule_index") is not None else "")
+        or (raw_id.split(":")[-1] if is_business_rule or is_transformation else "")
+    )
+    rule_type_val = props_dict.get("rule_type", "BUSINESS_RULE" if is_business_rule else ("TRANSFORMATION" if is_transformation else ""))
+
+    business_logic_html = ""
+    if expression_val:
+        if is_business_rule:
+            box_bg = "linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)"
+            box_border = "#FCD34D"
+            box_border_l = "#D97706"
+            header_color = "#92400E"
+            header_title = "⚡ Business Rule Logic"
+            tag_bg = "#FDE68A"
+            tag_border = "#FCD34D"
+            tag_color = "#78350F"
+            text_color = "#78350F"
+            r_id_tag = f"({html.escape(str(rule_id_val))})" if rule_id_val else ""
+        elif is_transformation:
+            box_bg = "linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)"
+            box_border = "#FDBA74"
+            box_border_l = "#EA580C"
+            header_color = "#9A3412"
+            header_title = "⚡ Transformation Expression"
+            tag_bg = "#FED7AA"
+            tag_border = "#FDBA74"
+            tag_color = "#7C2D12"
+            text_color = "#7C2D12"
+            r_id_tag = f"({html.escape(str(rule_id_val))})" if rule_id_val else ""
+        else:
+            box_bg = "linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)"
+            box_border = "#93C5FD"
+            box_border_l = "#2563EB"
+            header_color = "#1E40AF"
+            header_title = "⚡ Logic / Expression"
+            tag_bg = "#BFDBFE"
+            tag_border = "#93C5FD"
+            tag_color = "#1E3A8A"
+            text_color = "#1E3A8A"
+            r_id_tag = f"({html.escape(str(rule_id_val))})" if rule_id_val else ""
+
+        business_logic_html = (
+            f'<div style="margin: 8px 14px 10px 14px; background: {box_bg}; border: 1px solid {box_border}; border-left: 4px solid {box_border_l}; border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">'
+            f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">'
+            f'<span style="font-size: 11px; font-weight: 800; color: {header_color}; text-transform: uppercase; letter-spacing: 0.04em;">{header_title} {r_id_tag}</span>'
+            f'<span style="font-size: 10px; color: {tag_color}; font-weight: 700; background: {tag_bg}; border: 1px solid {tag_border}; padding: 1px 7px; border-radius: 4px;">{html.escape(str(rule_type_val))}</span>'
+            f'</div>'
+            f'<div style="font-family: \'JetBrains Mono\', monospace; font-size: 12px; color: {text_color}; word-break: break-word; font-weight: 700; line-height: 1.5;">'
+            f'{html.escape(str(expression_val))}'
+            f'</div>'
+            f'</div>'
+        )
+
+    # Build Key-Value table rows matching KAIRIX Light Neumorphic theme
     sorted_keys = ["<id>"] + sorted([k for k in props_dict.keys() if k != "<id>"])
     table_rows = []
 
-    for k in sorted_keys:
+    for idx, k in enumerate(sorted_keys):
         v = props_dict[k]
+
+        is_logic_prop = (
+            k in ("expression", "formula", "logic", "rule_statement", "rule_id", "rule_type", "rule_index")
+            or (is_business_rule and k == "description")
+        )
 
         # Format display value
         if k == "<id>":
             val_display = html.escape(str(v))
-            val_color = "#E2E8F0"
+            val_color = "#475569"
         elif isinstance(v, str):
             val_display = f'"{html.escape(v)}"'
-            val_color = "#FCD34D" if k in ("expression", "formula", "logic") else "#E2E8F0"
+            val_color = "#B45309" if is_logic_prop else "#1E293B"
         elif isinstance(v, (int, float)):
             val_display = str(v)
-            val_color = "#38BDF8"
+            val_color = "#0284C7"
         elif isinstance(v, bool):
             val_display = "true" if v else "false"
-            val_color = "#C084FC"
+            val_color = "#7C3AED"
         else:
             val_display = html.escape(str(v))
-            val_color = "#E2E8F0"
+            val_color = "#1E293B"
 
         safe_copy_val = html.escape(str(v), quote=True)
 
-        is_logic_prop = k in ("expression", "formula", "rule_id", "rule_type")
-        row_bg = "background: rgba(245, 158, 11, 0.07);" if is_logic_prop else ""
+        if is_logic_prop:
+            row_bg = "background-color: #FFFBEB; border-left: 3px solid #D97706;"
+            row_mouseout_bg = "#FFFBEB"
+        else:
+            row_bg = "background-color: #F8FAFD;" if idx % 2 == 1 else "background-color: #FFFFFF;"
+            row_mouseout_bg = "#F8FAFD" if idx % 2 == 1 else "#FFFFFF"
 
-        row_hover_bg = "rgba(245, 158, 11, 0.07)" if is_logic_prop else "transparent"
         table_rows.append(
-            f'<tr style="border-bottom: 1px solid #242B38; transition: background 0.15s; {row_bg}" onmouseover="this.style.background=\'#222834\'" onmouseout="this.style.background=\'{row_hover_bg}\'">'
-            f'<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 12.5px;">{html.escape(k)}</td>'
-            f'<td style="padding: 7px 8px; color: {val_color}; vertical-align: top; width: 66%; word-break: break-word; font-family: \'JetBrains Mono\', monospace; font-size: 11.5px; position: relative; line-height: 1.45;">'
+            f'<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; {row_bg}" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'{row_mouseout_bg}\'">'
+            f'<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">{html.escape(k)}</td>'
+            f'<td style="padding: 7px 10px; color: {val_color}; vertical-align: top; width: 66%; word-break: break-word; font-family: \'JetBrains Mono\', monospace; font-size: 11.5px; position: relative; line-height: 1.45;">'
             f'<span>{val_display}</span>'
-            f'<button class="st-prop-copy-btn" data-copy="{safe_copy_val}" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>'
+            f'<button class="st-prop-copy-btn" data-copy="{safe_copy_val}" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>'
             f'</td>'
             f'</tr>'
         )
 
     table_rows_html = "".join(table_rows)
-
-    # Dedicated Business Logic / Expression callout if present
-    business_logic_html = ""
-    expression_val = props_dict.get("expression") or props_dict.get("formula") or props_dict.get("logic")
-    rule_id_val = props_dict.get("rule_id", "")
-    rule_type_val = props_dict.get("rule_type", "")
-
-    if expression_val:
-        r_id_tag = f"({html.escape(rule_id_val)})" if rule_id_val else ""
-        business_logic_html = (
-            f'<div style="margin: 10px 14px 4px 14px; background: #0F172A; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 10px 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">'
-            f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">'
-            f'<span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.04em;">⚡ Business Logic / Expression {r_id_tag}</span>'
-            f'<span style="font-size: 10px; color: #94A3B8; font-weight: 600;">{html.escape(rule_type_val)}</span>'
-            f'</div>'
-            f'<div style="font-family: \'JetBrains Mono\', monospace; font-size: 12.5px; color: #FEF3C7; word-break: break-word; font-weight: 600; line-height: 1.45;">'
-            f'{html.escape(str(expression_val))}'
-            f'</div>'
-            f'</div>'
-        )
 
     # Connected Edges section
     edges_html = ""
@@ -271,46 +347,46 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
             neighbor_name = tgt if is_outgoing else src
 
             edge_rows.append(
-                f'<div style="background:#131720; border:1px solid #282E3B; border-radius:6px; padding:0.35rem 0.55rem; margin-bottom:0.3rem; font-size:0.75rem; display:flex; justify-content:space-between; align-items:center;">'
-                f'<span style="background:#1E293B; color:#38BDF8; font-weight:700; font-size:0.68rem; padding:0.12rem 0.4rem; border-radius:4px; white-space:nowrap; font-family:\'JetBrains Mono\',monospace;">{direction_icon} {html.escape(rel)}</span>'
-                f'<span style="font-family:\'JetBrains Mono\',monospace; color:#E2E8F0; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.75rem;" title="{html.escape(neighbor_name)}">{html.escape(neighbor_name)}</span>'
+                f'<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">'
+                f'<span style="background: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid #BFDBFE; white-space: nowrap; font-family: \'JetBrains Mono\', monospace;">{direction_icon} {html.escape(rel)}</span>'
+                f'<span style="font-family: \'JetBrains Mono\', monospace; color: #1E293B; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 600;" title="{html.escape(neighbor_name)}">{html.escape(neighbor_name)}</span>'
                 f'</div>'
             )
         edges_list_html = "".join(edge_rows)
         edges_html = (
-            f'<div style="margin-top:0.75rem; border-top:1px solid #282E3B; padding:0.75rem 14px 4px 14px;">'
-            f'<div style="font-size:0.74rem; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.4rem;">Connected Relationships ({len(connected_edges)})</div>'
-            f'<div style="max-height:160px; overflow-y:auto; padding-right:0.2rem;">{edges_list_html}</div>'
+            f'<div style="margin-top: 0.5rem; border-top: 1px solid #E2E8F0; padding: 10px 14px 6px 14px; background: #F8FAFC;">'
+            f'<div style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Connected Relationships ({len(connected_edges)})</div>'
+            f'<div style="max-height: 160px; overflow-y: auto; padding-right: 2px;">{edges_list_html}</div>'
             f'</div>'
         )
 
     # Encode all properties to JSON for copy all
     encoded_json = html.escape(json.dumps(props_dict, indent=2), quote=True)
 
-    # Full Authentic Neo4j Node details panel - zero leading indentation to prevent markdown code block bugs
+    # Light Neumorphic Node details panel matching KAIRIX visual design system
     neo4j_panel_html = (
-        f'<div id="neo4j-node-details-card" style="background: #181C24; border: 1px solid #282E3B; border-radius: 12px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 4px 20px rgba(0,0,0,0.35); margin-bottom: 0.75rem;">\n'
-        f'<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">\n'
+        f'<div id="neo4j-node-details-card" style="background: #FFFFFF; border: 1px solid #D5DFEB; border-radius: 14px; overflow: hidden; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, sans-serif; box-shadow: 6px 6px 18px rgba(166, 180, 200, 0.35), -6px -6px 18px rgba(255, 255, 255, 0.95); margin-bottom: 0.75rem;">\n'
+        f'<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);">\n'
         f'<div style="display: flex; align-items: center; gap: 8px;">\n'
-        f'<span style="font-size: 15px; opacity: 0.85;">📄</span>\n'
-        f'<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Node details</span>\n'
+        f'<span style="font-size: 15px;">📄</span>\n'
+        f'<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>\n'
         f'</div>\n'
         f'<div style="display: flex; align-items: center; gap: 8px;">\n'
-        f'<button class="st-copy-all-btn" data-copy="{encoded_json}" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;" onmouseover="this.style.color=\'#FFFFFF\'; this.style.borderColor=\'#0284C7\'" onmouseout="this.style.color=\'#94A3B8\'; this.style.borderColor=\'#334155\'">❐ Copy all</button>\n'
+        f'<button class="st-copy-all-btn" data-copy="{encoded_json}" title="Copy all properties as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>\n'
         f'</div>\n'
         f'</div>\n'
-        f'<div style="padding: 12px 16px 8px 16px;">\n'
-        f'<span style="background: {b_style["bg"]}; color: {b_style["color"]}; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">\n'
+        f'<div style="padding: 12px 16px 6px 16px;">\n'
+        f'<span style="background: {b_style["bg"]}; color: {b_style["color"]}; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: \'Inter\', -apple-system, BlinkMacSystemFont, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">\n'
         f'{html.escape(str(entity_label))}\n'
         f'</span>\n'
         f'</div>\n'
         f'{business_logic_html}\n'
-        f'<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">\n'
+        f'<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 10px 14px;">\n'
         f'<table style="width: 100%; border-collapse: collapse; font-size: 12px;">\n'
         f'<thead>\n'
-        f'<tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">\n'
-        f'<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>\n'
-        f'<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>\n'
+        f'<tr style="border-bottom: 2px solid #2563EB; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%); color: #0F172A; text-align: left;">\n'
+        f'<th style="padding: 8px 10px; font-weight: 800; width: 34%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Key</th>\n'
+        f'<th style="padding: 8px 10px; font-weight: 800; width: 66%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Value</th>\n'
         f'</tr>\n'
         f'</thead>\n'
         f'<tbody>\n'
@@ -355,3 +431,4 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
             st.markdown(neo4j_panel_html, unsafe_allow_html=True)
     except TypeError:
         st.html(neo4j_panel_html)
+

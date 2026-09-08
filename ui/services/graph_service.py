@@ -435,10 +435,15 @@ def _execute_cypher_subgraph(cypher: str, params: Optional[Dict[str, Any]] = Non
                             "properties": dict(val),
                         })
 
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to execute Cypher query: %s", e)
+        if params and params.get("is_lineage"):
+            return {"nodes": [], "edges": [], "error": str(e)}
         return _get_local_packages_subgraph(params.get("file_name") if params else None)
 
     if not nodes_dict:
+        if params and params.get("is_lineage"):
+            return {"nodes": [], "edges": [], "error": None}
         return _get_local_packages_subgraph(params.get("file_name") if params else None)
 
     return {
@@ -578,18 +583,38 @@ def _cached_get_node_neighborhood(node_id: str, hops: int = 1, max_nodes: int = 
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def _cached_trace_lineage(entity_name: str, max_depth: int = 3) -> Dict[str, Any]:
+def _cached_trace_lineage(entity_name: str, node_id: Optional[str] = None, max_depth: int = 2) -> Dict[str, Any]:
+    clean_name = str(entity_name or "").strip()
+    clean_id = str(node_id or "").strip()
+    if not clean_name and not clean_id:
+        return {"nodes": [], "edges": [], "error": "No entity specified for lineage trace."}
+
     cypher = f"""
-    MATCH (start:Entity)
-    WHERE toLower(start.name) = toLower($name) OR start.id = $name
-    OPTIONAL MATCH path = (start)-[r:READS_FROM|WRITES_TO|TRANSFORMS|USES|FEEDS_INTO*1..{max_depth}]-(target)
-    WITH start, relationships(path) AS rels, nodes(path) AS nodes
-    UNWIND rels AS rel
-    UNWIND nodes AS node
-    RETURN DISTINCT start, rel, node
-    LIMIT 60
+    MATCH (start)
+    WHERE (start.id = $node_id AND $node_id <> '')
+       OR toLower(start.id) = toLower($node_id)
+       OR toLower(start.name) = toLower($name)
+       OR start.id = $name
+       OR toLower(start.file_name) = toLower($name)
+       OR start.id = 'ARTIFACT:' + $name
+       OR start.id = 'ENTITY:' + $name
+       OR (start.name IS NOT NULL AND toLower(start.name) = toLower(split($node_id, ':')[-1]))
+    WITH start LIMIT 1
+    OPTIONAL MATCH path = (start)-[r*1..{max_depth}]-(m)
+    WHERE all(rel in relationships(path) WHERE type(rel) IN [
+        'READS_FROM', 'WRITES_TO', 'TRANSFORMS', 'USES', 'FEEDS_INTO', 
+        'INPUT_TO', 'OUTPUT_TO', 'DERIVES_FROM', 'CALCULATES', 'CALLS', 
+        'HAS_RULE', 'HAS_TRANSFORMATION', 'CONTAINS'
+    ])
+    RETURN start, path
+    LIMIT 40
     """
-    return _execute_cypher_subgraph(cypher, {"name": entity_name.strip()})
+    params = {
+        "name": clean_name,
+        "node_id": clean_id,
+        "is_lineage": True,
+    }
+    return _execute_cypher_subgraph(cypher, params)
 
 
 _VIS_JS_CACHE: Optional[str] = None
@@ -626,6 +651,30 @@ class GraphService:
     Handles graph data retrieval and Pyvis HTML rendering with caching.
     """
 
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Clears all cached subgraphs, searches, neighborhoods, and lineages."""
+        try:
+            _cached_get_overview_subgraph.clear()
+        except Exception:
+            pass
+        try:
+            _cached_get_file_subgraph.clear()
+        except Exception:
+            pass
+        try:
+            _cached_search_nodes.clear()
+        except Exception:
+            pass
+        try:
+            _cached_get_node_neighborhood.clear()
+        except Exception:
+            pass
+        try:
+            _cached_trace_lineage.clear()
+        except Exception:
+            pass
+
     @staticmethod
     def get_overview_subgraph(max_nodes: int = 5000, preset: Optional[str] = None) -> Dict[str, Any]:
         """Retrieves major artifacts, core entities, and cross-file relationships for overview (cached)."""
@@ -647,9 +696,9 @@ class GraphService:
         return _cached_get_node_neighborhood(node_id=node_id, hops=hops, max_nodes=max_nodes)
 
     @staticmethod
-    def trace_lineage(entity_name: str, max_depth: int = 3) -> Dict[str, Any]:
-        """Trace end-to-end data flow for a program or table (cached)."""
-        return _cached_trace_lineage(entity_name=entity_name, max_depth=max_depth)
+    def trace_lineage(entity_name: str, node_id: Optional[str] = None, max_depth: int = 2) -> Dict[str, Any]:
+        """Trace drill-down data flow and dependency lineage for a program, table, or entity (cached)."""
+        return _cached_trace_lineage(entity_name=entity_name, node_id=node_id, max_depth=max_depth)
 
     @staticmethod
     def execute_custom_cypher(cypher: str, max_records: int = 150) -> Dict[str, Any]:
@@ -1178,94 +1227,121 @@ class GraphService:
         var entityLabel = p.entity_label || 'Entity';
         var badgeBg = badgeColors[entityLabel] || badgeColors['Entity'] || '#A85A48';
 
+        var rawLabelStr = String(entityLabel).toLowerCase();
+        var rawIdStr = nid.toLowerCase();
+        var isBusinessRule = (rawLabelStr === 'businessrule' || rawIdStr.indexOf('rule:') >= 0 || p.rule_index !== undefined || p.entity_type === 'BusinessRule');
+        var isTransformation = (rawLabelStr === 'transformation' || rawIdStr.indexOf('transformation:') >= 0 || p.entity_type === 'Transformation');
+
         var html = '';
 
-        // Panel Header
-        html += '<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">';
+        // Light Neumorphic Panel Header
+        html += '<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);">';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<span style="font-size: 15px; opacity: 0.85;">📄</span>';
-        html += '<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Node details</span>';
+        html += '<span style="font-size: 15px;">📄</span>';
+        html += '<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Node details</span>';
         html += '</div>';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(p, null, 2)) + '" title="Copy all properties as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;">❐ Copy all</button>';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(p, null, 2)) + '" title="Copy all properties as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>';
         html += '</div>';
         html += '</div>';
 
         // Badge
-        html += '<div style="padding: 12px 16px 8px 16px;">';
-        html += '<span style="background:' + badgeBg + '; color:#FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">' + escapeHtml(entityLabel) + '</span>';
+        html += '<div style="padding: 12px 16px 6px 16px;">';
+        html += '<span style="background:' + badgeBg + '; color:#FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">' + escapeHtml(entityLabel) + '</span>';
         html += '</div>';
 
-        // Dedicated Business Logic / Expression callout
+        // Dedicated Business Logic / Expression callout extraction
         var expr = p.expression || p.formula || p.logic;
+        if (!expr && isBusinessRule) {{
+          var cand = p.rule_statement || p.statement || p.rule_text || p.description;
+          if (cand && cand !== 'No detailed description recorded.' && String(cand).indexOf('Enterprise legacy system') !== 0) {{
+            expr = cand;
+          }}
+        }}
+
         if (expr) {{
-          var rTag = p.rule_id ? '(' + escapeHtml(p.rule_id) + ')' : '';
-          var rTypeTag = p.rule_type ? escapeHtml(p.rule_type) : '';
-          html += '<div style="margin: 10px 14px 4px 14px; background: #0F172A; border: 1px solid #F59E0B; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 10px 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">';
-          html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">';
-          html += '<span style="font-size: 11px; font-weight: 800; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.04em;">⚡ Business Logic / Expression ' + rTag + '</span>';
-          html += '<span style="font-size: 10px; color: #94A3B8; font-weight: 600;">' + rTypeTag + '</span>';
+          var rTag = p.rule_id ? '(' + escapeHtml(p.rule_id) + ')' : (p.rule_index !== undefined ? '(Rule ' + p.rule_index + ')' : '');
+          var rType = p.rule_type ? escapeHtml(p.rule_type) : (isBusinessRule ? 'BUSINESS_RULE' : (isTransformation ? 'TRANSFORMATION' : ''));
+
+          var boxBg = isBusinessRule ? 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)' : (isTransformation ? 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)');
+          var boxBorder = isBusinessRule ? '#FCD34D' : (isTransformation ? '#FDBA74' : '#93C5FD');
+          var boxBorderL = isBusinessRule ? '#D97706' : (isTransformation ? '#EA580C' : '#2563EB');
+          var headerColor = isBusinessRule ? '#92400E' : (isTransformation ? '#9A3412' : '#1E40AF');
+          var headerTitle = isBusinessRule ? '⚡ Business Rule Logic' : (isTransformation ? '⚡ Transformation Expression' : '⚡ Logic / Expression');
+          var tagBg = isBusinessRule ? '#FDE68A' : (isTransformation ? '#FED7AA' : '#BFDBFE');
+          var tagBorder = isBusinessRule ? '#FCD34D' : (isTransformation ? '#FDBA74' : '#93C5FD');
+          var tagColor = isBusinessRule ? '#78350F' : (isTransformation ? '#7C2D12' : '#1E3A8A');
+          var textColor = isBusinessRule ? '#78350F' : (isTransformation ? '#7C2D12' : '#1E3A8A');
+
+          html += '<div style="margin: 8px 14px 10px 14px; background: ' + boxBg + '; border: 1px solid ' + boxBorder + '; border-left: 4px solid ' + boxBorderL + '; border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">';
+          html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">';
+          html += '<span style="font-size: 11px; font-weight: 800; color: ' + headerColor + '; text-transform: uppercase; letter-spacing: 0.04em;">' + headerTitle + ' ' + rTag + '</span>';
+          if (rType) {{
+            html += '<span style="font-size: 10px; color: ' + tagColor + '; font-weight: 700; background: ' + tagBg + '; border: 1px solid ' + tagBorder + '; padding: 1px 7px; border-radius: 4px;">' + rType + '</span>';
+          }}
           html += '</div>';
-          html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12.5px; color: #FEF3C7; word-break: break-word; font-weight: 600; line-height: 1.45;">' + escapeHtml(expr) + '</div>';
+          html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12px; color: ' + textColor + '; word-break: break-word; font-weight: 700; line-height: 1.5;">' + escapeHtml(expr) + '</div>';
           html += '</div>';
         }}
 
-        // Key-Value Table matching Image 2
-        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">';
+        // Key-Value Table matching Light Neumorphic theme (.kairix-table)
+        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 10px 14px;">';
         html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
-        html += '<thead><tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">';
-        html += '<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>';
-        html += '<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>';
+        html += '<thead><tr style="border-bottom: 2px solid #2563EB; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%); color: #0F172A; text-align: left;">';
+        html += '<th style="padding: 8px 10px; font-weight: 800; width: 34%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Key</th>';
+        html += '<th style="padding: 8px 10px; font-weight: 800; width: 66%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Value</th>';
         html += '</tr></thead><tbody>';
 
         var keys = Object.keys(p).filter(function(k) {{ return k !== '<id>'; }}).sort();
         keys.unshift('<id>');
 
-        keys.forEach(function(k) {{
+        keys.forEach(function(k, idx) {{
           var v = p[k];
           if (v === undefined || v === null) return;
           var valStr = String(v);
           var displayVal = valStr;
-          var valColor = '#E2E8F0';
+          var isLogicProp = (k === 'expression' || k === 'formula' || k === 'logic' || k === 'rule_statement' || k === 'rule_id' || k === 'rule_type' || k === 'rule_index' || (isBusinessRule && k === 'description'));
+          var valColor = isLogicProp ? '#B45309' : '#1E293B';
 
           if (k === '<id>') {{
             displayVal = escapeHtml(valStr);
+            valColor = '#475569';
           }} else if (typeof v === 'string') {{
             displayVal = '"' + escapeHtml(valStr) + '"';
-            if (k === 'expression' || k === 'formula' || k === 'logic') valColor = '#FCD34D';
           }} else if (typeof v === 'number') {{
-            valColor = '#38BDF8';
+            valColor = '#0284C7';
           }} else if (typeof v === 'boolean') {{
-            valColor = '#C084FC';
+            valColor = '#7C3AED';
           }}
 
-          var isLogicRow = (k === 'expression' || k === 'formula' || k === 'rule_id' || k === 'rule_type');
-          var rowBg = isLogicRow ? 'background: rgba(245, 158, 11, 0.07);' : '';
-          html += '<tr style="border-bottom: 1px solid #242B38; ' + rowBg + '">';
-          html += '<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 12.5px;">' + escapeHtml(k) + '</td>';
-          html += '<td style="padding: 7px 8px; color: ' + valColor + '; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
+          var rowBg = isLogicProp ? 'background-color: #FFFBEB; border-left: 3px solid #D97706;' : ((idx % 2 === 1) ? 'background-color: #F8FAFD;' : 'background-color: #FFFFFF;');
+          var rowMouseoutBg = isLogicProp ? '#FFFBEB' : ((idx % 2 === 1) ? '#F8FAFD' : '#FFFFFF');
+
+          html += '<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; ' + rowBg + '" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'' + rowMouseoutBg + '\'">';
+          html += '<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">' + escapeHtml(k) + '</td>';
+          html += '<td style="padding: 7px 10px; color: ' + valColor + '; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
           html += '<span>' + displayVal + '</span>';
-          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>';
           html += '</td></tr>';
         }});
 
         html += '</tbody></table></div>';
 
-        // Connected Relationships
+        // Connected Relationships in Light Theme
         var connEdges = edgesData.filter(function(e) {{ return String(e.from) === nid || String(e.to) === nid; }});
         if (connEdges.length > 0) {{
-          html += '<div style="margin-top:0.75rem; border-top:1px solid #282E3B; padding:0.75rem 14px 4px 14px;">';
-          html += '<div style="font-size:0.74rem; font-weight:700; color:#94A3B8; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.4rem;">Connected Relationships (' + connEdges.length + ')</div>';
-          html += '<div style="max-height:160px; overflow-y:auto; padding-right:0.2rem;">';
+          html += '<div style="margin-top:0.5rem; border-top:1px solid #E2E8F0; padding:10px 14px 6px 14px; background:#F8FAFC;">';
+          html += '<div style="font-size:11px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Connected Relationships (' + connEdges.length + ')</div>';
+          html += '<div style="max-height:160px; overflow-y:auto; padding-right:2px;">';
           connEdges.slice(0, 12).forEach(function(e) {{
             var isOut = String(e.from) === nid;
             var dirIcon = isOut ? '➔' : '⬅';
             var otherId = isOut ? String(e.to) : String(e.from);
             var otherName = otherId.split(':').pop();
             var relType = e.label || 'RELATES_TO';
-            html += '<div style="background:#131720; border:1px solid #282E3B; border-radius:6px; padding:0.35rem 0.55rem; margin-bottom:0.3rem; font-size:0.75rem; display:flex; justify-content:space-between; align-items:center;">';
-            html += '<span style="background:#1E293B; color:#38BDF8; font-weight:700; font-size:0.68rem; padding:0.12rem 0.4rem; border-radius:4px; white-space:nowrap; font-family: JetBrains Mono, monospace;">' + dirIcon + ' ' + escapeHtml(relType) + '</span>';
-            html += '<span style="font-family: JetBrains Mono, monospace; color:#E2E8F0; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.75rem;" title="' + escapeHtml(otherName) + '">' + escapeHtml(otherName) + '</span>';
+            html += '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">';
+            html += '<span style="background: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid #BFDBFE; white-space: nowrap; font-family: JetBrains Mono, monospace;">' + dirIcon + ' ' + escapeHtml(relType) + '</span>';
+            html += '<span style="font-family: JetBrains Mono, monospace; color: #1E293B; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; font-weight: 600;" title="' + escapeHtml(otherName) + '">' + escapeHtml(otherName) + '</span>';
             html += '</div>';
           }});
           html += '</div></div>';
@@ -1349,51 +1425,53 @@ class GraphService:
 
         var html = '';
 
-        // Panel Header
-        html += '<div style="padding: 11px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #282E3B; background: #1E232E;">';
+        // Light Neumorphic Panel Header
+        html += '<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E2E8F0; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);">';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<span style="font-size: 15px; opacity: 0.85;">🔗</span>';
-        html += '<span style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;">Relationship details</span>';
+        html += '<span style="font-size: 15px;">🔗</span>';
+        html += '<span style="font-size: 14px; font-weight: 800; color: #0F172A; letter-spacing: -0.01em;">Relationship details</span>';
         html += '</div>';
         html += '<div style="display: flex; align-items: center; gap: 8px;">';
-        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(edgeProps, null, 2)) + '" title="Copy relationship details as JSON" style="background: #242B38; border: 1px solid #334155; color: #94A3B8; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.15s;">❐ Copy all</button>';
+        html += '<button class="st-copy-all-btn" data-copy="' + escapeHtml(JSON.stringify(edgeProps, null, 2)) + '" title="Copy relationship details as JSON" style="background: #FFFFFF; border: 1px solid #CBD5E1; color: #334155; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#2563EB\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#334155\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#FFFFFF\'">❐ Copy all</button>';
         html += '</div>';
         html += '</div>';
 
         // Badge
-        html += '<div style="padding: 12px 16px 8px 16px;">';
-        html += '<span style="background: #6366F1; color: #FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">';
+        html += '<div style="padding: 12px 16px 6px 16px;">';
+        html += '<span style="background: #4F46E5; color: #FFFFFF; font-size: 11.5px; font-weight: 700; padding: 3px 12px; border-radius: 14px; display: inline-block; letter-spacing: 0.02em; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">';
         html += 'Relationship: ' + escapeHtml(relType);
         html += '</span>';
         html += '</div>';
 
-        // Flow Callout
-        html += '<div style="margin: 6px 14px 10px 14px; background: #0F172A; border: 1px solid #38BDF8; border-left: 4px solid #38BDF8; border-radius: 8px; padding: 10px 12px;">';
-        html += '<div style="font-size: 10.5px; font-weight: 700; color: #38BDF8; text-transform: uppercase; margin-bottom: 4px;">Connection Path</div>';
-        html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12px; color: #F1F5F9; word-break: break-word;">';
-        html += '<span style="color: #FCD34D;">' + escapeHtml(fromName) + '</span> ➔ <span style="background: #1E293B; color: #38BDF8; padding: 1px 6px; border-radius: 4px; font-weight: 700;">' + escapeHtml(relType) + '</span> ➔ <span style="color: #6EE7B7;">' + escapeHtml(toName) + '</span>';
+        // Flow Callout (Light Blue Accent)
+        html += '<div style="margin: 8px 14px 10px 14px; background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border: 1px solid #93C5FD; border-left: 4px solid #2563EB; border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);">';
+        html += '<div style="font-size: 11px; font-weight: 800; color: #1E40AF; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px;">Connection Path</div>';
+        html += '<div style="font-family: JetBrains Mono, monospace; font-size: 12px; color: #0F172A; word-break: break-word; font-weight: 600;">';
+        html += '<span style="color: #0F172A; font-weight: 700;">' + escapeHtml(fromName) + '</span> ➔ <span style="background: #2563EB; color: #FFFFFF; padding: 2px 8px; border-radius: 6px; font-weight: 700;">' + escapeHtml(relType) + '</span> ➔ <span style="color: #0F172A; font-weight: 700;">' + escapeHtml(toName) + '</span>';
         html += '</div>';
         html += '</div>';
 
-        // Properties Table
-        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 12px 14px;">';
+        // Properties Table matching Light Neumorphic theme
+        html += '<div style="max-height: 480px; overflow-y: auto; padding: 4px 14px 10px 14px;">';
         html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
-        html += '<thead><tr style="border-bottom: 1px solid #2E3646; color: #94A3B8; text-align: left;">';
-        html += '<th style="padding: 8px; font-weight: 600; width: 34%; font-size: 12px;">Key</th>';
-        html += '<th style="padding: 8px; font-weight: 600; width: 66%; font-size: 12px;">Value</th>';
+        html += '<thead><tr style="border-bottom: 2px solid #2563EB; background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%); color: #0F172A; text-align: left;">';
+        html += '<th style="padding: 8px 10px; font-weight: 800; width: 34%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Key</th>';
+        html += '<th style="padding: 8px 10px; font-weight: 800; width: 66%; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Value</th>';
         html += '</tr></thead><tbody>';
 
         var keys = Object.keys(edgeProps).filter(function(k) {{ return k !== '<id>'; }}).sort();
         keys.unshift('<id>');
 
-        keys.forEach(function(k) {{
+        keys.forEach(function(k, idx) {{
           var v = edgeProps[k];
           var valStr = String(v);
-          html += '<tr style="border-bottom: 1px solid #242B38;">';
-          html += '<td style="padding: 7px 8px; color: #F1F5F9; font-weight: 700; vertical-align: top; width: 34%; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 12.5px;">' + escapeHtml(k) + '</td>';
-          html += '<td style="padding: 7px 8px; color: #38BDF8; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
+          var rowBg = (idx % 2 === 1) ? 'background-color: #F8FAFD;' : 'background-color: #FFFFFF;';
+          var rowMouseoutBg = (idx % 2 === 1) ? '#F8FAFD' : '#FFFFFF';
+          html += '<tr style="border-bottom: 1px solid #EDF2F7; transition: background-color 0.15s ease; ' + rowBg + '" onmouseover="this.style.backgroundColor=\'#EFF6FF\'" onmouseout="this.style.backgroundColor=\'' + rowMouseoutBg + '\'">';
+          html += '<td style="padding: 7px 10px; color: #334155; font-weight: 700; vertical-align: top; width: 34%; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 12px;">' + escapeHtml(k) + '</td>';
+          html += '<td style="padding: 7px 10px; color: #0284C7; vertical-align: top; width: 66%; word-break: break-word; font-family: JetBrains Mono, monospace; font-size: 11.5px; position: relative; line-height: 1.45;">';
           html += '<span>"' + escapeHtml(valStr) + '"</span>';
-          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background:none; border:none; color:#64748B; cursor:pointer; font-size:12px; float:right; padding:1px 4px; border-radius:3px; margin-left:6px; transition:color 0.15s;">❐</button>';
+          html += '<button class="st-prop-copy-btn" data-copy="' + escapeHtml(valStr) + '" title="Copy value to clipboard" style="background: #F8FAFC; border: 1px solid #CBD5E1; color: #64748B; cursor: pointer; font-size: 11px; float: right; padding: 2px 5px; border-radius: 4px; margin-left: 6px; transition: all 0.15s;" onmouseover="this.style.color=\'#2563EB\'; this.style.borderColor=\'#93C5FD\'; this.style.background=\'#EFF6FF\'" onmouseout="this.style.color=\'#64748B\'; this.style.borderColor=\'#CBD5E1\'; this.style.background=\'#F8FAFC\'">❐</button>';
           html += '</td></tr>';
         }});
 
@@ -1508,6 +1586,19 @@ class GraphService:
                 updateRightSideNodeDetails(matchedNode);
               }} catch (err) {{}}
             }}
+          }} else {{
+            try {{
+              network.unselectAll();
+            }} catch (err) {{}}
+            try {{
+              if (window.parent && window.parent.location) {{
+                var pUrl = new URL(window.parent.location.href);
+                if (pUrl.searchParams.has('selected_node')) {{
+                  pUrl.searchParams.delete('selected_node');
+                  window.parent.history.replaceState(null, '', pUrl.toString());
+                }}
+              }}
+            }} catch (e) {{}}
           }}
           if (!userInteracted) {{
             network.fit({{ animation: {{ duration: 300, easingFunction: 'easeInOutQuad' }} }});

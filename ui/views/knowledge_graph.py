@@ -8,6 +8,7 @@ and one-click access to the Neo4j Aura Workspace (Bloom & Browser).
 """
 from __future__ import annotations
 
+import html
 import os
 import time
 import urllib.parse
@@ -20,11 +21,48 @@ from ui.components.graph_view import (
 from ui.services.graph_service import GraphService
 from ui.services.source_service import SourceService
 
+DEFAULT_SCOPE = "Full System Graph (All 22 Files)"
+
+
+def _on_graph_refresh_click() -> None:
+    """
+    Cleanses all state, clears database caches, resets filters,
+    and returns the Knowledge Graph to the complete macro view.
+    """
+    # 1. Clear database & data caches
+    GraphService.clear_cache()
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+
+    # 2. Clear lineage trace override & root tracking
+    st.session_state.pop("graph_override_subgraph", None)
+    st.session_state.pop("lineage_root_name", None)
+    st.session_state.pop("lineage_root_id", None)
+    st.session_state.pop("graph_search_term", None)
+    st.session_state.pop("canvas_node_inspect_select", None)
+
+    # 3. Reset input controls to default
+    st.session_state["graph_search_input"] = ""
+    st.session_state["kg_single_scope_select"] = DEFAULT_SCOPE
+    st.session_state["graph_type_filter_select"] = "(All Types)"
+
+    # 4. Remove selected_node from URL query parameters
+    if "selected_node" in st.query_params:
+        del st.query_params["selected_node"]
+
+    # 5. Set notice flag
+    st.session_state["graph_refreshed_toast"] = True
+
 
 def render_knowledge_graph() -> None:
     """
     Renders the complete interactive Knowledge Graph explorer page in light theme.
     """
+    if st.session_state.pop("graph_refreshed_toast", False):
+        st.toast("Knowledge graph refreshed successfully.", icon="🔄")
+
     st.markdown("## Knowledge Graph Explorer")
     st.markdown(
         "<p style='color: #64748B; margin-top: -0.5rem;'>Interactive Neo4j graph mapping COBOL programs, SSIS ETL pipelines, SQL schemas, business rules, and cross-system data lineage.</p>",
@@ -64,7 +102,7 @@ def render_knowledge_graph() -> None:
 
     # Build clean single-select options list
     scope_options = [
-        "Full System Graph (All 22 Files)",
+        DEFAULT_SCOPE,
         "COBOL Mainframe (All Programs)",
         "SSIS ETL Pipeline (All Packages)",
         "SQL PolicyCenter & ClaimCenter (All Scripts)",
@@ -89,7 +127,7 @@ def render_knowledge_graph() -> None:
                 st.session_state["kg_single_scope_select"] = scope_options[0]
 
     # 2. Sleek Single-Row Control Bar (Search + Scope Selectbox + Type + Refresh)
-    col_search, col_scope, col_type, col_reset = st.columns([3.8, 3.2, 2.0, 1.0])
+    col_search, col_scope, col_type, col_reset = st.columns([3.4, 3.0, 2.0, 1.6])
 
     with col_search:
         pre_search = st.session_state.pop("graph_search_term", None)
@@ -121,9 +159,28 @@ def render_knowledge_graph() -> None:
 
     with col_reset:
         st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 Refresh", use_container_width=True, help="Refresh Graph"):
-            st.session_state.pop("graph_override_subgraph", None)
-            st.rerun()
+        st.button(
+            "🔄 Refresh",
+            use_container_width=True,
+            help="Reset filters, clear lineage/search, and reload live graph from Neo4j AuraDB",
+            on_click=_on_graph_refresh_click,
+            key="btn_kg_refresh",
+        )
+
+    # Detect user-initiated Scope or Type changes to clear stale node selection
+    last_scope = st.session_state.get("_last_active_scope")
+    if last_scope != selected_scope:
+        st.session_state["_last_active_scope"] = selected_scope
+        st.session_state.pop("canvas_node_inspect_select", None)
+        if "selected_node" in st.query_params:
+            del st.query_params["selected_node"]
+
+    last_type = st.session_state.get("_last_active_type_filter")
+    if last_type != selected_type_filter:
+        st.session_state["_last_active_type_filter"] = selected_type_filter
+        st.session_state.pop("canvas_node_inspect_select", None)
+        if "selected_node" in st.query_params:
+            del st.query_params["selected_node"]
 
     # 3. Fetch Graph Data
     nodes: list = []
@@ -131,9 +188,10 @@ def render_knowledge_graph() -> None:
     selected_node = None
     connected_edges = []
 
+    override_subgraph = st.session_state.get("graph_override_subgraph")
+
     with st.spinner("Loading Knowledge Graph from Neo4j AuraDB..."):
         # Check for active lineage trace override
-        override_subgraph = st.session_state.get("graph_override_subgraph")
         if override_subgraph and not search_query:
             nodes = override_subgraph.get("nodes", [])
             edges = override_subgraph.get("edges", [])
@@ -187,7 +245,8 @@ def render_knowledge_graph() -> None:
         for n in sorted(nodes, key=lambda x: str(x.get("name") or x.get("file_name") or x.get("id", "")).lower()):
             nid = str(n.get("id") or n.get("file_name") or n.get("name"))
             lbl = str(n.get("name") or n.get("file_name") or nid).split(":")[-1]
-            node_labels_dict[f"{lbl} ({n.get('entity_type', 'Entity')})"] = nid
+            ent_type = n.get("entity_type") or n.get("entity_label") or "Entity"
+            node_labels_dict[f"{lbl} ({ent_type})"] = nid
 
         query_node_id = st.query_params.get("selected_node")
         if query_node_id and any(str(n.get("id") or n.get("file_name") or n.get("name")) == query_node_id for n in nodes):
@@ -205,14 +264,45 @@ def render_knowledge_graph() -> None:
                 chosen_id = selected_node.get("id")
                 focus_node_id = chosen_id
             else:
-                chosen_id = list(node_labels_dict.values())[0]
-                focus_node_id = None  # Fit entire graph on initial load
+                lineage_root = st.session_state.get("lineage_root_id") or st.session_state.get("lineage_root_name")
+                matched_root = None
+                if lineage_root:
+                    matched_root = next((str(n.get("id")) for n in nodes if str(n.get("id")) == lineage_root or str(n.get("name")) == lineage_root or str(n.get("file_name")) == lineage_root), None)
+                chosen_id = matched_root or list(node_labels_dict.values())[0]
+                focus_node_id = None  # Fit entire graph on initial load or drilldown
 
         selected_node = next((n for n in nodes if str(n.get("id") or n.get("file_name") or n.get("name")) == chosen_id), nodes[0])
         connected_edges = [
             e for e in edges
             if str(e.get("source")) == chosen_id or str(e.get("target")) == chosen_id
         ]
+
+    # Active Lineage Trace notification banner with 1-click Exit button
+    if override_subgraph and not search_query:
+        root_name = st.session_state.get("lineage_root_name", "Selected Node")
+        col_lin_msg, col_lin_btn = st.columns([5.5, 1.5])
+        with col_lin_msg:
+            st.markdown(
+                f"""
+                <div style="background:#EFF6FF; border:1px solid #93C5FD; border-radius:10px; padding:0.45rem 0.85rem; margin-bottom:0.55rem; display:flex; align-items:center; gap:0.55rem;">
+                    <span style="font-size:1.1rem; color:#2563EB;">⚡</span>
+                    <div>
+                        <span style="font-size:0.83rem; color:#1E40AF; font-weight:700;">Data Lineage View:</span>
+                        <span style="font-size:0.83rem; color:#1D4ED8;"> Showing end-to-end data flow for <b>{html.escape(root_name)}</b> ({len(nodes)} nodes, {len(edges)} relationships)</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_lin_btn:
+            if st.button("✖ Exit Lineage", use_container_width=True, help="Exit lineage trace and return to full graph"):
+                st.session_state.pop("graph_override_subgraph", None)
+                st.session_state.pop("lineage_root_name", None)
+                st.session_state.pop("lineage_root_id", None)
+                if "selected_node" in st.query_params:
+                    del st.query_params["selected_node"]
+                st.session_state.pop("canvas_node_inspect_select", None)
+                st.rerun()
 
     # Layout: Graph Canvas on Left (67%), Node Details on Right (33%)
     col_canvas, col_details = st.columns([67, 33], gap="medium")
@@ -277,23 +367,27 @@ def render_knowledge_graph() -> None:
         render_node_details_panel(selected_node, connected_edges=connected_edges)
 
         if selected_node:
-            node_name = selected_node.get("name") or selected_node.get("file_name") or ""
-            if node_name:
+            node_id = str(selected_node.get("id") or "")
+            node_name = str(selected_node.get("name") or selected_node.get("file_name") or node_id or "")
+            if node_name or node_id:
                 st.markdown("<div style='margin-top: 0.35rem;'></div>", unsafe_allow_html=True)
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     if st.button("⚡ Trace Lineage", use_container_width=True, key="btn_trace_lineage"):
-                        lineage_graph = GraphService.trace_lineage(node_name)
+                        with st.spinner(f"Drilling down lineage for {node_name}..."):
+                            lineage_graph = GraphService.trace_lineage(node_name, node_id=node_id)
                         if lineage_graph.get("nodes"):
                             st.session_state["graph_override_subgraph"] = lineage_graph
+                            st.session_state["lineage_root_name"] = node_name
+                            st.session_state["lineage_root_id"] = node_id or node_name
+                            st.session_state.pop("canvas_node_inspect_select", None)
+                            if "selected_node" in st.query_params:
+                                del st.query_params["selected_node"]
                             st.rerun()
                         else:
-                            st.info("No extended lineage edges found.")
+                            st.info(f"No extended lineage edges found for '{node_name}'.")
                 with col_b2:
                     if st.button("💬 Ask Agent", use_container_width=True, key="btn_ask_agent"):
                         st.session_state["pending_investigation_query"] = f"Explain the dependencies and business logic associated with graph node {node_name}"
                         st.session_state["navigate_to_page"] = "Investigation Agent"
                         st.rerun()
-
-
-
