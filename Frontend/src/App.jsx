@@ -9,10 +9,13 @@ import DashboardView from './views/DashboardView';
 import './App.css';
 
 export default function App() {
-  const [activeView, setActiveView] = useState('sources');
-  const [displayedView, setDisplayedView] = useState('sources');
+  // Default landing view is Investigation Agent, matching Streamlit
+  const [activeView, setActiveView] = useState('investigation');
+  const [displayedView, setDisplayedView] = useState('investigation');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeInvestigationSample, setActiveInvestigationSample] = useState(null);
+  const [pendingInvestigationQuery, setPendingInvestigationQuery] = useState(null);
+  const [activeTask, setActiveTask] = useState(null);
 
   const handleViewChange = (newView) => {
     if (newView === activeView || isTransitioning) return;
@@ -25,28 +28,42 @@ export default function App() {
       setTimeout(() => {
         setIsTransitioning(false);
       }, 40);
-    }, 220);
+    }, 200);
   };
 
-  const handleNavigateToInvestigate = (filename) => {
+  const handleNavigateToInvestigate = (queryOrFilename) => {
+    if (typeof queryOrFilename === 'string') {
+      setPendingInvestigationQuery(queryOrFilename);
+    }
     handleViewChange('investigation');
   };
 
   return (
     <div className="app-shell-layout">
-      {/* Left Sidebar matching screenshot */}
-      <Sidebar activeView={activeView} onViewChange={handleViewChange} />
+      {/* Left Navigation Sidebar matching Streamlit */}
+      <Sidebar 
+        activeView={activeView} 
+        onViewChange={handleViewChange} 
+        activeTask={activeTask}
+      />
 
-      {/* Main Content Area */}
+      {/* Main Workbench Area */}
       <div className="app-main-area">
         <TopBar />
         <main className="app-content-container">
           <div className={`page-transition-wrapper ${isTransitioning ? 'page-transition-exiting' : 'page-transition-entering'}`}>
-            {displayedView === 'sources' && (
-              <SourceExplorerView onNavigateToInvestigate={handleNavigateToInvestigate} />
-            )}
             {displayedView === 'investigation' && (
-              <InvestigationView initialSample={activeInvestigationSample} />
+              <InvestigationView 
+                initialSample={activeInvestigationSample}
+                initialQuery={pendingInvestigationQuery}
+                onNavigateToGraph={() => handleViewChange('graph')}
+                onNavigateToSource={() => handleViewChange('sources')}
+              />
+            )}
+            {displayedView === 'sources' && (
+              <SourceExplorerView 
+                onNavigateToInvestigate={handleNavigateToInvestigate} 
+              />
             )}
             {displayedView === 'pipeline' && (
               <PipelineView />
@@ -55,7 +72,10 @@ export default function App() {
               <KnowledgeGraphView />
             )}
             {displayedView === 'dashboard' && (
-              <DashboardView onNavigate={handleViewChange} onLaunchQuery={handleNavigateToInvestigate} />
+              <DashboardView 
+                onNavigate={handleViewChange} 
+                onLaunchQuery={handleNavigateToInvestigate} 
+              />
             )}
           </div>
         </main>

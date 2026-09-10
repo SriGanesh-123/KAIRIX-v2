@@ -1,16 +1,19 @@
 import React from 'react';
 import { 
+  Sparkles, 
   FileCode, 
-  Search, 
   GitMerge, 
   Network,
-  Database,
-  Radio,
-  Cpu,
-  Sparkles
+  Activity,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 
-export default function Sidebar({ activeView, onViewChange }) {
+export default function Sidebar({ 
+  activeView, 
+  onViewChange,
+  activeTask = null, // { type: 'investigation' | 'extraction', status: 'running' | 'complete', title: '' }
+}) {
   const navItems = [
     { id: 'investigation', label: 'Investigation Agent' },
     { id: 'sources', label: 'Source Explorer' },
@@ -20,8 +23,8 @@ export default function Sidebar({ activeView, onViewChange }) {
 
   return (
     <aside className="app-sidebar">
-      {/* Brand Header */}
-      <div className="sidebar-brand" onClick={() => onViewChange('sources')}>
+      {/* Brand Header with Official Logo pinned to top-left */}
+      <div className="sidebar-brand" onClick={() => onViewChange('investigation')} style={{ cursor: 'pointer' }}>
         <div className="sidebar-logo-box">
           <img 
             src="/kairix_emblem_transparent.png" 
@@ -36,7 +39,7 @@ export default function Sidebar({ activeView, onViewChange }) {
         </div>
       </div>
 
-      {/* Navigation Buttons List */}
+      {/* Main Navigation (4 Options Only) */}
       <nav className="sidebar-nav">
         {navItems.map((item) => {
           const isActive = activeView === item.id;
@@ -52,19 +55,55 @@ export default function Sidebar({ activeView, onViewChange }) {
         })}
       </nav>
 
+      {/* Active Background Task Toast Notification matching Streamlit */}
+      {activeTask && (
+        <div className={`sidebar-task-banner ${activeTask.status}`}>
+          <div className="task-banner-header">
+            {activeTask.status === 'running' ? (
+              <>
+                <span className="pulse-dot-green" />
+                <span className="task-status-text">
+                  {activeTask.type === 'investigation' ? 'AI Investigation Running...' : 'AST Extraction Running...'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>✨</span>
+                <span className="task-status-text">
+                  {activeTask.type === 'investigation' ? 'Answer Ready!' : 'Extraction Ready!'}
+                </span>
+              </>
+            )}
+          </div>
+          {activeTask.title && (
+            <div className="task-snippet-text font-mono">
+              "{activeTask.title.slice(0, 32)}..."
+            </div>
+          )}
+          {activeTask.status === 'complete' && activeView !== 'investigation' && (
+            <button 
+              className="btn-task-action"
+              onClick={() => onViewChange('investigation')}
+            >
+              View Result →
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Divider */}
       <div className="sidebar-divider" />
 
-      {/* Backend Services Status Card */}
+      {/* Backend Services Status Card matching Streamlit */}
       <div className="sidebar-footer">
         <div className="services-section-title">BACKEND SERVICES</div>
-        <div className="services-card">
+        <div className="services-card neo-inset">
           <div className="service-row">
             <div className="service-name">
               <span className="status-indicator-dot dot-green" />
               <span>Neo4j Graph</span>
             </div>
-            <span className="service-latency font-mono">528.9ms</span>
+            <span className="service-latency font-mono">12.4ms</span>
           </div>
 
           <div className="service-row">
@@ -72,7 +111,7 @@ export default function Sidebar({ activeView, onViewChange }) {
               <span className="status-indicator-dot dot-green" />
               <span>Pinecone DB</span>
             </div>
-            <span className="service-latency font-mono">693.5ms</span>
+            <span className="service-latency font-mono">18.2ms</span>
           </div>
 
           <div className="service-row">
@@ -80,7 +119,7 @@ export default function Sidebar({ activeView, onViewChange }) {
               <span className="status-indicator-dot dot-green" />
               <span>LLM Provider</span>
             </div>
-            <span className="service-latency font-mono font-bold">NIM</span>
+            <span className="service-latency font-mono font-bold text-cyan">NIM</span>
           </div>
         </div>
 
