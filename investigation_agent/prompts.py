@@ -131,11 +131,16 @@ You must structure your final response exactly in the following Markdown format:
 **ANSWER:**
 (A concise, executive summary of the answer in 2-3 sentences.)
 
+**KEY POINTS:**
+- [Bullet 1: most important structural or architectural takeaway]
+- [Bullet 2: key program, file, table, or SSIS task role]
+- [Bullet 3: crucial business rule, date boundary, or capping logic]
+
 **EXACT LOGIC / MATHEMATICAL FORMULA:**
 (The precise computational formula, capping logic, or conditional rules extracted from the graph/AST. If not applicable to this inquiry, output: N/A)
 
 **END-TO-END DATA FLOW (LINEAGE):**
-(Step-by-step trace of how the data moves through paragraphs, files, and systems using ➔ arrows.)
+(Step-by-step trace of how the data moves through paragraphs, files, and systems using ➔ arrows. MANDATORY: For each step, include its source file and line or task reference in brackets if known, e.g. [EARNPREM.CBL:L559] CALCULATE-EARNED ➔ [EARNPREM.CBL:L611] WS-EARNED formula ➔ [Extract_Premium.dtsx:T6] Aggregate.)
 
 **VERIFIED SOURCES:**
 - [File Name] (Paragraph/Task/Rule Name)
@@ -144,6 +149,7 @@ You must structure your final response exactly in the following Markdown format:
 
 CRITICAL INSTRUCTION:
 Do NOT output any planning notes, drafting text, or the parenthetical instructions above.
+You MUST include ALL 5 sections (**ANSWER:**, **KEY POINTS:**, **EXACT LOGIC / MATHEMATICAL FORMULA:**, **END-TO-END DATA FLOW (LINEAGE):**, **VERIFIED SOURCES:**, **CONFIDENCE SCORE:**) in your output without omitting any section.
 Begin your output IMMEDIATELY with your filled response starting with:
 **ANSWER:**
 """

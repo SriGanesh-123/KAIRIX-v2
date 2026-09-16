@@ -554,7 +554,7 @@ class InvestigationAgent:
             "Synthesize a factual, structured technical answer strictly using the retrieved evidence. "
             "Do NOT write any preamble, internal thinking, or reasoning steps. "
             "Start your response IMMEDIATELY with the '**ANSWER:**' header. "
-            "Follow the required output section headers strictly: **ANSWER:**, **EXACT LOGIC / MATHEMATICAL FORMULA:**, **END-TO-END DATA FLOW (LINEAGE):**, **VERIFIED SOURCES:**, **CONFIDENCE SCORE:**."
+            "Follow the required output section headers strictly: **ANSWER:**, **KEY POINTS:**, **EXACT LOGIC / MATHEMATICAL FORMULA:**, **END-TO-END DATA FLOW (LINEAGE):**, **VERIFIED SOURCES:**, **CONFIDENCE SCORE:**."
         )
 
         try:

@@ -1204,7 +1204,7 @@ div[class*="st-key-tpl_preset_"] > button:hover * {
   border: 1px solid #BFDBFE;
 }
 
-/* Visual Data Flow Pipeline */
+/* Visual Data Flow Pipeline — Legacy Fallback */
 .dataflow-container {
   display: flex;
   flex-wrap: wrap;
@@ -1241,6 +1241,302 @@ div[class*="st-key-tpl_preset_"] > button:hover * {
   font-size: 1.15rem;
   font-weight: 800;
   user-select: none;
+}
+
+/* ==========================================================================
+   KAIRIX Premium Lineage Pipeline Stepper
+   ========================================================================== */
+.df-pipeline-wrapper {
+  background: var(--neo-surface-inset);
+  border: 1px solid var(--neo-border);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: inset 1px 1px 5px rgba(166, 180, 200, 0.25), inset -1px -1px 5px rgba(255, 255, 255, 0.8);
+}
+
+.df-pipeline-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #CBD5E1;
+}
+
+.df-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.df-pulse-indicator {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  display: inline-block;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.6); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+.df-toolbar-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--neo-text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.df-hops-counter {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  padding: 0.25rem 0.65rem;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.df-pipeline-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.df-step-item {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.df-step-box {
+  background: var(--neo-surface-card);
+  border: 1px solid var(--neo-border);
+  border-radius: 12px;
+  padding: 0.95rem 1.25rem;
+  box-shadow: 3px 3px 8px rgba(166, 180, 200, 0.28), -3px -3px 8px rgba(255, 255, 255, 0.95);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.df-step-box:hover {
+  border-color: #93C5FD;
+  transform: translateX(4px);
+  box-shadow: 5px 5px 14px rgba(166, 180, 200, 0.38), -4px -4px 10px rgba(255, 255, 255, 1);
+}
+
+.df-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.df-step-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+/* Provenance File & Line Chip */
+.df-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 1px 1px 3px rgba(166, 180, 200, 0.2);
+  transition: all 0.15s ease;
+}
+
+.df-chip-cobol {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  color: #1D4ED8;
+}
+
+.df-chip-ssis {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  color: #15803D;
+}
+
+.df-chip-sql {
+  background: #FAF5FF;
+  border: 1px solid #E9D5FF;
+  color: #7E22CE;
+}
+
+.df-chip-default {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #475569;
+}
+
+.df-chip-icon {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.df-chip-file {
+  font-weight: 700;
+}
+
+.df-chip-sep {
+  color: #94A3B8;
+  font-weight: 400;
+  margin: 0 0.05rem;
+}
+
+.df-chip-line {
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.df-step-number-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.df-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  color: #FFFFFF;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.35);
+}
+
+.df-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.df-badge-cobol {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FFEDD5;
+}
+
+.df-badge-ssis {
+  background: #F0FDF4;
+  color: #15803D;
+  border: 1px solid #DCFCE7;
+}
+
+.df-badge-db {
+  background: #FAF5FF;
+  color: #7E22CE;
+  border: 1px solid #F3E8FF;
+}
+
+.df-badge-calc {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #DBEAFE;
+}
+
+.df-badge-rule {
+  background: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.df-badge-step {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #E2E8F0;
+}
+
+.df-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.df-card-title {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--neo-text-primary);
+  line-height: 1.5;
+}
+
+.df-card-title code, .df-card-desc code {
+  background: #EFF6FF;
+  color: #1E40AF;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid #DBEAFE;
+}
+
+.df-card-desc {
+  font-size: 0.84rem;
+  color: var(--neo-text-muted);
+  line-height: 1.45;
+  background: #F8FAFC;
+  border-left: 3px solid #94A3B8;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0 6px 6px 0;
+  margin-top: 0.25rem;
+}
+
+.df-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  position: relative;
+}
+
+.df-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: linear-gradient(180deg, #93C5FD, #3B82F6);
+  transform: translateX(-50%);
+}
+
+.df-arrow-chevron {
+  position: relative;
+  z-index: 2;
+  background: #FFFFFF;
+  border: 1px solid #93C5FD;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563EB;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
 }
 
 /* Formula & Calculation Rules */
