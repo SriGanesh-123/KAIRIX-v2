@@ -19,12 +19,14 @@ load_dotenv(override=False)
 
 COLLECTION_CHUNKS = "kairix_chunks"
 COLLECTION_SUMMARIES = "kairix_summaries"
-_DEFAULT_VECTOR_DIM = 384
+_DEFAULT_VECTOR_DIM = 2048
+_DEFAULT_INDEX_NAME = "kairix-2048"
 
 
 class PineconeWrapper:
     """
     Thin wrapper around Pinecone client for KAIRIX.
+    Supports 2048-dimensional embeddings and cosine similarity.
     Matches QdrantWrapper interface for drop-in compatibility.
     """
 
@@ -35,8 +37,20 @@ class PineconeWrapper:
         vector_dim: int = _DEFAULT_VECTOR_DIM,
         silent: bool = False,
     ):
-        self.api_key = api_key or os.getenv("PINECONE_API_KEY", "pcsk_5jR55M_3tHUKV3cR1uyptCj57DFocet6p7vwAjJc7ABczmkGjM2JL5M5w25XTeDuutEr4V")
-        self.index_name = index_name or os.getenv("PINECONE_INDEX_NAME", "kairix-index")
+        self.api_key = (
+            api_key
+            or os.getenv("PINECONE_API_KEY", "")
+        )
+        self.index_name = (
+            index_name
+            or os.getenv("PINECONE_INDEX_NAME_2048")
+            or os.getenv("PINECONE_INDEX_NAME")
+            or _DEFAULT_INDEX_NAME
+        )
+        # If still set to old 384 index, point to 2048 index
+        if self.index_name == "kairix-index" and vector_dim == 2048:
+            self.index_name = _DEFAULT_INDEX_NAME
+
         self.vector_dim = vector_dim
         self.silent = silent
 
@@ -48,7 +62,7 @@ class PineconeWrapper:
         self._index = self._pc.Index(self.index_name)
 
         if not self.silent:
-            print(f"[Pinecone] Connected to index '{self.index_name}'")
+            print(f"[Pinecone] Connected to index '{self.index_name}' (dim={self.vector_dim})")
 
     def _ensure_index(self) -> None:
         """Ensure index exists; create serverless if missing."""
@@ -63,12 +77,20 @@ class PineconeWrapper:
             if not self.silent:
                 print(f"[Pinecone] Created serverless index '{self.index_name}'")
 
+    def clear_index(self) -> None:
+        """Completely wipe all data in index namespaces."""
+        self.ensure_collections(recreate=True)
+
     def ensure_collections(self, recreate: bool = False) -> None:
         """In Pinecone, namespaces are created on upsert. If recreate, delete all in namespace."""
         if recreate:
             try:
                 self._index.delete(delete_all=True, namespace=COLLECTION_CHUNKS)
                 self._index.delete(delete_all=True, namespace=COLLECTION_SUMMARIES)
+                try:
+                    self._index.delete(delete_all=True)
+                except Exception:
+                    pass
                 if not self.silent:
                     print("[Pinecone] Cleared namespaces for recreation.")
             except Exception as e:
@@ -119,9 +141,10 @@ class PineconeWrapper:
                     elif v is not None:
                         cleaned_meta[k] = str(v)
 
+                safe_id = bid if all(c.isalnum() or c in "_-." for c in str(bid)) else str(uuid.uuid5(uuid.NAMESPACE_DNS, str(bid)))
                 records.append(
                     {
-                        "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, bid)),
+                        "id": safe_id,
                         "values": vec,
                         "metadata": cleaned_meta,
                     }

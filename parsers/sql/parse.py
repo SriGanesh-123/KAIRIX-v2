@@ -1765,7 +1765,7 @@ def print_result(
 def main():
 
     sql_files = sorted(
-        INPUT_FOLDER.glob("*.sql")
+        {p for p in INPUT_FOLDER.rglob("*") if p.is_file() and p.suffix.lower() == ".sql"}
     )
 
     print("=" * 72)

@@ -212,7 +212,7 @@ JSON Schema:
         models_to_try = [self.model]
         # Include known healthy fallback models if using NVIDIA NIM
         if "nvidia" in self.base_url or "nim" in self.base_url:
-            for fb in ["nvidia/nemotron-3-nano-30b-a3b", "nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-super-120b-a12b"]:
+            for fb in ["nvidia/nemotron-3-super-120b-a12b", "nvidia/nemotron-3.5-lightning-30b-a3b"]:
                 if fb not in models_to_try:
                     models_to_try.append(fb)
 

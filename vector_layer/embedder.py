@@ -1,95 +1,80 @@
 """
-Embedder — wraps sentence-transformers all-MiniLM-L6-v2.
+Embedder — wraps NVIDIA NIM llama-nemotron-embed-vl-1b-v2 (2048 Dimensions).
+Replaces previous local sentence-transformers (all-MiniLM-L6-v2, 384-dim).
 
-Lazy-loads the model on first call so import is fast.
-Vector dimension: 384.
+Configuration:
+- Model: nvidia/llama-nemotron-embed-vl-1b-v2
+- Vector dimension: 2048
+- High-performance, low-latency enterprise embedding API.
 """
 from __future__ import annotations
 
 import os
 from typing import List, Optional
 
-import warnings
-warnings.filterwarnings("ignore")
-
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-
 from dotenv import load_dotenv
+
+from .nvidia_embedder import NvidiaNemotronEmbedder
 
 load_dotenv(override=False)
 
-_VECTOR_DIM = 384
+_DEFAULT_MODEL = "nvidia/llama-nemotron-embed-vl-1b-v2"
+_DEFAULT_DIM = 2048
 
 
 class Embedder:
     """
-    Thin wrapper around sentence-transformers for local embedding.
-
-    Usage:
-        embedder = Embedder()
-        vectors = embedder.embed(["text one", "text two"])
-        # returns List[List[float]], each of length 384
+    Enterprise embedding provider for KAIRIX Vector Layer.
+    Uses NVIDIA NIM 2048-dimensional passage and query embeddings.
     """
 
-    def __init__(self, model_name: Optional[str] = None, silent: bool = False):
-        self.model_name = model_name or os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    def __init__(
+        self,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        silent: bool = False,
+        **kwargs,
+    ):
+        self.model_name = (
+            model_name
+            or os.getenv("NVIDIA_EMBEDDING_MODEL")
+            or os.getenv("EMBEDDING_MODEL")
+            or _DEFAULT_MODEL
+        )
         self.silent = silent
-        self._model = None  # lazy load
+        self._embedder = NvidiaNemotronEmbedder(
+            api_key=api_key,
+            model=self.model_name,
+            vector_dim=_DEFAULT_DIM,
+            silent=self.silent,
+        )
 
     @property
     def vector_dim(self) -> int:
-        return _VECTOR_DIM
+        return self._embedder.vector_dim
 
-    def _load(self) -> None:
-        if self._model is None:
-            if not self.silent:
-                print(f"[Embedder] Loading model '{self.model_name}' (first-time download ~90MB)...")
-            import logging
-            import warnings
-            warnings.filterwarnings("ignore")
-            logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-            logging.getLogger("transformers").setLevel(logging.ERROR)
-            logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-            try:
-                from huggingface_hub.utils import disable_progress_bars
-                disable_progress_bars()
-            except ImportError:
-                pass
-            from sentence_transformers import SentenceTransformer
-            try:
-                self._model = SentenceTransformer(self.model_name, local_files_only=True)
-            except Exception:
-                self._model = SentenceTransformer(self.model_name)
-            if not self.silent:
-                print(f"[Embedder] Model ready. Vector dim: {_VECTOR_DIM}")
-
-
-    def embed(self, texts: List[str], batch_size: int = 64) -> List[List[float]]:
+    def embed(self, texts: List[str], batch_size: int = 16) -> List[List[float]]:
         """
-        Embed a list of texts.
-
-        Args:
-            texts: Strings to embed.
-            batch_size: Inference batch size.
-
-        Returns:
-            List of float vectors, one per input text.
+        Embeds a list of texts (passages) using the 2048-dim model.
         """
         if not texts:
             return []
-        self._load()
-        vectors = self._model.encode(
-            texts,
-            batch_size=batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )
-        return vectors.tolist()
+        return self._embedder.embed_passages(texts, batch_size=batch_size)
+
+    def embed_passages(self, texts: List[str], batch_size: int = 16) -> List[List[float]]:
+        """
+        Explicit passage embedding for source chunks or summary documents.
+        """
+        return self.embed(texts, batch_size=batch_size)
 
     def embed_one(self, text: str) -> List[float]:
-        """Embed a single text string."""
-        return self.embed([text])[0]
+        """
+        Embeds a single query or text string using query input type.
+        """
+        return self._embedder.embed_query(text)
+
+    def embed_query(self, query: str) -> List[float]:
+        """
+        Embeds a single search query using query input type.
+        """
+        return self._embedder.embed_query(query)

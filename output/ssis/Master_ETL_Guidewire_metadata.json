@@ -25,7 +25,8 @@
       "task_name": "SQL - Log Master Start",
       "task_type": "Microsoft.ExecuteSQLTask",
       "creation_name": "Microsoft.ExecuteSQLTask",
-      "ref_id": "Package\\SQL_MasterStart"
+      "ref_id": "Package\\SQL_MasterStart",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -33,7 +34,8 @@
       "task_name": "Run Account",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Account"
+      "ref_id": "Package\\EPT_Account",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -41,7 +43,8 @@
       "task_name": "Run Producer",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Producer"
+      "ref_id": "Package\\EPT_Producer",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -49,7 +52,8 @@
       "task_name": "Run Policy",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Policy"
+      "ref_id": "Package\\EPT_Policy",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -57,7 +61,8 @@
       "task_name": "Run Job",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Job"
+      "ref_id": "Package\\EPT_Job",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -65,7 +70,8 @@
       "task_name": "Run Claims",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Claims"
+      "ref_id": "Package\\EPT_Claims",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -73,7 +79,8 @@
       "task_name": "Run PolicyPeriod",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_PolicyPeriod"
+      "ref_id": "Package\\EPT_PolicyPeriod",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -81,7 +88,8 @@
       "task_name": "Run Location",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Location"
+      "ref_id": "Package\\EPT_Location",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -89,7 +97,8 @@
       "task_name": "Run Coverage",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Coverage"
+      "ref_id": "Package\\EPT_Coverage",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -97,7 +106,8 @@
       "task_name": "Run Premium",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_Premium"
+      "ref_id": "Package\\EPT_Premium",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -105,7 +115,8 @@
       "task_name": "Run KPIAggregates",
       "task_type": "Microsoft.ExecutePackageTask",
       "creation_name": "Microsoft.ExecutePackageTask",
-      "ref_id": "Package\\EPT_KPIAggregates"
+      "ref_id": "Package\\EPT_KPIAggregates",
+      "parent_container": null
     },
     {
       "package_name": "Master_ETL_Guidewire",
@@ -113,7 +124,17 @@
       "task_name": "SQL - Log Master End",
       "task_type": "Microsoft.ExecuteSQLTask",
       "creation_name": "Microsoft.ExecuteSQLTask",
-      "ref_id": "Package\\SQL_MasterEnd"
+      "ref_id": "Package\\SQL_MasterEnd",
+      "parent_container": null
+    },
+    {
+      "package_name": "Master_ETL_Guidewire",
+      "task_id": "{68F8D1D3-D7CE-4A84-872A-65225052CC86}",
+      "task_name": "SQL - Log Master Failure",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\EH_MasterFail",
+      "parent_container": "OnError"
     }
   ],
   "components": [],

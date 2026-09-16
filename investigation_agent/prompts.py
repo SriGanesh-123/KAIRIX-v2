@@ -28,18 +28,30 @@ GRAPH SCHEMA:
 
 Node types:
 - :Artifact {{id, file_name, source_type, purpose, business_domain, total_lines}}
-- :Entity {{id, name, entity_type, entity_label, source_file, data_type, description}}
+- :Entity {{id, name, entity_type, entity_label, source_file, data_type, description}} (entity_types: Table, Column, File, Record, Variable, Task, Storage, Program)
 - :BusinessRule {{id, description, source_file}}
 - :Transformation {{id, rule_id, rule_type, description, expression, source_file}}
+- :CodeBlock {{id, name, start_line, end_line, source_file}} (COBOL Paragraphs)
+- :Loop {{id, condition, text, start_line, end_line, source_file}} (PERFORM UNTIL / VARYING loops)
+- :Branch {{id, condition, text, start_line, end_line, source_file}} (IF branching conditions)
+- :Statement {{id, statement_type, expression, start_line, end_line, source_file}} (COMPUTE, READ, WRITE)
 
-Key relationships:
-- (:Artifact)-[:CONTAINS]->(:Entity) — an artifact file contains entities
-- (:Artifact)-[:HAS_RULE]->(:BusinessRule) — an artifact has business rules
+4-Tier Hierarchical Relationships:
+- (:Artifact)-[:ENTRY_POINT]->(:CodeBlock) — main execution entry point
+- (:Artifact)-[:DECLARES_FILE]->(:Entity {{entity_type: 'File'}}) — files declared in program
+- (:Artifact)-[:HAS_STORAGE]->(:Entity {{entity_type: 'Storage'}}) — working storage section
+- (:Entity {{entity_type: 'File'}})-[:HAS_RECORD]->(:Entity {{entity_type: 'Record'}}) — record layout
+- (:Entity {{entity_type: 'Record'}})-[:HAS_FIELD]->(:Entity {{entity_type: 'Variable'}}) — fields in record
+- (:CodeBlock)-[:CALLS_BLOCK]->(:CodeBlock) — execution call-graph between paragraphs
+- (:CodeBlock)-[:CONTAINS_LOOP]->(:Loop) — loops inside a paragraph
+- (:CodeBlock)-[:CONTAINS_BRANCH]->(:Branch) — conditional branches inside a paragraph
+- (:CodeBlock)-[:CONTAINS_STATEMENT]->(:Statement) — compute / read / write statements inside a paragraph
+- (:Entity {{entity_type: 'Task'}})-[:PRECEDES]->(:Entity {{entity_type: 'Task'}}) — SSIS task execution flow
+- (:Entity)-[:CONTAINS_CHILD_TASK]->(:Entity) — SSIS container task hierarchy
+- (:Artifact)-[:HAS_RULE]->(:BusinessRule) — business rules
 - (:Artifact)-[:HAS_TRANSFORMATION]->(:Transformation) — transformations
-- (:Entity)-[:READS_FROM]->(:Entity) — data read lineage (edge has source_file property)
-- (:Entity)-[:WRITES_TO]->(:Entity) — data write lineage (edge has source_file property)
-- (:Entity)-[:CONTAINS]->(:Entity) — hierarchical (e.g. table contains columns)
-- (:Entity)-[:USES]->(:Entity) — entity uses another (edge has source_file property)
+- (:Entity)-[:READS_FROM]->(:Entity) — data read lineage
+- (:Entity)-[:WRITES_TO]->(:Entity) — data write lineage
 
 IMPORTANT: Lineage edges (READS_FROM, WRITES_TO, USES, etc.) are between Entity nodes,
 NOT from Artifact nodes. They have a `source_file` property on the EDGE that indicates
@@ -79,58 +91,61 @@ Return ONLY the Cypher query, no explanation, no markdown.
 """
 
 # ── Answer Synthesis ───────────────────────────────────────────────────────────
-ANSWER_SYNTHESIS_PROMPT = """You are a senior insurance legacy systems reverse-engineering specialist.
-You have been asked a question and retrieved evidence from a Neo4j knowledge graph and Pinecone vector database.
+ANSWER_SYNTHESIS_PROMPT = """[ROLE AND PERSONA]
+You are the KAIREX Investigation & Synthesis Agent, an elite Enterprise Legacy Code Architect. You specialize in analyzing complex legacy systems (COBOL, SSIS, SQL) and providing deterministic, 100% mathematically and structurally accurate answers. 
+You are powered by a Tri-Hybrid GraphRAG engine combining a Neo4j Knowledge Graph (for AST and Lineage) and a Pinecone Vector Database (for semantic code chunks).
 
-Question:
+[CORE OBJECTIVE]
+Your goal is to answer user queries regarding calculation logic, data lineage, and impact analysis by synthesizing evidence exclusively retrieved from your attached tools. 
+YOU MUST NEVER GUESS, HALLUCINATE, OR INVENT VARIABLES, FORMULAS, OR FILE NAMES. 
+
+[AVAILABLE TOOLS & WORKFLOW]
+You have access to evidence retrieved from:
+1. `search_pinecone_vectors(query)`: Retrieves exact source code chunks, paragraph definitions, and architectural summaries based on semantic relevance.
+2. `execute_cypher_neo4j(query_type, anchor_node)`: Retrieves strict 4-Tier AST structural data, mathematical transformations, business rules, and bidirectional end-to-end data lineage.
+
+Workflow (ReAct):
+- THINK: Determine if the user's intent is Calculation, Lineage, or Impact Analysis.
+- ACT: Examine Neo4j structural facts and rules. Examine Pinecone raw code context.
+- OBSERVE: Cross-correlate the Graph facts (e.g., WS-EARNED formula, transformations) with the Vector chunks (e.g., CALCULATE-EARNED paragraph).
+- SYNTHESIZE: Generate the final response using ONLY the gathered evidence. If the evidence is insufficient to answer the question, state: "Insufficient evidence in the current knowledge base."
+
+[STRICT SYNTHESIS CONSTRAINTS]
+1. ZERO HALLUCINATION: Every variable name, mathematical operator, and rule MUST exist in the retrieved tool context. 
+2. CROSS-BOUNDARY CORRELATION: If a COBOL variable (e.g., WS-TERM-DAYS, WS-EARNED) flows into an SSIS package (e.g., Extract_Premium.dtsx) or SQL reporting layer, you must explicitly state this transition.
+3. LINE-ANCHORED CITATIONS: Every claim must be backed by a source file name, paragraph/task name, and line number where available.
+4. CRITICAL: Do NOT output any internal chain-of-thought preamble, reasoning steps, or "Here's a thinking process:". Start your output IMMEDIATELY with the "**ANSWER:**" section header.
+
+[USER QUERY]
 {question}
 
-Graph Evidence (Neo4j results):
+[GRAPH EVIDENCE (Neo4j results)]:
 {graph_evidence}
 
-Semantic Evidence (relevant source code / summaries):
+[SEMANTIC CODE EVIDENCE (Pinecone chunks & summaries)]:
 {vector_evidence}
 
-Synthesize a concise, structured, user-facing response strictly following the section headers below.
+[OUTPUT FORMAT]
+You must structure your final response exactly in the following Markdown format:
 
-RULES:
-1. Be concise, direct, and factual. Do NOT include conversation intros, outros, or internal debug details.
-2. Distinguish:
-   - Direct source-code evidence
-   - Graph-derived relationships
-   - Vector/semantic summary evidence
-   - Inferences (explicitly label if an element is inferred)
-3. Never present an inference as direct source-code evidence.
-4. If evidence is insufficient, state that clearly under GAPS.
-5. FORMULA: Only include this section when the question involves a calculation or mathematical business logic.
-6. GAPS: Only include this section when important evidence is missing, incomplete, or unverified.
+**ANSWER:**
+(A concise, executive summary of the answer in 2-3 sentences.)
 
-REQUIRED OUTPUT FORMAT (Use these exact capitalized section headers):
+**EXACT LOGIC / MATHEMATICAL FORMULA:**
+(The precise computational formula, capping logic, or conditional rules extracted from the graph/AST. If not applicable to this inquiry, output: N/A)
 
-ANSWER
-[Direct, concise answer explaining the core facts in 1-3 short paragraphs or numbered points.]
+**END-TO-END DATA FLOW (LINEAGE):**
+(Step-by-step trace of how the data moves through paragraphs, files, and systems using ➔ arrows.)
 
-KEY POINTS
-- [Bullet 1: most important fact]
-- [Bullet 2: key program/table role]
-- [Bullet 3: crucial business rule or behavior]
+**VERIFIED SOURCES:**
+- [File Name] (Paragraph/Task/Rule Name)
 
-DATA FLOW
-[Short readable data flow, e.g. Policy/Coverage Data → PREMCALC.CBL → Written Premium → EARNPREM.CBL → Earned / Unearned Premium]
+**CONFIDENCE SCORE:** [0-100%] (Based on evidence density)
 
-FORMULA
-[Only when applicable: exact formula or business calculation]
-
-SOURCES
-[List actual source files referenced, one per line or comma-separated]
-
-CONFIDENCE
-[High / Medium / Low — Percentage, e.g. High — 85%]
-
-GAPS
-[Only when applicable: missing tables, unverified constants, or unknown downstream consumers]
-
-Answer:
+CRITICAL INSTRUCTION:
+Do NOT output any planning notes, drafting text, or the parenthetical instructions above.
+Begin your output IMMEDIATELY with your filled response starting with:
+**ANSWER:**
 """
 
 # ── Cypher Repair (fallback) ───────────────────────────────────────────────────

@@ -135,16 +135,34 @@ def parse_package(root, namespace, file_name):
 # TASKS
 # ============================================================
 
+def _iter_all_executables(root, namespace):
+    """
+    Recursively discovers all Executables (Tasks, Containers, EventHandlers) in an SSIS package,
+    yielding (executable_element, parent_container_name).
+    Supports Sequence Containers, For Loop Containers, ForEach Loop Containers, and EventHandlers.
+    """
+    parent_map = {c: p for p in root.iter() for c in p}
+
+    for element in root.iter():
+        tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+        if tag == "Executable" and element is not root:
+            parent_container = None
+            curr = parent_map.get(element)
+            while curr is not None and curr is not root:
+                c_tag = curr.tag.split("}")[-1] if "}" in curr.tag else curr.tag
+                if c_tag in ("Executable", "EventHandler"):
+                    parent_container = get_attr(curr, "ObjectName") or get_attr(curr, "CreationName") or c_tag
+                    break
+                curr = parent_map.get(curr)
+
+            yield element, parent_container
+
+
 def parse_tasks(root, namespace, package_name):
 
     tasks = []
 
-    executables = find_child(root, namespace, "Executables")
-
-    if executables is None:
-        return tasks
-
-    for executable in find_children(executables, namespace, "Executable"):
+    for executable, parent_container in _iter_all_executables(root, namespace):
 
         task = {
             "package_name": package_name,
@@ -152,7 +170,8 @@ def parse_tasks(root, namespace, package_name):
             "task_name": get_attr(executable, "ObjectName"),
             "task_type": get_attr(executable, "ExecutableType"),
             "creation_name": get_attr(executable, "CreationName"),
-            "ref_id": get_attr(executable, "refId")
+            "ref_id": get_attr(executable, "refId"),
+            "parent_container": parent_container,
         }
 
         tasks.append(task)
@@ -199,18 +218,9 @@ def parse_components(
     relationships_output
 ):
 
-    executables = find_child(root, namespace, "Executables")
-
-    if executables is None:
-        return []
-
     component_counter = 1
 
-    for executable in find_children(
-        executables,
-        namespace,
-        "Executable"
-    ):
+    for executable, _parent_container in _iter_all_executables(root, namespace):
 
         task_name = get_attr(
             executable,
@@ -627,54 +637,39 @@ def parse_precedence(
 
     precedence = []
 
-    precedence_element = find_child(
-        root,
-        namespace,
-        "PrecedenceConstraints"
-    )
-
-    if precedence_element is None:
-        return precedence
-
-    for constraint in find_children(
-        precedence_element,
-        namespace,
-        "PrecedenceConstraint"
-    ):
-
-        precedence.append({
-
-            "package_name":
-                package_name,
-
-            "id":
-                get_attr(
-                    constraint,
-                    "DTSID"
-                ),
-
-            "from":
-                get_attr(
-                    constraint,
-                    "From"),
-
-            "to":
-                get_attr(
-                    constraint,
-                    "To"),
-
-            "evaluation_operation":
-                get_attr(
-                    constraint,
-                    "EvaluationOperation"
-                ),
-
-            "value":
-                get_attr(
-                    constraint,
-                    "Value"
-                )
-        })
+    # Recursively find all PrecedenceConstraint elements across root and all nested containers
+    for element in root.iter():
+        tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+        if tag == "PrecedenceConstraint":
+            precedence.append({
+                "package_name":
+                    package_name,
+                "id":
+                    get_attr(
+                        element,
+                        "DTSID"
+                    ),
+                "from":
+                    get_attr(
+                        element,
+                        "From"
+                    ),
+                "to":
+                    get_attr(
+                        element,
+                        "To"
+                    ),
+                "evaluation_operation":
+                    get_attr(
+                        element,
+                        "EvaluationOperation"
+                    ),
+                "value":
+                    get_attr(
+                        element,
+                        "Value"
+                    )
+            })
 
     return precedence
 
@@ -996,17 +991,10 @@ def main():
     # FIND DTSX FILES
     # --------------------------------------------------------
 
+    ssis_base = PROJECT_ROOT / "source" / "ssis"
     dtsx_files = sorted(
-
-        file_name
-
-        for file_name in os.listdir(
-            DTSX_DIR
-        )
-
-        if file_name.lower().endswith(
-            ".dtsx"
-        )
+        {p for p in ssis_base.rglob("*") if p.is_file() and p.suffix.lower() == ".dtsx"},
+        key=lambda p: p.name
     )
 
     print()
@@ -1014,8 +1002,8 @@ def main():
         f"DTSX files found: {len(dtsx_files)}"
     )
 
-    for file_name in dtsx_files:
-
+    for p in dtsx_files:
+        file_name = p.name
         print(
             f"  - {file_name}"
         )
@@ -1045,18 +1033,15 @@ def main():
     print("PARSING ALL PACKAGES")
     print("=" * 70)
 
-    for file_name in dtsx_files:
-
-        file_path = os.path.join(
-            DTSX_DIR,
-            file_name
-        )
+    for p in dtsx_files:
+        file_name = p.name
+        file_path = str(p)
 
         # One metadata object per DTSX package.
         metadata = {
             "metadata_version": "1.0",
             "source_type": "SSIS DTSX",
-            "source_directory": DTSX_DIR,
+            "source_directory": str(DTSX_DIR),
             "packages": [],
             "tasks": [],
             "components": [],

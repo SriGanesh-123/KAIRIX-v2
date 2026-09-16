@@ -353,12 +353,68 @@ def _iter_lines_with_offsets(source_text: str):
         offset += len(line)
 
 
+def strip_identification_area(line: str) -> str:
+    """
+    Strips sequence numbers (columns 1-6) and punch-card sequence / identification
+    numbers (columns 73-80) in standard fixed-format COBOL lines if present,
+    preventing sequence digits from polluting arithmetic formulas or statement conditions.
+    """
+    # 1. Strip fixed column 73+ if line is > 72 chars and ends with card id
+    if len(line) > 72:
+        tail = line[72:]
+        if re.search(r"\b\d{6,8}\b\.?$", tail.strip()):
+            has_dot = "." in tail
+            line = line[:72].rstrip()
+            if has_dot and not line.endswith("."):
+                line += "."
+        elif re.match(r"^[0-9\s]+$", tail):
+            line = line[:72].rstrip()
+        elif re.match(r"^[A-Z0-9\s]{1,8}\.?$", tail) and not any(
+            kw in tail.upper()
+            for kw in (
+                "THEN",
+                "ELSE",
+                "MOVE",
+                "PERFORM",
+                "COMPUTE",
+                "READ",
+                "WRITE",
+                "ADD",
+                "SUBTRACT",
+                "MULTIPLY",
+                "DIVIDE",
+            )
+        ):
+            has_dot = "." in tail
+            line = line[:72].rstrip()
+            if has_dot and not line.endswith("."):
+                line += "."
+
+    # 2. Strip trailing 6-8 digit sequence number right before period or end of line
+    # e.g., 'COMPUTE A = B + C 00045000.' -> 'COMPUTE A = B + C.'
+    line = re.sub(
+        r"\s+\d{6,8}(\s*\.)?$",
+        lambda m: "." if m.group(1) and "." in m.group(1) else "",
+        line,
+    )
+
+    # 3. Strip columns 1-6 if sequence digits (preserve char length with spaces)
+    if len(line) >= 6 and line[:6].isdigit():
+        line = " " * 6 + line[6:]
+
+    return line
+
+
 def _make_operation(
     source_text: str,
     start_char: int,
     end_char: int,
 ) -> dict[str, Any]:
-    raw = source_text[start_char:end_char].strip()
+    raw_lines = [
+        strip_identification_area(line)
+        for line in source_text[start_char:end_char].splitlines()
+    ]
+    raw = " ".join(clean_spaces(l) for l in raw_lines if l.strip())
 
     return {
         "text": clean_spaces(raw),
@@ -391,11 +447,11 @@ def _extract_statement_operations(
     - Paragraph labels such as OPEN-FILES. and CLOSE-FILES. are ignored.
     - END-IF, END-PERFORM, END-READ, etc. are never operations.
     - PERFORM paragraph calls are captured.
-    - PERFORM UNTIL / VARYING are captured as control operations.
-    - READ/WRITE/MOVE/IF/etc. are captured only when they are actual
-      statements.
-    - OPEN and CLOSE support COBOL continuation lines.
-    - Operation metadata contains exact source locations.
+    - PERFORM UNTIL / VARYING are captured as control operations with full multi-line conditions.
+    - COMPUTE, ADD, SUBTRACT, MULTIPLY, DIVIDE are captured with expressions.
+    - READ/WRITE/MOVE/IF/etc. are captured with full condition / target fidelity.
+    - Multi-line statements are buffered until terminating period or next statement keyword.
+    - Identification columns (73-80) and sequence numbers (1-6) are stripped.
     """
 
     operations: dict[str, list[dict[str, Any]]] = {
@@ -409,6 +465,10 @@ def _extract_statement_operations(
         "if": [],
         "goto": [],
         "add": [],
+        "subtract": [],
+        "multiply": [],
+        "divide": [],
+        "compute": [],
     }
 
     lines = list(
@@ -422,20 +482,7 @@ def _extract_statement_operations(
     if procedure_start is None:
         return operations
 
-    # ---------------------------------------------------------
-    # Build paragraph-label positions.
-    #
-    # This is important because:
-    #
-    # OPEN-FILES.
-    # CLOSE-FILES.
-    # READ-POLICY.
-    #
-    # are paragraph names, NOT operations.
-    # ---------------------------------------------------------
-
     paragraph_ranges = []
-
     paragraphs = _extract_paragraphs(
         source_text
     )
@@ -449,22 +496,10 @@ def _extract_statement_operations(
             )
         )
 
-    # ---------------------------------------------------------
-    # Helper: determine whether a source line is a paragraph
-    # header.
-    # ---------------------------------------------------------
-
     def is_paragraph_header(
         line_start: int,
         stripped_line: str,
     ) -> bool:
-
-        # A COBOL paragraph header is:
-        #
-        # OPEN-FILES.
-        #
-        # and must contain only the paragraph name + period.
-
         return bool(
             re.match(
                 r"^[A-Z0-9][A-Z0-9-]*\.\s*$",
@@ -473,28 +508,59 @@ def _extract_statement_operations(
             )
         )
 
-    # ---------------------------------------------------------
-    # Helper: calculate actual byte offset of keyword
-    # ---------------------------------------------------------
-
     def keyword_offset(
         raw_line: str,
         line_start: int,
         keyword: str,
     ) -> int:
-
-        position = raw_line.upper().find(
+        clean_l = strip_identification_area(raw_line)
+        position = clean_l.upper().find(
             keyword.upper()
         )
-
         if position < 0:
             return line_start
-
         return line_start + position
 
-    # ---------------------------------------------------------
-    # Helper: create a one-line operation
-    # ---------------------------------------------------------
+    def _consume_multiline_statement(
+        current_index: int,
+        start_char: int,
+        end_char: int,
+    ) -> int:
+        statement_end = end_char
+        initial_line = lines[current_index][3]
+        initial_clean = strip_identification_area(initial_line)
+        if initial_clean.strip().endswith("."):
+            return statement_end
+
+        statement_keywords = (
+            r"^(PERFORM|READ|WRITE|MOVE|OPEN|CLOSE|IF|ELSE|DISPLAY|ADD|SUBTRACT|"
+            r"MULTIPLY|DIVIDE|COMPUTE|GO\s+TO|GOTO|SET|STRING|UNSTRING|EVALUATE|"
+            r"SEARCH|START|DELETE|REWRITE|CALL|EXEC|END-IF|END-PERFORM|END-READ|"
+            r"END-WRITE|END-COMPUTE|END-EVALUATE|GOBACK|STOP\s+RUN|EXIT)\b"
+        )
+
+        for next_index in range(current_index + 1, len(lines)):
+            _num, _start, _end, next_line = lines[next_index]
+            next_clean = strip_identification_area(next_line)
+            next_stripped = next_clean.strip()
+            if not next_stripped:
+                continue
+            if len(next_line) >= 7 and next_line[6] in ("*", "/"):
+                continue
+            next_upper = next_stripped.upper()
+
+            if re.match(statement_keywords, next_upper, re.IGNORECASE):
+                break
+            if is_paragraph_header(_start, next_stripped):
+                break
+
+            statement_end = _end
+            if next_stripped.endswith(".") or "." in next_stripped:
+                break
+
+        return statement_end
+
+    current_paragraph: str | None = None
 
     def add_operation(
         operation_type: str,
@@ -502,23 +568,20 @@ def _extract_statement_operations(
         line_start: int,
         line_end: int,
         raw_line: str,
+        multi_line_end: int | None = None,
     ) -> None:
-
-        operations[operation_type].append(
-            _make_operation(
-                source_text,
-                keyword_offset(
-                    raw_line,
-                    line_start,
-                    keyword,
-                ),
-                line_end,
-            )
+        effective_end = multi_line_end if multi_line_end is not None else line_end
+        op_meta = _make_operation(
+            source_text,
+            keyword_offset(
+                raw_line,
+                line_start,
+                keyword,
+            ),
+            effective_end,
         )
-
-    # ---------------------------------------------------------
-    # Scan source
-    # ---------------------------------------------------------
+        op_meta["parent_paragraph"] = current_paragraph
+        operations[operation_type].append(op_meta)
 
     for index, (
         number,
@@ -527,16 +590,14 @@ def _extract_statement_operations(
         raw_line,
     ) in enumerate(lines):
 
-        # Before PROCEDURE DIVISION
         if end <= procedure_start:
             continue
 
-        stripped = raw_line.strip()
-
+        clean_line = strip_identification_area(raw_line)
+        stripped = clean_line.strip()
         if not stripped:
             continue
 
-        # Fixed-format COBOL comments
         if (
             len(raw_line) >= 7
             and raw_line[6] in ("*", "/")
@@ -545,17 +606,13 @@ def _extract_statement_operations(
 
         upper = stripped.upper()
 
-        # -----------------------------------------------------
-        # Paragraph header
-        # -----------------------------------------------------
-
         if is_paragraph_header(
             start,
             stripped,
         ):
+            current_paragraph = stripped.rstrip(".").strip().upper()
             continue
 
-        # Never treat structural terminators as operations.
         if upper.startswith(
             (
                 "END-IF",
@@ -567,6 +624,7 @@ def _extract_statement_operations(
                 "END-STRING",
                 "END-UNSTRING",
                 "END-START",
+                "END-COMPUTE",
             )
         ):
             continue
@@ -574,309 +632,258 @@ def _extract_statement_operations(
         # -----------------------------------------------------
         # PERFORM
         # -----------------------------------------------------
-
         if re.match(
             r"^PERFORM\b",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "perform",
                 "PERFORM",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # READ
         # -----------------------------------------------------
-
         elif re.match(
             r"^READ\s+[A-Z0-9-]+",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "read",
                 "READ",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # WRITE
         # -----------------------------------------------------
-
         elif re.match(
             r"^WRITE\s+[A-Z0-9-]+",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "write",
                 "WRITE",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # MOVE
         # -----------------------------------------------------
-
         elif re.match(
             r"^MOVE\b",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "move",
                 "MOVE",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # OPEN
-        #
-        # Example:
-        #
-        # OPEN INPUT POLICY-IN PREMIUM-IN
-        #      OUTPUT PREMIUM-OUT ERROR-OUT
-        #
-        # Stop when another executable statement begins.
         # -----------------------------------------------------
-
         elif re.match(
             r"^OPEN(?:\s+|$)",
             stripped,
             re.IGNORECASE,
         ):
-
-            statement_start = keyword_offset(
-                raw_line,
-                start,
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "open",
                 "OPEN",
-            )
-
-            statement_end = end
-
-            # Only consume continuation lines.
-            for next_index in range(
-                index + 1,
-                len(lines),
-            ):
-
-                (
-                    _next_number,
-                    _next_start,
-                    _next_end,
-                    next_line,
-                ) = lines[next_index]
-
-                next_stripped = (
-                    next_line.strip()
-                )
-
-                if not next_stripped:
-                    continue
-
-                next_upper = (
-                    next_stripped.upper()
-                )
-
-                # A new COBOL statement starts.
-                if re.match(
-                    r"^(PERFORM|READ|WRITE|MOVE|"
-                    r"OPEN|CLOSE|IF|DISPLAY|ADD|"
-                    r"GO\s+TO|GOTO|SET|COMPUTE|"
-                    r"STRING|UNSTRING|EVALUATE|"
-                    r"SEARCH|START|DELETE|REWRITE|"
-                    r"CALL|EXEC|END-IF|END-PERFORM)\b",
-                    next_upper,
-                    re.IGNORECASE,
-                ):
-                    break
-
-                # Paragraph header.
-                if is_paragraph_header(
-                    _next_start,
-                    next_stripped,
-                ):
-                    break
-
-                statement_end = _next_end
-
-                # If the continuation line ends the
-                # COBOL sentence, stop.
-                if "." in next_line:
-                    break
-
-            operations["open"].append(
-                _make_operation(
-                    source_text,
-                    statement_start,
-                    statement_end,
-                )
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # CLOSE
         # -----------------------------------------------------
-
         elif re.match(
             r"^CLOSE(?:\s+|$)",
             stripped,
             re.IGNORECASE,
         ):
-
-            statement_start = keyword_offset(
-                raw_line,
-                start,
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "close",
                 "CLOSE",
-            )
-
-            statement_end = end
-
-            # CLOSE is usually one line, but support
-            # continuation lines.
-            for next_index in range(
-                index + 1,
-                len(lines),
-            ):
-
-                (
-                    _next_number,
-                    _next_start,
-                    _next_end,
-                    next_line,
-                ) = lines[next_index]
-
-                next_stripped = (
-                    next_line.strip()
-                )
-
-                if not next_stripped:
-                    continue
-
-                next_upper = (
-                    next_stripped.upper()
-                )
-
-                if re.match(
-                    r"^(PERFORM|READ|WRITE|MOVE|"
-                    r"OPEN|CLOSE|IF|DISPLAY|ADD|"
-                    r"GO\s+TO|GOTO|SET|COMPUTE|"
-                    r"STRING|UNSTRING|EVALUATE|"
-                    r"SEARCH|START|DELETE|REWRITE|"
-                    r"CALL|EXEC|END-IF|END-PERFORM)\b",
-                    next_upper,
-                    re.IGNORECASE,
-                ):
-                    break
-
-                if is_paragraph_header(
-                    _next_start,
-                    next_stripped,
-                ):
-                    break
-
-                statement_end = _next_end
-
-                if "." in next_line:
-                    break
-
-            operations["close"].append(
-                _make_operation(
-                    source_text,
-                    statement_start,
-                    statement_end,
-                )
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # DISPLAY
         # -----------------------------------------------------
-
         elif re.match(
             r"^DISPLAY\b",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "display",
                 "DISPLAY",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # IF
         # -----------------------------------------------------
-
         elif re.match(
             r"^IF\b",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "if",
                 "IF",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # GO TO / GOTO
         # -----------------------------------------------------
-
         elif re.match(
             r"^(GO\s+TO|GOTO)\b",
             stripped,
             re.IGNORECASE,
         ):
-
             keyword = (
                 "GO TO"
                 if upper.startswith("GO TO")
                 else "GOTO"
             )
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "goto",
                 keyword,
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
             )
 
         # -----------------------------------------------------
         # ADD
         # -----------------------------------------------------
-
         elif re.match(
             r"^ADD\b",
             stripped,
             re.IGNORECASE,
         ):
-
+            stmt_end = _consume_multiline_statement(index, start, end)
             add_operation(
                 "add",
                 "ADD",
                 start,
                 end,
                 raw_line,
+                multi_line_end=stmt_end,
+            )
+
+        # -----------------------------------------------------
+        # SUBTRACT
+        # -----------------------------------------------------
+        elif re.match(
+            r"^SUBTRACT\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "subtract",
+                "SUBTRACT",
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
+            )
+
+        # -----------------------------------------------------
+        # MULTIPLY
+        # -----------------------------------------------------
+        elif re.match(
+            r"^MULTIPLY\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "multiply",
+                "MULTIPLY",
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
+            )
+
+        # -----------------------------------------------------
+        # DIVIDE
+        # -----------------------------------------------------
+        elif re.match(
+            r"^DIVIDE\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "divide",
+                "DIVIDE",
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
+            )
+
+        # -----------------------------------------------------
+        # COMPUTE
+        # -----------------------------------------------------
+        elif re.match(
+            r"^COMPUTE\b",
+            stripped,
+            re.IGNORECASE,
+        ):
+            stmt_end = _consume_multiline_statement(index, start, end)
+            add_operation(
+                "compute",
+                "COMPUTE",
+                start,
+                end,
+                raw_line,
+                multi_line_end=stmt_end,
             )
 
     return _deduplicate_operations(
@@ -1035,15 +1042,17 @@ def extract_variables(source_text: str) -> list[dict[str, Any]]:
     pattern = re.compile(
         r"""
         (?mi)^[ \t]*
-        (?P<level>01|05|77)
+        (?P<level>01|02|03|05|10|15|77|88)
         \s+
         (?P<name>[A-Z0-9-]+)
-        \s+
-        PIC\s+
-        (?P<picture>[A-Z0-9()VXS9+\-]+)
         (?:
             \s+
-            VALUE\s+
+            PIC\s+
+            (?P<picture>[A-Z0-9()VXS9+\-]+)
+        )?
+        (?:
+            \s+
+            VALUE\s+(?:IS\s+)?
             (?P<value>[^.]+)
         )?
         \s*\.
@@ -1057,10 +1066,19 @@ def extract_variables(source_text: str) -> list[dict[str, Any]]:
         if name in seen:
             continue
 
+        level = int(match.group("level"))
+        pic = match.group("picture")
+        if pic:
+            pic_str = pic.upper()
+        elif level == 88:
+            pic_str = "CONDITION_FLAG"
+        else:
+            pic_str = "GROUP_ITEM"
+
         item: dict[str, Any] = {
             "name": name,
-            "level": int(match.group("level")),
-            "picture": match.group("picture").upper(),
+            "level": level,
+            "picture": pic_str,
             "start_line": line_number(
                 source_text,
                 match.start(),
@@ -1117,6 +1135,9 @@ def extract_copybooks(source_text: str) -> list[dict[str, Any]]:
 def extract_records(source_text: str) -> list[dict[str, Any]]:
     records = []
 
+    proc_start = _procedure_division_start(source_text)
+    data_limit = proc_start if proc_start is not None else len(source_text)
+
     record_pattern = re.compile(
         r"""
         (?mi)^[ \t]*
@@ -1130,15 +1151,17 @@ def extract_records(source_text: str) -> list[dict[str, Any]]:
     field_pattern = re.compile(
         r"""
         (?mi)^[ \t]*
-        (?P<level>02|05)
+        (?P<level>02|03|05|10|15|20|49|88)
         \s+
         (?P<name>[A-Z0-9-]+)
-        \s+
-        PIC\s+
-        (?P<picture>[A-Z0-9()VXS9+\-]+)
         (?:
             \s+
-            VALUE\s+
+            PIC\s+
+            (?P<picture>[A-Z0-9()VXS9+\-]+)
+        )?
+        (?:
+            \s+
+            VALUE\s+(?:IS\s+)?
             (?P<value>[^.]+)
         )?
         \s*\.
@@ -1146,7 +1169,8 @@ def extract_records(source_text: str) -> list[dict[str, Any]]:
         re.IGNORECASE | re.VERBOSE,
     )
 
-    matches = list(record_pattern.finditer(source_text))
+    data_text = source_text[:data_limit]
+    matches = list(record_pattern.finditer(data_text))
 
     for index, match in enumerate(matches):
         start = match.start()
@@ -1154,12 +1178,13 @@ def extract_records(source_text: str) -> list[dict[str, Any]]:
         if index + 1 < len(matches):
             end = matches[index + 1].start()
         else:
-            end = len(source_text)
+            end = data_limit
 
         block = source_text[start:end]
 
         record = {
             "record_name": match.group("record").upper(),
+            "name": match.group("record").upper(),
             "level": 1,
             "start_line": line_number(
                 source_text,
@@ -1172,10 +1197,19 @@ def extract_records(source_text: str) -> list[dict[str, Any]]:
         }
 
         for field_match in field_pattern.finditer(block):
+            f_level = int(field_match.group("level"))
+            f_pic = field_match.group("picture")
+            if f_pic:
+                f_pic_str = f_pic.upper()
+            elif f_level == 88:
+                f_pic_str = "CONDITION_FLAG"
+            else:
+                f_pic_str = "GROUP_ITEM"
+
             field = {
                 "name": field_match.group("name").upper(),
-                "level": int(field_match.group("level")),
-                "picture": field_match.group("picture").upper(),
+                "level": f_level,
+                "picture": f_pic_str,
                 "start_line": line_number(
                     source_text,
                     start + field_match.start(),
@@ -1191,7 +1225,79 @@ def extract_records(source_text: str) -> list[dict[str, Any]]:
 
         records.append(record)
 
+    rec_to_file = extract_record_to_file_map(source_text)
+    for record in records:
+        r_name = record.get("name", "")
+        if r_name in rec_to_file:
+            record["parent_file"] = rec_to_file[r_name]
+            record["section"] = "FILE SECTION"
+        else:
+            record["parent_file"] = None
+            record["section"] = "WORKING-STORAGE SECTION"
+
     return records
+
+
+def extract_record_to_file_map(source_text: str) -> dict[str, str]:
+    """
+    Maps COBOL record names (01 level under FD) to their parent File names.
+    Example:
+      FD PREMIUM-OUT.
+      01 PRO-REC.
+      -> {"PRO-REC": "PREMIUM-OUT"}
+    """
+    rec_to_file: dict[str, str] = {}
+    fd_pattern = re.compile(
+        r"""
+        (?mi)^[ \t]*
+        FD\s+(?P<file>[A-Z0-9-]+)\s*\.
+        (?P<body>.*?)
+        (?=^[ \t]*(?:FD|SD|WORKING-STORAGE\s+SECTION|PROCEDURE\s+DIVISION)\b|\Z)
+        """,
+        re.DOTALL | re.VERBOSE,
+    )
+    rec_pattern = re.compile(
+        r"(?mi)^[ \t]*01\s+(?P<rec>[A-Z0-9-]+)",
+    )
+    for fd_match in fd_pattern.finditer(source_text):
+        file_name = fd_match.group("file").upper()
+        body = fd_match.group("body")
+        for rec_match in rec_pattern.finditer(body):
+            rec_name = rec_match.group("rec").upper()
+            rec_to_file[rec_name] = file_name
+    return rec_to_file
+
+
+def extract_call_graph(
+    file_name: str,
+    paragraphs: list[dict[str, Any]],
+    perform_operations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Extracts the paragraph-to-paragraph call graph:
+    e.g. MAIN --[:CALLS_BLOCK]--> CALCULATE-EARNED
+    """
+    p_names = {p["name"].upper() for p in paragraphs}
+    calls = []
+    seen = set()
+    for perform in perform_operations:
+        caller = perform.get("parent_paragraph")
+        txt = clean_spaces(perform.get("text", "")).upper()
+        m = re.match(r"^PERFORM\s+([A-Z0-9-]+)", txt)
+        if m:
+            target = m.group(1)
+            if target in p_names and target != caller:
+                key = (caller, target)
+                if key not in seen:
+                    seen.add(key)
+                    calls.append({
+                        "source_file": file_name,
+                        "caller_block": caller,
+                        "target_block": target,
+                        "relationship": "CALLS_BLOCK",
+                        "start_line": perform.get("start_line"),
+                    })
+    return calls
 
 
 # =========================================================
@@ -1208,8 +1314,10 @@ def _operation_text(operation: Any) -> str:
 def extract_relationships(
     file_name: str,
     metadata: dict[str, Any],
+    source_text: str | None = None,
 ) -> list[dict[str, Any]]:
     relationships = []
+    record_to_file = extract_record_to_file_map(source_text) if source_text else {}
 
     # -----------------------------------------------------
     # READ
@@ -1225,11 +1333,13 @@ def extract_relationships(
         )
 
         if match:
+            target = match.group(1).upper()
+            resolved_file = record_to_file.get(target, target)
             relationships.append(
                 {
                     "source": file_name,
                     "relationship": "READS",
-                    "target": match.group(1).upper(),
+                    "target": resolved_file,
                 }
             )
 
@@ -1259,6 +1369,9 @@ def extract_relationships(
             if name and name.upper() == target:
                 resolved_file = name.upper()
                 break
+
+        if not resolved_file and target in record_to_file:
+            resolved_file = record_to_file[target]
 
         if resolved_file:
             relationships.append(
@@ -1701,6 +1814,7 @@ def parse_cobol_file(
         extract_relationships(
             file_path.name,
             metadata,
+            source_text=source_text,
         )
     )
 
@@ -1720,6 +1834,21 @@ def parse_cobol_file(
         in metadata["operations"].items()
     }
 
+    # -----------------------------------------------------
+    # CALL GRAPH
+    # -----------------------------------------------------
+    metadata["call_graph"] = extract_call_graph(
+        file_path.name,
+        metadata.get("paragraphs", []),
+        metadata.get("operations", {}).get("perform", []),
+    )
+
+    print(
+        f"CALL GRAPH: extraction complete "
+        f"({len(metadata['call_graph'])})",
+        flush=True,
+    )
+
     print(
         "PARSER: returning metadata",
         flush=True,
@@ -1734,8 +1863,9 @@ def parse_cobol_file(
 
 def main() -> None:
 
+    source_base = PROJECT_ROOT / "source" / "mainframe"
     cobol_files = sorted(
-        SOURCE_DIR.glob("*.CBL")
+        {p for p in source_base.rglob("*") if p.is_file() and p.suffix.lower() in {".cbl", ".cob", ".cpy"}}
     )
 
     print("=" * 80)

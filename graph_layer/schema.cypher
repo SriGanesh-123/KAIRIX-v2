@@ -18,4 +18,10 @@ CREATE INDEX entity_source IF NOT EXISTS FOR (e:Entity) ON (e.source_file);
 CREATE CONSTRAINT rule_id IF NOT EXISTS FOR (r:BusinessRule) REQUIRE r.id IS UNIQUE;
 
 // ── Transformation nodes ───────────────────────────────────────────────────────
-CREATE CONSTRAINT transform_id IF NOT EXISTS FOR (t:Transformation) REQUIRE t.id IS UNIQUE
+CREATE CONSTRAINT transform_id IF NOT EXISTS FOR (t:Transformation) REQUIRE t.id IS UNIQUE;
+
+// ── Control Flow & AST nodes ──────────────────────────────────────────────────
+CREATE CONSTRAINT block_id IF NOT EXISTS FOR (b:CodeBlock) REQUIRE b.id IS UNIQUE;
+CREATE CONSTRAINT loop_id IF NOT EXISTS FOR (l:Loop) REQUIRE l.id IS UNIQUE;
+CREATE CONSTRAINT branch_id IF NOT EXISTS FOR (c:Branch) REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT stmt_id IF NOT EXISTS FOR (s:Statement) REQUIRE s.id IS UNIQUE;

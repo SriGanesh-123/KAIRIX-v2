@@ -235,6 +235,16 @@ class InvestigationService:
         Parses structured section headers with flexible markdown/plain formats:
         ANSWER, KEY POINTS, DATA FLOW, FORMULA, SOURCES, CONFIDENCE, GAPS.
         """
+        # Clean stray thinking process or CoT preamble if present
+        text_to_parse = raw_text or ""
+        if "<think>" in text_to_parse:
+            text_to_parse = re.sub(r"(?s)<think>.*?</think>", "", text_to_parse).strip()
+        if re.search(r"\bHere(?:'s|\s+is)\s+(?:a\s+)?thinking\s+process\b", text_to_parse, re.IGNORECASE):
+            m = re.search(r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?ANSWER\b", text_to_parse, re.IGNORECASE)
+            if m:
+                text_to_parse = text_to_parse[m.start():].strip()
+        raw_text = text_to_parse
+
         sections: Dict[str, Any] = {
             "answer": "",
             "key_points": [],
@@ -246,13 +256,13 @@ class InvestigationService:
         }
 
         header_patterns = [
-            ("ANSWER", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?ANSWER(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("KEY POINTS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?KEY POINTS(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("DATA FLOW", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?DATA FLOW(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("FORMULA", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?FORMULA(?:S|\s*/\s*CALCULATION)?(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("SOURCES", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:CONTRIBUTING\s+)?SOURCES(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("CONFIDENCE", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?CONFIDENCE(?:\s*&\s*RETRIEVAL\s*INTENT)?(?:\s*\*\*)?\s*:?\s*\n?"),
-            ("GAPS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:KNOWLEDGE\s+)?GAPS(?:\s*&\s*UNVERIFIED\s*ITEMS)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("ANSWER", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?ANSWER(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("KEY POINTS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?KEY\s+POINTS(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("DATA FLOW", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:END-TO-END\s+)?DATA\s+FLOW(?:\s*\(\s*LINEAGE\s*\))?(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("FORMULA", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:EXACT\s+LOGIC\s*/\s*)?(?:MATHEMATICAL\s+)?FORMULA(?:S|\s*/\s*CALCULATION)?(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("SOURCES", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:VERIFIED\s+|CONTRIBUTING\s+)?SOURCES(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("CONFIDENCE", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?CONFIDENCE(?:\s+SCORE)?(?:\s*&\s*RETRIEVAL\s*INTENT)?(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
+            ("GAPS", r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?(?:KNOWLEDGE\s+)?GAPS(?:\s*&\s*UNVERIFIED\s*ITEMS)?(?:\s*:\s*)?(?:\s*\*\*)?\s*:?\s*\n?"),
         ]
 
         matches = []

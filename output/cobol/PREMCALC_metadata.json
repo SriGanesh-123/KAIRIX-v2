@@ -155,6 +155,7 @@
     "records": [
         {
             "record_name": "PI-REC",
+            "name": "PI-REC",
             "level": 1,
             "start_line": 55,
             "start_byte": 2145,
@@ -219,10 +220,13 @@
                     "picture": "9(8)",
                     "start_line": 65
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "PR-REC",
+            "name": "PR-REC",
             "level": 1,
             "start_line": 68,
             "start_byte": 2656,
@@ -269,10 +273,13 @@
                     "picture": "9(10)V99",
                     "start_line": 75
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "VE-REC",
+            "name": "VE-REC",
             "level": 1,
             "start_line": 78,
             "start_byte": 3056,
@@ -319,10 +326,13 @@
                     "picture": "9(10)V99",
                     "start_line": 85
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "CO-REC",
+            "name": "CO-REC",
             "level": 1,
             "start_line": 88,
             "start_byte": 3456,
@@ -369,10 +379,13 @@
                     "picture": "9(8)",
                     "start_line": 95
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "PO-REC",
+            "name": "PO-REC",
             "level": 1,
             "start_line": 98,
             "start_byte": 3856,
@@ -413,10 +426,13 @@
                     "picture": "9(8)",
                     "start_line": 104
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "ER-REC",
+            "name": "ER-REC",
             "level": 1,
             "start_line": 107,
             "start_byte": 4211,
@@ -439,10 +455,13 @@
                     "picture": "X(54)",
                     "start_line": 110
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "WS-FILE-STATUS",
+            "name": "WS-FILE-STATUS",
             "level": 1,
             "start_line": 113,
             "start_byte": 4403,
@@ -489,10 +508,13 @@
                     "start_line": 119,
                     "value": "SPACES"
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "WS-SWITCHES",
+            "name": "WS-SWITCHES",
             "level": 1,
             "start_line": 121,
             "start_byte": 4697,
@@ -505,11 +527,25 @@
                     "value": "'N'"
                 },
                 {
+                    "name": "POL-EOF",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 123,
+                    "value": "'Y'"
+                },
+                {
                     "name": "WS-PR-EOF",
                     "level": 5,
                     "picture": "X",
                     "start_line": 124,
                     "value": "'N'"
+                },
+                {
+                    "name": "PR-EOF",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 125,
+                    "value": "'Y'"
                 },
                 {
                     "name": "WS-VE-EOF",
@@ -519,11 +555,25 @@
                     "value": "'N'"
                 },
                 {
+                    "name": "VE-EOF",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 127,
+                    "value": "'Y'"
+                },
+                {
                     "name": "WS-CO-EOF",
                     "level": 5,
                     "picture": "X",
                     "start_line": 128,
                     "value": "'N'"
+                },
+                {
+                    "name": "CO-EOF",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 129,
+                    "value": "'Y'"
                 },
                 {
                     "name": "WS-PR-FOUND",
@@ -552,11 +602,21 @@
                     "picture": "X",
                     "start_line": 133,
                     "value": "'N'"
+                },
+                {
+                    "name": "FATAL-ERROR",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 134,
+                    "value": "'Y'"
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "WS-RATING-CONSTANTS",
+            "name": "WS-RATING-CONSTANTS",
             "level": 1,
             "start_line": 137,
             "start_byte": 5306,
@@ -645,10 +705,13 @@
                     "start_line": 149,
                     "value": "75"
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "WS-CALC",
+            "name": "WS-CALC",
             "level": 1,
             "start_line": 151,
             "start_byte": 6029,
@@ -701,10 +764,13 @@
                     "start_line": 158,
                     "value": "ZERO"
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         },
         {
             "record_name": "WS-COUNTERS",
+            "name": "WS-COUNTERS",
             "level": 1,
             "start_line": 160,
             "start_byte": 6444,
@@ -737,7 +803,9 @@
                     "start_line": 164,
                     "value": "ZERO"
                 }
-            ]
+            ],
+            "parent_file": null,
+            "section": "WORKING-STORAGE SECTION"
         }
     ],
     "files": [
@@ -804,6 +872,12 @@
     ],
     "variables": [
         {
+            "name": "PI-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 55
+        },
+        {
             "name": "PI-POLICY-NO",
             "level": 5,
             "picture": "X(12)",
@@ -864,6 +938,12 @@
             "start_line": 65
         },
         {
+            "name": "PR-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 68
+        },
+        {
             "name": "PR-PROPERTY-ID",
             "level": 5,
             "picture": "X(12)",
@@ -904,6 +984,12 @@
             "level": 5,
             "picture": "9(10)V99",
             "start_line": 75
+        },
+        {
+            "name": "VE-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 78
         },
         {
             "name": "VE-VEHICLE-ID",
@@ -948,6 +1034,12 @@
             "start_line": 85
         },
         {
+            "name": "CO-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 88
+        },
+        {
             "name": "CO-COVERAGE-ID",
             "level": 5,
             "picture": "X(12)",
@@ -990,6 +1082,12 @@
             "start_line": 95
         },
         {
+            "name": "PO-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 98
+        },
+        {
             "name": "PO-PREMIUM-ID",
             "level": 5,
             "picture": "X(12)",
@@ -1026,6 +1124,12 @@
             "start_line": 104
         },
         {
+            "name": "ER-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 107
+        },
+        {
             "name": "ER-POLICY-NO",
             "level": 5,
             "picture": "X(12)",
@@ -1042,6 +1146,12 @@
             "level": 5,
             "picture": "X(54)",
             "start_line": 110
+        },
+        {
+            "name": "WS-FILE-STATUS",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 113
         },
         {
             "name": "WS-PI-ST",
@@ -1086,11 +1196,24 @@
             "value": "SPACES"
         },
         {
+            "name": "WS-SWITCHES",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 121
+        },
+        {
             "name": "WS-POL-EOF",
             "level": 5,
             "picture": "X",
             "start_line": 122,
             "value": "'N'"
+        },
+        {
+            "name": "POL-EOF",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 123,
+            "value": "'Y'"
         },
         {
             "name": "WS-PR-EOF",
@@ -1100,6 +1223,13 @@
             "value": "'N'"
         },
         {
+            "name": "PR-EOF",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 125,
+            "value": "'Y'"
+        },
+        {
             "name": "WS-VE-EOF",
             "level": 5,
             "picture": "X",
@@ -1107,11 +1237,25 @@
             "value": "'N'"
         },
         {
+            "name": "VE-EOF",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 127,
+            "value": "'Y'"
+        },
+        {
             "name": "WS-CO-EOF",
             "level": 5,
             "picture": "X",
             "start_line": 128,
             "value": "'N'"
+        },
+        {
+            "name": "CO-EOF",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 129,
+            "value": "'Y'"
         },
         {
             "name": "WS-PR-FOUND",
@@ -1140,6 +1284,19 @@
             "picture": "X",
             "start_line": 133,
             "value": "'N'"
+        },
+        {
+            "name": "FATAL-ERROR",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 134,
+            "value": "'Y'"
+        },
+        {
+            "name": "WS-RATING-CONSTANTS",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 137
         },
         {
             "name": "WS-HO-BASE",
@@ -1226,6 +1383,12 @@
             "value": "75"
         },
         {
+            "name": "WS-CALC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 151
+        },
+        {
             "name": "WS-RISK-VALUE",
             "level": 5,
             "picture": "9(12)V99",
@@ -1274,6 +1437,12 @@
             "value": "ZERO"
         },
         {
+            "name": "WS-COUNTERS",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 160
+        },
+        {
             "name": "WS-READ",
             "level": 5,
             "picture": "9(9)",
@@ -1310,233 +1479,266 @@
                 "start_byte": 6807,
                 "end_byte": 6825,
                 "start_line": 169,
-                "end_line": 169
+                "end_line": 169,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM READ-PROPERTY",
                 "start_byte": 6882,
                 "end_byte": 6903,
                 "start_line": 172,
-                "end_line": 172
+                "end_line": 172,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM READ-VEHICLE",
                 "start_byte": 6916,
                 "end_byte": 6936,
                 "start_line": 173,
-                "end_line": 173
+                "end_line": 173,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM READ-COVERAGE",
                 "start_byte": 6949,
                 "end_byte": 6970,
                 "start_line": 174,
-                "end_line": 174
+                "end_line": 174,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM UNTIL POL-EOF OR FATAL-ERROR",
                 "start_byte": 6986,
                 "end_byte": 7022,
                 "start_line": 176,
-                "end_line": 176
+                "end_line": 176,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM READ-POLICY",
                 "start_byte": 7038,
                 "end_byte": 7057,
                 "start_line": 177,
-                "end_line": 177
+                "end_line": 177,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM PROCESS-POLICY",
                 "start_byte": 7161,
                 "end_byte": 7183,
                 "start_line": 180,
-                "end_line": 180
+                "end_line": 180,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM CLOSE-FILES",
                 "start_byte": 7245,
                 "end_byte": 7264,
                 "start_line": 184,
-                "end_line": 184
+                "end_line": 184,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "PERFORM GET-PROPERTY",
                 "start_byte": 10660,
                 "end_byte": 10680,
                 "start_line": 283,
-                "end_line": 283
+                "end_line": 283,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM GET-ALL-COVERAGES",
                 "start_byte": 10735,
                 "end_byte": 10760,
                 "start_line": 285,
-                "end_line": 285
+                "end_line": 285,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM CALC-HO",
                 "start_byte": 10821,
                 "end_byte": 10836,
                 "start_line": 287,
-                "end_line": 287
+                "end_line": 287,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-PREMIUM",
                 "start_byte": 10858,
                 "end_byte": 10879,
                 "start_line": 288,
-                "end_line": 288
+                "end_line": 288,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 11041,
                 "end_byte": 11060,
                 "start_line": 292,
-                "end_line": 292
+                "end_line": 292,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 11261,
                 "end_byte": 11280,
                 "start_line": 298,
-                "end_line": 298
+                "end_line": 298,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM GET-VEHICLE",
                 "start_byte": 11379,
                 "end_byte": 11398,
                 "start_line": 302,
-                "end_line": 302
+                "end_line": 302,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM GET-ALL-COVERAGES",
                 "start_byte": 11459,
                 "end_byte": 11484,
                 "start_line": 304,
-                "end_line": 304
+                "end_line": 304,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM CALC-AU",
                 "start_byte": 11551,
                 "end_byte": 11566,
                 "start_line": 306,
-                "end_line": 306
+                "end_line": 306,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-PREMIUM",
                 "start_byte": 11591,
                 "end_byte": 11612,
                 "start_line": 307,
-                "end_line": 307
+                "end_line": 307,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 11812,
                 "end_byte": 11831,
                 "start_line": 312,
-                "end_line": 312
+                "end_line": 312,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 12020,
                 "end_byte": 12039,
                 "start_line": 317,
-                "end_line": 317
+                "end_line": 317,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 12213,
                 "end_byte": 12232,
                 "start_line": 322,
-                "end_line": 322
+                "end_line": 322,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "PERFORM UNTIL PR-EOF OR FATAL-ERROR",
                 "start_byte": 12348,
                 "end_byte": 12383,
                 "start_line": 328,
-                "end_line": 328
+                "end_line": 328,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "PERFORM READ-PROPERTY",
                 "start_byte": 12448,
                 "end_byte": 12469,
                 "start_line": 330,
-                "end_line": 330
+                "end_line": 330,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "PERFORM UNTIL VE-EOF OR FATAL-ERROR",
                 "start_byte": 12820,
                 "end_byte": 12855,
                 "start_line": 342,
-                "end_line": 342
+                "end_line": 342,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "PERFORM READ-VEHICLE",
                 "start_byte": 12920,
                 "end_byte": 12940,
                 "start_line": 344,
-                "end_line": 344
+                "end_line": 344,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "PERFORM UNTIL CO-EOF OR FATAL-ERROR",
                 "start_byte": 13296,
                 "end_byte": 13331,
                 "start_line": 356,
-                "end_line": 356
+                "end_line": 356,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "PERFORM READ-COVERAGE",
                 "start_byte": 13396,
                 "end_byte": 13417,
                 "start_line": 358,
-                "end_line": 358
+                "end_line": 358,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "PERFORM READ-COVERAGE",
                 "start_byte": 13724,
                 "end_byte": 13745,
                 "start_line": 365,
-                "end_line": 365
+                "end_line": 365,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "PERFORM WRITE-ERROR",
                 "start_byte": 15583,
                 "end_byte": 15602,
                 "start_line": 417,
-                "end_line": 417
+                "end_line": 417,
+                "parent_paragraph": "WRITE-PREMIUM"
             }
         ],
         "read": [
             {
-                "text": "READ POLICY-IN",
+                "text": "READ POLICY-IN AT END",
                 "start_byte": 8636,
-                "end_byte": 8650,
+                "end_byte": 8672,
                 "start_line": 221,
-                "end_line": 221
+                "end_line": 222,
+                "parent_paragraph": "READ-POLICY"
             },
             {
-                "text": "READ PROPERTY-IN",
+                "text": "READ PROPERTY-IN AT END",
                 "start_byte": 9042,
-                "end_byte": 9058,
+                "end_byte": 9083,
                 "start_line": 234,
-                "end_line": 234
+                "end_line": 235,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
-                "text": "READ VEHICLE-IN",
+                "text": "READ VEHICLE-IN AT END",
                 "start_byte": 9496,
-                "end_byte": 9511,
+                "end_byte": 9536,
                 "start_line": 248,
-                "end_line": 248
+                "end_line": 249,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
-                "text": "READ COVERAGE-IN",
+                "text": "READ COVERAGE-IN AT END",
                 "start_byte": 9949,
-                "end_byte": 9965,
+                "end_byte": 9990,
                 "start_line": 262,
-                "end_line": 262
+                "end_line": 263,
+                "parent_paragraph": "READ-COVERAGE"
             }
         ],
         "write": [
@@ -1545,14 +1747,16 @@
                 "start_byte": 15330,
                 "end_byte": 15342,
                 "start_line": 410,
-                "end_line": 410
+                "end_line": 410,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "WRITE ER-REC",
                 "start_byte": 15705,
                 "end_byte": 15717,
                 "start_line": 422,
-                "end_line": 422
+                "end_line": 422,
+                "parent_paragraph": "WRITE-ERROR"
             }
         ],
         "move": [
@@ -1561,266 +1765,304 @@
                 "start_byte": 6744,
                 "end_byte": 6794,
                 "start_line": 168,
-                "end_line": 168
+                "end_line": 168,
+                "parent_paragraph": "MAIN"
             },
             {
-                "text": "MOVE 'Y' TO WS-POL-EOF",
+                "text": "MOVE 'Y' TO WS-POL-EOF NOT AT END",
                 "start_byte": 8691,
-                "end_byte": 8713,
+                "end_byte": 8739,
                 "start_line": 223,
-                "end_line": 223
+                "end_line": 224,
+                "parent_paragraph": "READ-POLICY"
             },
             {
-                "text": "MOVE 'Y' TO WS-PR-EOF",
+                "text": "MOVE 'Y' TO WS-PR-EOF NOT AT END",
                 "start_byte": 9105,
-                "end_byte": 9126,
+                "end_byte": 9155,
                 "start_line": 236,
-                "end_line": 236
+                "end_line": 237,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
-                "text": "MOVE 'Y' TO WS-VE-EOF",
+                "text": "MOVE 'Y' TO WS-VE-EOF NOT AT END",
                 "start_byte": 9558,
-                "end_byte": 9579,
+                "end_byte": 9608,
                 "start_line": 250,
-                "end_line": 250
+                "end_line": 251,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
-                "text": "MOVE 'Y' TO WS-CO-EOF",
+                "text": "MOVE 'Y' TO WS-CO-EOF NOT AT END",
                 "start_byte": 10012,
-                "end_byte": 10033,
+                "end_byte": 10062,
                 "start_line": 264,
-                "end_line": 264
+                "end_line": 265,
+                "parent_paragraph": "READ-COVERAGE"
             },
             {
-                "text": "MOVE ZERO TO WS-RISK-VALUE",
+                "text": "MOVE ZERO TO WS-RISK-VALUE WS-COV-LIMIT-TOTAL WS-DEDUCT-TOTAL WS-DISCOUNT WS-PREMIUM WS-COVERAGE-COUNT",
                 "start_byte": 10376,
-                "end_byte": 10402,
+                "end_byte": 10603,
                 "start_line": 275,
-                "end_line": 275
+                "end_line": 280,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'P003' TO ER-CODE",
                 "start_byte": 10924,
                 "end_byte": 10946,
                 "start_line": 290,
-                "end_line": 290
+                "end_line": 290,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'NO COVERAGE RECORDS FOR POLICY' TO ER-MESSAGE",
                 "start_byte": 10968,
                 "end_byte": 11019,
                 "start_line": 291,
-                "end_line": 291
+                "end_line": 291,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'P001' TO ER-CODE",
                 "start_byte": 11124,
                 "end_byte": 11146,
                 "start_line": 295,
-                "end_line": 295
+                "end_line": 295,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
-                "text": "MOVE 'HOMEOWNERS PROPERTY RECORD NOT FOUND'",
+                "text": "MOVE 'HOMEOWNERS PROPERTY RECORD NOT FOUND' TO ER-MESSAGE",
                 "start_byte": 11165,
-                "end_byte": 11208,
+                "end_byte": 11242,
                 "start_line": 296,
-                "end_line": 296
+                "end_line": 297,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'P003' TO ER-CODE",
                 "start_byte": 11663,
                 "end_byte": 11685,
                 "start_line": 309,
-                "end_line": 309
+                "end_line": 309,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
-                "text": "MOVE 'NO COVERAGE RECORDS FOR POLICY'",
+                "text": "MOVE 'NO COVERAGE RECORDS FOR POLICY' TO ER-MESSAGE",
                 "start_byte": 11710,
-                "end_byte": 11747,
+                "end_byte": 11787,
                 "start_line": 310,
-                "end_line": 310
+                "end_line": 311,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'P002' TO ER-CODE",
                 "start_byte": 11904,
                 "end_byte": 11926,
                 "start_line": 315,
-                "end_line": 315
+                "end_line": 315,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'AUTO VEHICLE RECORD NOT FOUND' TO ER-MESSAGE",
                 "start_byte": 11948,
                 "end_byte": 11998,
                 "start_line": 316,
-                "end_line": 316
+                "end_line": 316,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'P004' TO ER-CODE",
                 "start_byte": 12103,
                 "end_byte": 12125,
                 "start_line": 320,
-                "end_line": 320
+                "end_line": 320,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'PRODUCT TYPE MUST BE HO OR AU' TO ER-MESSAGE",
                 "start_byte": 12144,
                 "end_byte": 12194,
                 "start_line": 321,
-                "end_line": 321
+                "end_line": 321,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "MOVE 'N' TO WS-PR-FOUND",
                 "start_byte": 12312,
                 "end_byte": 12335,
                 "start_line": 327,
-                "end_line": 327
+                "end_line": 327,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "MOVE PR-PROPERTY-VALUE TO WS-RISK-VALUE",
                 "start_byte": 12560,
                 "end_byte": 12599,
                 "start_line": 333,
-                "end_line": 333
+                "end_line": 333,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "MOVE 'Y' TO WS-PR-FOUND",
                 "start_byte": 12621,
                 "end_byte": 12644,
                 "start_line": 334,
-                "end_line": 334
+                "end_line": 334,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "MOVE 'N' TO WS-VE-FOUND",
                 "start_byte": 12784,
                 "end_byte": 12807,
                 "start_line": 341,
-                "end_line": 341
+                "end_line": 341,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "MOVE VE-VEHICLE-VALUE TO WS-RISK-VALUE",
                 "start_byte": 13031,
                 "end_byte": 13069,
                 "start_line": 347,
-                "end_line": 347
+                "end_line": 347,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "MOVE 'Y' TO WS-VE-FOUND",
                 "start_byte": 13091,
                 "end_byte": 13114,
                 "start_line": 348,
-                "end_line": 348
+                "end_line": 348,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "MOVE 'N' TO WS-CO-FOUND",
                 "start_byte": 13260,
                 "end_byte": 13283,
                 "start_line": 355,
-                "end_line": 355
+                "end_line": 355,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "MOVE 'Y' TO WS-CO-FOUND",
                 "start_byte": 13508,
                 "end_byte": 13531,
                 "start_line": 361,
-                "end_line": 361
+                "end_line": 361,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "MOVE WS-HO-MAX-DISC TO WS-DISCOUNT",
                 "start_byte": 14044,
                 "end_byte": 14078,
                 "start_line": 376,
-                "end_line": 376
+                "end_line": 376,
+                "parent_paragraph": "CALC-HO"
             },
             {
                 "text": "MOVE WS-HO-MIN TO WS-PREMIUM",
                 "start_byte": 14353,
                 "end_byte": 14381,
                 "start_line": 384,
-                "end_line": 384
+                "end_line": 384,
+                "parent_paragraph": "CALC-HO"
             },
             {
                 "text": "MOVE WS-AU-MAX-DISC TO WS-DISCOUNT",
                 "start_byte": 14571,
                 "end_byte": 14605,
                 "start_line": 391,
-                "end_line": 391
+                "end_line": 391,
+                "parent_paragraph": "CALC-AU"
             },
             {
                 "text": "MOVE WS-AU-MIN TO WS-PREMIUM",
                 "start_byte": 14880,
                 "end_byte": 14908,
                 "start_line": 399,
-                "end_line": 399
+                "end_line": 399,
+                "parent_paragraph": "CALC-AU"
             },
             {
                 "text": "MOVE PI-POLICY-NO(1:6) TO PO-PREMIUM-ID(1:6)",
                 "start_byte": 14967,
                 "end_byte": 15011,
                 "start_line": 403,
-                "end_line": 403
+                "end_line": 403,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE WS-CURRENT-DATE(3:6) TO PO-PREMIUM-ID(7:6)",
                 "start_byte": 15024,
                 "end_byte": 15071,
                 "start_line": 404,
-                "end_line": 404
+                "end_line": 404,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE PI-POLICY-NO TO PO-POLICY-NO",
                 "start_byte": 15084,
                 "end_byte": 15117,
                 "start_line": 405,
-                "end_line": 405
+                "end_line": 405,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE WS-PREMIUM TO PO-WRITTEN-PREMIUM",
                 "start_byte": 15130,
                 "end_byte": 15167,
                 "start_line": 406,
-                "end_line": 406
+                "end_line": 406,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE ZERO TO PO-EARNED-PREMIUM",
                 "start_byte": 15180,
                 "end_byte": 15210,
                 "start_line": 407,
-                "end_line": 407
+                "end_line": 407,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE WS-PREMIUM TO PO-UNEARNED-PREMIUM",
                 "start_byte": 15223,
                 "end_byte": 15261,
                 "start_line": 408,
-                "end_line": 408
+                "end_line": 408,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE WS-CURRENT-DATE TO PO-CALCULATION-DATE",
                 "start_byte": 15274,
                 "end_byte": 15317,
                 "start_line": 409,
-                "end_line": 409
+                "end_line": 409,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE 'P901' TO ER-CODE",
                 "start_byte": 15481,
                 "end_byte": 15503,
                 "start_line": 415,
-                "end_line": 415
+                "end_line": 415,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE 'PREMIUM OUTPUT WRITE FAILED' TO ER-MESSAGE",
                 "start_byte": 15519,
                 "end_byte": 15567,
                 "start_line": 416,
-                "end_line": 416
+                "end_line": 416,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "MOVE PI-POLICY-NO TO ER-POLICY-NO",
                 "start_byte": 15659,
                 "end_byte": 15692,
                 "start_line": 421,
-                "end_line": 421
+                "end_line": 421,
+                "parent_paragraph": "WRITE-ERROR"
             }
         ],
         "open": [
@@ -1829,7 +2071,8 @@
                 "start_byte": 7602,
                 "end_byte": 7703,
                 "start_line": 193,
-                "end_line": 194
+                "end_line": 194,
+                "parent_paragraph": "OPEN-FILES"
             }
         ],
         "close": [
@@ -1838,7 +2081,8 @@
                 "start_byte": 15993,
                 "end_byte": 16084,
                 "start_line": 432,
-                "end_line": 433
+                "end_line": 433,
+                "parent_paragraph": "CLOSE-FILES"
             }
         ],
         "display": [
@@ -1847,105 +2091,120 @@
                 "start_byte": 7277,
                 "end_byte": 7317,
                 "start_line": 185,
-                "end_line": 185
+                "end_line": 185,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "DISPLAY 'PREMCALC CALCULATED : ' WS-CALCULATED",
                 "start_byte": 7330,
                 "end_byte": 7376,
                 "start_line": 186,
-                "end_line": 186
+                "end_line": 186,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "DISPLAY 'PREMCALC ERRORS : ' WS-ERRORS",
                 "start_byte": 7389,
                 "end_byte": 7431,
                 "start_line": 187,
-                "end_line": 187
+                "end_line": 187,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "DISPLAY 'PREMCALC I/O ERRORS : ' WS-IO-ERRORS",
                 "start_byte": 7444,
                 "end_byte": 7489,
                 "start_line": 188,
-                "end_line": 188
+                "end_line": 188,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "DISPLAY 'POLICY OPEN ERROR ' WS-PI-ST",
                 "start_byte": 7754,
                 "end_byte": 7791,
                 "start_line": 196,
-                "end_line": 196
+                "end_line": 196,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'PROPERTY OPEN ERROR ' WS-PR-ST",
                 "start_byte": 7900,
                 "end_byte": 7939,
                 "start_line": 200,
-                "end_line": 200
+                "end_line": 200,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'VEHICLE OPEN ERROR ' WS-VE-ST",
                 "start_byte": 8048,
                 "end_byte": 8086,
                 "start_line": 204,
-                "end_line": 204
+                "end_line": 204,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'COVERAGE OPEN ERROR ' WS-CO-ST",
                 "start_byte": 8195,
                 "end_byte": 8234,
                 "start_line": 208,
-                "end_line": 208
+                "end_line": 208,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'PREMIUM OUTPUT OPEN ERROR ' WS-PO-ST",
                 "start_byte": 8343,
                 "end_byte": 8388,
                 "start_line": 212,
-                "end_line": 212
+                "end_line": 212,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'ERROR OUTPUT OPEN ERROR ' WS-ER-ST",
                 "start_byte": 8497,
                 "end_byte": 8540,
                 "start_line": 216,
-                "end_line": 216
+                "end_line": 216,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "DISPLAY 'POLICY READ ERROR ' WS-PI-ST",
                 "start_byte": 8802,
                 "end_byte": 8839,
                 "start_line": 226,
-                "end_line": 226
+                "end_line": 226,
+                "parent_paragraph": "READ-POLICY"
             },
             {
                 "text": "DISPLAY 'PROPERTY READ ERROR ' WS-PR-ST",
                 "start_byte": 9224,
                 "end_byte": 9263,
                 "start_line": 239,
-                "end_line": 239
+                "end_line": 239,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
                 "text": "DISPLAY 'VEHICLE READ ERROR ' WS-VE-ST",
                 "start_byte": 9677,
                 "end_byte": 9715,
                 "start_line": 253,
-                "end_line": 253
+                "end_line": 253,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
                 "text": "DISPLAY 'COVERAGE READ ERROR ' WS-CO-ST",
                 "start_byte": 10131,
                 "end_byte": 10170,
                 "start_line": 267,
-                "end_line": 267
+                "end_line": 267,
+                "parent_paragraph": "READ-COVERAGE"
             },
             {
                 "text": "DISPLAY 'ERROR OUTPUT WRITE FAILED ' WS-ER-ST",
                 "start_byte": 15815,
                 "end_byte": 15860,
                 "start_line": 426,
-                "end_line": 426
+                "end_line": 426,
+                "parent_paragraph": "WRITE-ERROR"
             }
         ],
         "if": [
@@ -1954,238 +2213,272 @@
                 "start_byte": 6838,
                 "end_byte": 6866,
                 "start_line": 170,
-                "end_line": 170
+                "end_line": 170,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "IF NOT POL-EOF AND NOT FATAL-ERROR",
                 "start_byte": 7073,
                 "end_byte": 7107,
                 "start_line": 178,
-                "end_line": 178
+                "end_line": 178,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "IF FATAL-ERROR MOVE 12 TO RETURN-CODE END-IF",
                 "start_byte": 7502,
                 "end_byte": 7546,
                 "start_line": 189,
-                "end_line": 189
+                "end_line": 189,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "IF WS-PI-ST NOT = '00'",
                 "start_byte": 7716,
                 "end_byte": 7738,
                 "start_line": 195,
-                "end_line": 195
+                "end_line": 195,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-PR-ST NOT = '00'",
                 "start_byte": 7862,
                 "end_byte": 7884,
                 "start_line": 199,
-                "end_line": 199
+                "end_line": 199,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-VE-ST NOT = '00'",
                 "start_byte": 8010,
                 "end_byte": 8032,
                 "start_line": 203,
-                "end_line": 203
+                "end_line": 203,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-CO-ST NOT = '00'",
                 "start_byte": 8157,
                 "end_byte": 8179,
                 "start_line": 207,
-                "end_line": 207
+                "end_line": 207,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-PO-ST NOT = '00'",
                 "start_byte": 8305,
                 "end_byte": 8327,
                 "start_line": 211,
-                "end_line": 211
+                "end_line": 211,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-ER-ST NOT = '00'",
                 "start_byte": 8459,
                 "end_byte": 8481,
                 "start_line": 215,
-                "end_line": 215
+                "end_line": 215,
+                "parent_paragraph": "OPEN-FILES"
             },
             {
                 "text": "IF WS-PI-ST NOT = '00'",
                 "start_byte": 8758,
                 "end_byte": 8780,
                 "start_line": 225,
-                "end_line": 225
+                "end_line": 225,
+                "parent_paragraph": "READ-POLICY"
             },
             {
                 "text": "IF NOT PR-EOF",
                 "start_byte": 9013,
                 "end_byte": 9026,
                 "start_line": 233,
-                "end_line": 233
+                "end_line": 233,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
                 "text": "IF WS-PR-ST NOT = '00'",
                 "start_byte": 9177,
                 "end_byte": 9199,
                 "start_line": 238,
-                "end_line": 238
+                "end_line": 238,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
                 "text": "IF NOT VE-EOF",
                 "start_byte": 9467,
                 "end_byte": 9480,
                 "start_line": 247,
-                "end_line": 247
+                "end_line": 247,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
                 "text": "IF WS-VE-ST NOT = '00'",
                 "start_byte": 9630,
                 "end_byte": 9652,
                 "start_line": 252,
-                "end_line": 252
+                "end_line": 252,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
                 "text": "IF NOT CO-EOF",
                 "start_byte": 9920,
                 "end_byte": 9933,
                 "start_line": 261,
-                "end_line": 261
+                "end_line": 261,
+                "parent_paragraph": "READ-COVERAGE"
             },
             {
                 "text": "IF WS-CO-ST NOT = '00'",
                 "start_byte": 10084,
                 "end_byte": 10106,
                 "start_line": 266,
-                "end_line": 266
+                "end_line": 266,
+                "parent_paragraph": "READ-COVERAGE"
             },
             {
                 "text": "IF PI-PRODUCT-TYPE = 'HO'",
                 "start_byte": 10619,
                 "end_byte": 10644,
                 "start_line": 282,
-                "end_line": 282
+                "end_line": 282,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF WS-PR-FOUND = 'Y'",
                 "start_byte": 10696,
                 "end_byte": 10716,
                 "start_line": 284,
-                "end_line": 284
+                "end_line": 284,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF WS-CO-FOUND = 'Y'",
                 "start_byte": 10779,
                 "end_byte": 10799,
                 "start_line": 286,
-                "end_line": 286
+                "end_line": 286,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF PI-PRODUCT-TYPE = 'AU'",
                 "start_byte": 11335,
                 "end_byte": 11360,
                 "start_line": 301,
-                "end_line": 301
+                "end_line": 301,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF WS-VE-FOUND = 'Y'",
                 "start_byte": 11417,
                 "end_byte": 11437,
                 "start_line": 303,
-                "end_line": 303
+                "end_line": 303,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF WS-CO-FOUND = 'Y'",
                 "start_byte": 11506,
                 "end_byte": 11526,
                 "start_line": 305,
-                "end_line": 305
+                "end_line": 305,
+                "parent_paragraph": "PROCESS-POLICY"
             },
             {
                 "text": "IF PR-POLICY-NO < PI-POLICY-NO",
                 "start_byte": 12399,
                 "end_byte": 12429,
                 "start_line": 329,
-                "end_line": 329
+                "end_line": 329,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "IF PR-POLICY-NO = PI-POLICY-NO",
                 "start_byte": 12508,
                 "end_byte": 12538,
                 "start_line": 332,
-                "end_line": 332
+                "end_line": 332,
+                "parent_paragraph": "GET-PROPERTY"
             },
             {
                 "text": "IF VE-POLICY-NO < PI-POLICY-NO",
                 "start_byte": 12871,
                 "end_byte": 12901,
                 "start_line": 343,
-                "end_line": 343
+                "end_line": 343,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "IF VE-POLICY-NO = PI-POLICY-NO",
                 "start_byte": 12979,
                 "end_byte": 13009,
                 "start_line": 346,
-                "end_line": 346
+                "end_line": 346,
+                "parent_paragraph": "GET-VEHICLE"
             },
             {
                 "text": "IF CO-POLICY-NO < PI-POLICY-NO",
                 "start_byte": 13347,
                 "end_byte": 13377,
                 "start_line": 357,
-                "end_line": 357
+                "end_line": 357,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "IF CO-POLICY-NO = PI-POLICY-NO",
                 "start_byte": 13456,
                 "end_byte": 13486,
                 "start_line": 360,
-                "end_line": 360
+                "end_line": 360,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "IF WS-DISCOUNT > WS-HO-MAX-DISC",
                 "start_byte": 13997,
                 "end_byte": 14028,
                 "start_line": 375,
-                "end_line": 375
+                "end_line": 375,
+                "parent_paragraph": "CALC-HO"
             },
             {
                 "text": "IF WS-PREMIUM < WS-HO-MIN",
                 "start_byte": 14312,
                 "end_byte": 14337,
                 "start_line": 383,
-                "end_line": 383
+                "end_line": 383,
+                "parent_paragraph": "CALC-HO"
             },
             {
                 "text": "IF WS-DISCOUNT > WS-AU-MAX-DISC",
                 "start_byte": 14524,
                 "end_byte": 14555,
                 "start_line": 390,
-                "end_line": 390
+                "end_line": 390,
+                "parent_paragraph": "CALC-AU"
             },
             {
                 "text": "IF WS-PREMIUM < WS-AU-MIN",
                 "start_byte": 14839,
                 "end_byte": 14864,
                 "start_line": 398,
-                "end_line": 398
+                "end_line": 398,
+                "parent_paragraph": "CALC-AU"
             },
             {
                 "text": "IF WS-PO-ST = '00'",
                 "start_byte": 15355,
                 "end_byte": 15373,
                 "start_line": 411,
-                "end_line": 411
+                "end_line": 411,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "IF WS-ER-ST = '00'",
                 "start_byte": 15730,
                 "end_byte": 15748,
                 "start_line": 423,
-                "end_line": 423
+                "end_line": 423,
+                "parent_paragraph": "WRITE-ERROR"
             }
         ],
         "goto": [],
@@ -2195,84 +2488,133 @@
                 "start_byte": 7126,
                 "end_byte": 7142,
                 "start_line": 179,
-                "end_line": 179
+                "end_line": 179,
+                "parent_paragraph": "MAIN"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 8861,
                 "end_byte": 8882,
                 "start_line": 227,
-                "end_line": 227
+                "end_line": 227,
+                "parent_paragraph": "READ-POLICY"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 9288,
                 "end_byte": 9309,
                 "start_line": 240,
-                "end_line": 240
+                "end_line": 240,
+                "parent_paragraph": "READ-PROPERTY"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 9740,
                 "end_byte": 9761,
                 "start_line": 254,
-                "end_line": 254
+                "end_line": 254,
+                "parent_paragraph": "READ-VEHICLE"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 10195,
                 "end_byte": 10216,
                 "start_line": 268,
-                "end_line": 268
+                "end_line": 268,
+                "parent_paragraph": "READ-COVERAGE"
             },
             {
                 "text": "ADD CO-COVERAGE-LIMIT TO WS-COV-LIMIT-TOTAL",
                 "start_byte": 13553,
                 "end_byte": 13596,
                 "start_line": 362,
-                "end_line": 362
+                "end_line": 362,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "ADD CO-DEDUCTIBLE TO WS-DEDUCT-TOTAL",
                 "start_byte": 13618,
                 "end_byte": 13654,
                 "start_line": 363,
-                "end_line": 363
+                "end_line": 363,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "ADD 1 TO WS-COVERAGE-COUNT",
                 "start_byte": 13676,
                 "end_byte": 13702,
                 "start_line": 364,
-                "end_line": 364
+                "end_line": 364,
+                "parent_paragraph": "GET-ALL-COVERAGES"
             },
             {
                 "text": "ADD 1 TO WS-CALCULATED",
                 "start_byte": 15389,
                 "end_byte": 15411,
                 "start_line": 412,
-                "end_line": 412
+                "end_line": 412,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 15444,
                 "end_byte": 15465,
                 "start_line": 414,
-                "end_line": 414
+                "end_line": 414,
+                "parent_paragraph": "WRITE-PREMIUM"
             },
             {
                 "text": "ADD 1 TO WS-ERRORS",
                 "start_byte": 15764,
                 "end_byte": 15782,
                 "start_line": 424,
-                "end_line": 424
+                "end_line": 424,
+                "parent_paragraph": "WRITE-ERROR"
             },
             {
                 "text": "ADD 1 TO WS-IO-ERRORS",
                 "start_byte": 15876,
                 "end_byte": 15897,
                 "start_line": 427,
-                "end_line": 427
+                "end_line": 427,
+                "parent_paragraph": "WRITE-ERROR"
+            }
+        ],
+        "subtract": [],
+        "multiply": [],
+        "divide": [],
+        "compute": [
+            {
+                "text": "COMPUTE WS-DISCOUNT ROUNDED = WS-DEDUCT-TOTAL * WS-HO-DED-RATE",
+                "start_byte": 13907,
+                "end_byte": 13984,
+                "start_line": 373,
+                "end_line": 374,
+                "parent_paragraph": "CALC-HO"
+            },
+            {
+                "text": "COMPUTE WS-PREMIUM ROUNDED = WS-HO-BASE + (WS-RISK-VALUE * WS-HO-RISK-RATE) + (WS-COV-LIMIT-TOTAL * WS-HO-COV-RATE) - WS-DISCOUNT",
+                "start_byte": 14110,
+                "end_byte": 14299,
+                "start_line": 378,
+                "end_line": 382,
+                "parent_paragraph": "CALC-HO"
+            },
+            {
+                "text": "COMPUTE WS-DISCOUNT ROUNDED = WS-DEDUCT-TOTAL * WS-AU-DED-RATE",
+                "start_byte": 14434,
+                "end_byte": 14511,
+                "start_line": 388,
+                "end_line": 389,
+                "parent_paragraph": "CALC-AU"
+            },
+            {
+                "text": "COMPUTE WS-PREMIUM ROUNDED = WS-AU-BASE + (WS-RISK-VALUE * WS-AU-RISK-RATE) + (WS-COV-LIMIT-TOTAL * WS-AU-COV-RATE) - WS-DISCOUNT",
+                "start_byte": 14637,
+                "end_byte": 14826,
+                "start_line": 393,
+                "end_line": 397,
+                "parent_paragraph": "CALC-AU"
             }
         ]
     },
@@ -2585,7 +2927,17 @@
         {
             "source": "WS-SWITCHES",
             "relationship": "CONTAINS_FIELD",
+            "target": "POL-EOF"
+        },
+        {
+            "source": "WS-SWITCHES",
+            "relationship": "CONTAINS_FIELD",
             "target": "WS-PR-EOF"
+        },
+        {
+            "source": "WS-SWITCHES",
+            "relationship": "CONTAINS_FIELD",
+            "target": "PR-EOF"
         },
         {
             "source": "WS-SWITCHES",
@@ -2595,7 +2947,17 @@
         {
             "source": "WS-SWITCHES",
             "relationship": "CONTAINS_FIELD",
+            "target": "VE-EOF"
+        },
+        {
+            "source": "WS-SWITCHES",
+            "relationship": "CONTAINS_FIELD",
             "target": "WS-CO-EOF"
+        },
+        {
+            "source": "WS-SWITCHES",
+            "relationship": "CONTAINS_FIELD",
+            "target": "CO-EOF"
         },
         {
             "source": "WS-SWITCHES",
@@ -2616,6 +2978,11 @@
             "source": "WS-SWITCHES",
             "relationship": "CONTAINS_FIELD",
             "target": "WS-FATAL"
+        },
+        {
+            "source": "WS-SWITCHES",
+            "relationship": "CONTAINS_FIELD",
+            "target": "FATAL-ERROR"
         },
         {
             "source": "PREMCALC.CBL",
@@ -2999,6 +3366,138 @@
         "display": 15,
         "if": 34,
         "goto": 0,
-        "add": 12
-    }
+        "add": 12,
+        "subtract": 0,
+        "multiply": 0,
+        "divide": 0,
+        "compute": 4
+    },
+    "call_graph": [
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "OPEN-FILES",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 169
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "READ-PROPERTY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 172
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "READ-VEHICLE",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 173
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "READ-COVERAGE",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 174
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "READ-POLICY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 177
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "PROCESS-POLICY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 180
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "MAIN",
+            "target_block": "CLOSE-FILES",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 184
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "GET-PROPERTY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 283
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "GET-ALL-COVERAGES",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 285
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "CALC-HO",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 287
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "WRITE-PREMIUM",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 288
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "WRITE-ERROR",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 292
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "GET-VEHICLE",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 302
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "PROCESS-POLICY",
+            "target_block": "CALC-AU",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 306
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "GET-PROPERTY",
+            "target_block": "READ-PROPERTY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 330
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "GET-VEHICLE",
+            "target_block": "READ-VEHICLE",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 344
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "GET-ALL-COVERAGES",
+            "target_block": "READ-COVERAGE",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 358
+        },
+        {
+            "source_file": "PREMCALC.CBL",
+            "caller_block": "WRITE-PREMIUM",
+            "target_block": "WRITE-ERROR",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 417
+        }
+    ]
 }

@@ -397,24 +397,24 @@ class InvestigationAgent:
             # 1b. Transformations
             q_trans = (
                 "MATCH (t_node:Transformation) "
-                "WHERE toLower(t_node.name) CONTAINS toLower($term) OR toLower(t_node.description) CONTAINS toLower($term) "
-                "RETURN labels(t_node)[0] AS node_type, t_node.source_file AS file, t_node.name AS name, t_node.description AS detail "
+                "WHERE toLower(t_node.description) CONTAINS toLower($term) OR toLower(t_node.expression) CONTAINS toLower($term) OR toLower(t_node.rule_id) CONTAINS toLower($term) "
+                "RETURN labels(t_node)[0] AS node_type, t_node.source_file AS file, t_node.rule_id AS rule_id, t_node.rule_type AS rule_type, t_node.expression AS expression, t_node.description AS detail "
                 "LIMIT 10"
             )
             try:
                 for row in self.neo4j.run_query(q_trans, {"term": t}):
-                    k = ("trans", row.get("file"), row.get("name"), row.get("detail"))
+                    k = ("trans", row.get("file"), row.get("rule_id"), row.get("expression"))
                     if k not in seen:
                         seen.add(k)
                         records.append(row)
             except Exception:
                 pass
 
-            # 1c. Entities (Tables, Columns, Programs)
+            # 1c. Entities (Tables, Columns, Programs, Variables, Records)
             q_ent = (
                 "MATCH (e:Entity) "
                 "WHERE toLower(e.name) CONTAINS toLower($term) "
-                "RETURN labels(e)[0] AS node_type, e.source_file AS file, e.name AS name "
+                "RETURN labels(e)[0] AS node_type, e.source_file AS file, e.name AS name, e.entity_type AS entity_type "
                 "LIMIT 10"
             )
             try:
@@ -426,7 +426,23 @@ class InvestigationAgent:
             except Exception:
                 pass
 
-            # 1d. Connected Lineage Relationships
+            # 1d. AST Statements (COMPUTE, READ, WRITE with parent paragraph)
+            q_stmt = (
+                "MATCH (b:CodeBlock)-[:CONTAINS_STATEMENT]->(s:Statement) "
+                "WHERE toLower(s.expression) CONTAINS toLower($term) "
+                "RETURN 'Statement' AS node_type, s.source_file AS file, b.name AS paragraph, s.statement_type AS stmt_type, s.expression AS expression, s.start_line AS start_line "
+                "LIMIT 10"
+            )
+            try:
+                for row in self.neo4j.run_query(q_stmt, {"term": t}):
+                    k = ("stmt", row.get("file"), row.get("paragraph"), row.get("expression"))
+                    if k not in seen:
+                        seen.add(k)
+                        records.append(row)
+            except Exception:
+                pass
+
+            # 1e. Connected Lineage Relationships
             q_rel = (
                 "MATCH (src:Entity)-[r]->(tgt:Entity) "
                 "WHERE toLower(src.name) CONTAINS toLower($term) OR toLower(tgt.name) CONTAINS toLower($term) "
@@ -534,17 +550,53 @@ class InvestigationAgent:
         )
 
         sys_prompt = (
-            "You are a senior insurance legacy systems reverse-engineering specialist. "
-            "Synthesize a factual, structured technical answer using the retrieved evidence. "
-            "Follow the required output section headers strictly: ANSWER, KEY POINTS, DATA FLOW, FORMULA, SOURCES, CONFIDENCE, GAPS."
+            "You are the KAIREX Investigation & Synthesis Agent, an elite Enterprise Legacy Code Architect. "
+            "Synthesize a factual, structured technical answer strictly using the retrieved evidence. "
+            "Do NOT write any preamble, internal thinking, or reasoning steps. "
+            "Start your response IMMEDIATELY with the '**ANSWER:**' header. "
+            "Follow the required output section headers strictly: **ANSWER:**, **EXACT LOGIC / MATHEMATICAL FORMULA:**, **END-TO-END DATA FLOW (LINEAGE):**, **VERIFIED SOURCES:**, **CONFIDENCE SCORE:**."
         )
 
         try:
-            answer = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.2, max_tokens=2048).strip()
+            answer = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.1, max_tokens=2048).strip()
+            # Clean any stray CoT/thinking blocks or drafting preambles if present
+            if "<think>" in answer:
+                answer = re.sub(r"(?s)<think>.*?</think>", "", answer).strip()
+            if "let's draft" in answer.lower():
+                idx = answer.lower().rfind("let's draft")
+                sub = answer[idx:]
+                if "\n" in sub:
+                    answer = sub.split("\n", 1)[1].strip()
+            elif re.search(r"\bHere(?:'s|\s+is)\s+(?:a\s+)?thinking\s+process\b", answer, re.IGNORECASE):
+                m = re.search(r"(?:^|\n)\s*(?:###\s*|\*\*\s*)?ANSWER\b", answer, re.IGNORECASE)
+                if m:
+                    answer = answer[m.start():].strip()
+
+            # If template instructions were echoed before the actual answer
+            if answer.count("**ANSWER:**") > 1:
+                parts = answer.split("**ANSWER:**")
+                for p in parts[1:]:
+                    clean_p = p.strip()
+                    if not clean_p.startswith("(") and len(clean_p) > 20:
+                        actual_idx = answer.find(p) - len("**ANSWER:**")
+                        answer = answer[actual_idx:].strip()
+                        break
+
+            # Clean trailing scratchpad or self-prompting lines
+            answer = re.sub(r"(?i)\n*(?:so\s+i\s+need\s+to\s+output|here(?:'s|\s+is)\s+what\s+i\s+need\s+to\s+output)\s*:?\s*$", "", answer).strip()
+
             answer_lower = answer.lower()
 
             # Calibrate confidence based on LLM's evidence analysis
-            if any(phrase in answer_lower for phrase in (
+            confidence = 0.85
+            m_conf = re.search(r"CONFIDENCE(?:\s+SCORE)?[:\s*]+\[?(\d+)%?\]?", answer, re.IGNORECASE)
+            if m_conf:
+                try:
+                    val = float(m_conf.group(1))
+                    confidence = val / 100.0 if val > 1.0 else val
+                except Exception:
+                    pass
+            elif any(phrase in answer_lower for phrase in (
                 "confidence: low",
                 "confidence\nlow",
                 "confidence\n- low",

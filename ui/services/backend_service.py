@@ -484,13 +484,13 @@ class BackendService:
 
     @staticmethod
     def check_embedding_status() -> Dict[str, Any]:
-        """Check local embedding model configuration."""
-        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        """Check embedding model configuration."""
+        model_name = os.getenv("NVIDIA_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL", "nvidia/llama-nemotron-embed-vl-1b-v2")
         return {
             "status": "ready",
             "model": model_name,
-            "dimension": 384,
-            "message": f"SentenceTransformer: {model_name} (dim=384)",
+            "dimension": 2048,
+            "message": f"NVIDIA NIM: {model_name} (dim=2048)",
         }
 
     @classmethod

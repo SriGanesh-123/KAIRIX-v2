@@ -429,62 +429,25 @@ class ParserEvidenceBuilder:
     def _compact_relationships(
         items: Any,
     ) -> list[Any]:
-
         if not isinstance(items, list):
             return []
 
         result = []
-
-        for item in items[
-            :ParserEvidenceBuilder.MAX_RELATIONSHIPS
-        ]:
-
-            if isinstance(
-                item,
-                dict,
-            ):
-
-                compact = {}
-
-                for key, value in item.items():
-
-                    if isinstance(
-                        value,
-                        (
-                            str,
-                            int,
-                            float,
-                            bool,
-                        ),
-                    ) or value is None:
-
-                        if isinstance(
-                            value,
-                            str,
-                        ):
-                            value = value[
-                                :ParserEvidenceBuilder.PREVIEW_LENGTH
-                            ]
-
-                        compact[key] = value
-
-                    else:
-
-                        compact[key] = str(
-                            value
-                        )
-
-                result.append(
-                    compact
-                )
-
+        # Support up to 250 relationships using token-efficient compact edge notation
+        for item in items[:250]:
+            if isinstance(item, dict):
+                src = item.get("source") or item.get("from")
+                rel = item.get("relationship") or item.get("type") or "RELATES_TO"
+                tgt = item.get("target") or item.get("to")
+                if src and tgt:
+                    result.append(f"({src})-[{rel}]->({tgt})")
+                else:
+                    compact = {k: str(v)[:100] for k, v in item.items() if v is not None}
+                    result.append(compact)
+            elif isinstance(item, str):
+                result.append(item)
             else:
-
-                result.append(
-                    {
-                        "value": str(item)
-                    }
-                )
+                result.append(str(item))
 
         return result
 

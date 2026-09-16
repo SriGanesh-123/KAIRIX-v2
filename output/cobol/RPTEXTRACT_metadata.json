@@ -51,6 +51,7 @@
     "records": [
         {
             "record_name": "POLICY-REC",
+            "name": "POLICY-REC",
             "level": 1,
             "start_line": 28,
             "start_byte": 597,
@@ -85,10 +86,13 @@
                     "picture": "X(02)",
                     "start_line": 33
                 }
-            ]
+            ],
+            "parent_file": "POLICY-IN",
+            "section": "FILE SECTION"
         },
         {
             "record_name": "PREMIUM-REC",
+            "name": "PREMIUM-REC",
             "level": 1,
             "start_line": 37,
             "start_byte": 893,
@@ -110,8 +114,17 @@
                     "level": 5,
                     "picture": "9(9)V99",
                     "start_line": 40
+                },
+                {
+                    "name": "END-OF-POLICY",
+                    "level": 88,
+                    "picture": "CONDITION_FLAG",
+                    "start_line": 51,
+                    "value": "'Y'"
                 }
-            ]
+            ],
+            "parent_file": "PREMIUM-IN",
+            "section": "FILE SECTION"
         }
     ],
     "files": [
@@ -138,6 +151,12 @@
         }
     ],
     "variables": [
+        {
+            "name": "POLICY-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 28
+        },
         {
             "name": "POL-POLICY-NO",
             "level": 5,
@@ -169,6 +188,12 @@
             "start_line": 33
         },
         {
+            "name": "PREMIUM-REC",
+            "level": 1,
+            "picture": "GROUP_ITEM",
+            "start_line": 37
+        },
+        {
             "name": "PREM-POLICY-NO",
             "level": 5,
             "picture": "X(12)",
@@ -198,6 +223,13 @@
             "picture": "X",
             "start_line": 50,
             "value": "'N'"
+        },
+        {
+            "name": "END-OF-POLICY",
+            "level": 88,
+            "picture": "CONDITION_FLAG",
+            "start_line": 51,
+            "value": "'Y'"
         },
         {
             "name": "WS-UNEARNED",
@@ -234,30 +266,34 @@
                 "start_byte": 1864,
                 "end_byte": 1891,
                 "start_line": 72,
-                "end_line": 72
+                "end_line": 72,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
                 "text": "PERFORM WRITE-KPI-SUMMARY",
                 "start_byte": 3180,
                 "end_byte": 3205,
                 "start_line": 119,
-                "end_line": 119
+                "end_line": 119,
+                "parent_paragraph": "MAIN-PARA"
             }
         ],
         "read": [
             {
-                "text": "READ POLICY-IN",
+                "text": "READ POLICY-IN AT END",
                 "start_byte": 1910,
-                "end_byte": 1924,
+                "end_byte": 1951,
                 "start_line": 74,
-                "end_line": 74
+                "end_line": 75,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
                 "text": "READ PREMIUM-IN",
                 "start_byte": 2057,
                 "end_byte": 2072,
                 "start_line": 79,
-                "end_line": 79
+                "end_line": 79,
+                "parent_paragraph": "MAIN-PARA"
             }
         ],
         "write": [
@@ -266,205 +302,234 @@
                 "start_byte": 1814,
                 "end_byte": 1849,
                 "start_line": 70,
-                "end_line": 70
+                "end_line": 70,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "WRITE REPORT-OUT-REC",
+                "text": "WRITE REPORT-OUT-REC FROM REPORT-RECORD",
                 "start_byte": 3046,
-                "end_byte": 3066,
+                "end_byte": 3112,
                 "start_line": 112,
-                "end_line": 112
+                "end_line": 113,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 3485,
                 "end_byte": 3505,
                 "start_line": 132,
-                "end_line": 132
+                "end_line": 132,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 3601,
                 "end_byte": 3621,
                 "start_line": 137,
-                "end_line": 137
+                "end_line": 137,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 3760,
                 "end_byte": 3780,
                 "start_line": 142,
-                "end_line": 142
+                "end_line": 142,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 3886,
                 "end_byte": 3906,
                 "start_line": 147,
-                "end_line": 147
+                "end_line": 147,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 4012,
                 "end_byte": 4032,
                 "start_line": 152,
-                "end_line": 152
+                "end_line": 152,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 4136,
                 "end_byte": 4156,
                 "start_line": 157,
-                "end_line": 157
+                "end_line": 157,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 4260,
                 "end_byte": 4280,
                 "start_line": 162,
-                "end_line": 162
+                "end_line": 162,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC",
                 "start_byte": 4384,
                 "end_byte": 4404,
                 "start_line": 167,
-                "end_line": 167
+                "end_line": 167,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
                 "text": "WRITE REPORT-OUT-REC.",
                 "start_byte": 4517,
                 "end_byte": 4538,
                 "start_line": 172,
-                "end_line": 172
+                "end_line": 172,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             }
         ],
         "move": [
             {
-                "text": "MOVE WS-REPORT-MONTH",
+                "text": "MOVE WS-REPORT-MONTH TO RPT-REPORT-MONTH",
                 "start_byte": 2238,
-                "end_byte": 2258,
+                "end_byte": 2306,
                 "start_line": 85,
-                "end_line": 85
+                "end_line": 86,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE POL-POLICY-NO",
+                "text": "MOVE POL-POLICY-NO TO RPT-POLICY-NO",
                 "start_byte": 2332,
-                "end_byte": 2350,
+                "end_byte": 2395,
                 "start_line": 88,
-                "end_line": 88
+                "end_line": 89,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE POL-CUSTOMER-ID",
+                "text": "MOVE POL-CUSTOMER-ID TO RPT-CUSTOMER-ID",
                 "start_byte": 2421,
-                "end_byte": 2441,
+                "end_byte": 2488,
                 "start_line": 91,
-                "end_line": 91
+                "end_line": 92,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE POL-AGENT-ID",
+                "text": "MOVE POL-AGENT-ID TO RPT-AGENT-ID",
                 "start_byte": 2514,
-                "end_byte": 2531,
+                "end_byte": 2575,
                 "start_line": 94,
-                "end_line": 94
+                "end_line": 95,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE POL-PRODUCT",
+                "text": "MOVE POL-PRODUCT TO RPT-PRODUCT",
                 "start_byte": 2601,
-                "end_byte": 2617,
+                "end_byte": 2660,
                 "start_line": 97,
-                "end_line": 97
+                "end_line": 98,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE POL-STATUS",
+                "text": "MOVE POL-STATUS TO RPT-STATUS",
                 "start_byte": 2686,
-                "end_byte": 2701,
+                "end_byte": 2743,
                 "start_line": 100,
-                "end_line": 100
+                "end_line": 101,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE WRITTEN-PREMIUM",
+                "text": "MOVE WRITTEN-PREMIUM TO RPT-WRITTEN-PREM",
                 "start_byte": 2769,
-                "end_byte": 2789,
+                "end_byte": 2837,
                 "start_line": 103,
-                "end_line": 103
+                "end_line": 104,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE EARNED-PREMIUM",
+                "text": "MOVE EARNED-PREMIUM TO RPT-EARNED-PREM",
                 "start_byte": 2863,
-                "end_byte": 2882,
+                "end_byte": 2929,
                 "start_line": 106,
-                "end_line": 106
+                "end_line": 107,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE WS-UNEARNED",
+                "text": "MOVE WS-UNEARNED TO RPT-UNEARNED-PREM",
                 "start_byte": 2955,
-                "end_byte": 2971,
+                "end_byte": 3020,
                 "start_line": 109,
-                "end_line": 109
+                "end_line": 110,
+                "parent_paragraph": "MAIN-PARA"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE '==============================================================' TO REPORT-OUT-REC",
                 "start_byte": 3361,
-                "end_byte": 3365,
+                "end_byte": 3472,
                 "start_line": 129,
-                "end_line": 129
+                "end_line": 131,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'MONTHLY KPI SUMMARY' TO REPORT-OUT-REC",
                 "start_byte": 3520,
-                "end_byte": 3524,
+                "end_byte": 3588,
                 "start_line": 134,
-                "end_line": 134
+                "end_line": 136,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE '==============================================================' TO REPORT-OUT-REC",
                 "start_byte": 3636,
-                "end_byte": 3640,
+                "end_byte": 3747,
                 "start_line": 139,
-                "end_line": 139
+                "end_line": 141,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'TOTAL POLICIES : 14500' TO REPORT-OUT-REC",
                 "start_byte": 3795,
-                "end_byte": 3799,
+                "end_byte": 3873,
                 "start_line": 144,
-                "end_line": 144
+                "end_line": 146,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'ACTIVE POLICIES : 13100' TO REPORT-OUT-REC",
                 "start_byte": 3921,
-                "end_byte": 3925,
+                "end_byte": 3999,
                 "start_line": 149,
-                "end_line": 149
+                "end_line": 151,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'PENDING POLICIES : 300' TO REPORT-OUT-REC",
                 "start_byte": 4047,
-                "end_byte": 4051,
+                "end_byte": 4123,
                 "start_line": 154,
-                "end_line": 154
+                "end_line": 156,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'EXPIRED POLICIES : 800' TO REPORT-OUT-REC",
                 "start_byte": 4171,
-                "end_byte": 4175,
+                "end_byte": 4247,
                 "start_line": 159,
-                "end_line": 159
+                "end_line": 161,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'CANCELLED POLICIES : 300' TO REPORT-OUT-REC",
                 "start_byte": 4295,
-                "end_byte": 4299,
+                "end_byte": 4371,
                 "start_line": 164,
-                "end_line": 164
+                "end_line": 166,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             },
             {
-                "text": "MOVE",
+                "text": "MOVE 'WRITTEN = EARNED + UNEARNED : PASSED' TO REPORT-OUT-REC",
                 "start_byte": 4419,
-                "end_byte": 4423,
+                "end_byte": 4504,
                 "start_line": 169,
-                "end_line": 169
+                "end_line": 171,
+                "parent_paragraph": "WRITE-KPI-SUMMARY"
             }
         ],
         "open": [
@@ -473,22 +538,37 @@
                 "start_byte": 1710,
                 "end_byte": 1799,
                 "start_line": 66,
-                "end_line": 68
+                "end_line": 68,
+                "parent_paragraph": "MAIN-PARA"
             }
         ],
         "close": [
             {
-                "text": "CLOSE POLICY-IN PREMIUM-IN REPORT-OUT STOP RUN.",
+                "text": "CLOSE POLICY-IN PREMIUM-IN REPORT-OUT",
                 "start_byte": 3220,
-                "end_byte": 3317,
+                "end_byte": 3293,
                 "start_line": 121,
-                "end_line": 125
+                "end_line": 123,
+                "parent_paragraph": "MAIN-PARA"
             }
         ],
         "display": [],
         "if": [],
         "goto": [],
-        "add": []
+        "add": [],
+        "subtract": [],
+        "multiply": [],
+        "divide": [],
+        "compute": [
+            {
+                "text": "COMPUTE WS-UNEARNED = WRITTEN-PREMIUM - EARNED-PREMIUM",
+                "start_byte": 2098,
+                "end_byte": 2212,
+                "start_line": 81,
+                "end_line": 83,
+                "parent_paragraph": "MAIN-PARA"
+            }
+        ]
     },
     "relationships": [
         {
@@ -504,56 +584,111 @@
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
             "source": "RPTEXTRACT.CBL",
             "relationship": "WRITES",
+            "target": "REPORT-OUT"
+        },
+        {
+            "source": "REPORT-OUT",
+            "relationship": "WRITES_RECORD",
             "target": "REPORT-OUT-REC"
         },
         {
@@ -612,6 +747,11 @@
             "target": "EARNED-PREMIUM"
         },
         {
+            "source": "PREMIUM-REC",
+            "relationship": "CONTAINS_FIELD",
+            "target": "END-OF-POLICY"
+        },
+        {
             "source": "RPTEXTRACT.CBL",
             "relationship": "CONTAINS_PARAGRAPH",
             "target": "MAIN-PARA"
@@ -655,16 +795,6 @@
             "source": "RPTEXTRACT.CBL",
             "relationship": "CLOSES",
             "target": "REPORT-OUT"
-        },
-        {
-            "source": "RPTEXTRACT.CBL",
-            "relationship": "CLOSES",
-            "target": "STOP"
-        },
-        {
-            "source": "RPTEXTRACT.CBL",
-            "relationship": "CLOSES",
-            "target": "RUN"
         }
     ],
     "parse_errors": [],
@@ -678,6 +808,19 @@
         "display": 0,
         "if": 0,
         "goto": 0,
-        "add": 0
-    }
+        "add": 0,
+        "subtract": 0,
+        "multiply": 0,
+        "divide": 0,
+        "compute": 1
+    },
+    "call_graph": [
+        {
+            "source_file": "RPTEXTRACT.CBL",
+            "caller_block": "MAIN-PARA",
+            "target_block": "WRITE-KPI-SUMMARY",
+            "relationship": "CALLS_BLOCK",
+            "start_line": 119
+        }
+    ]
 }

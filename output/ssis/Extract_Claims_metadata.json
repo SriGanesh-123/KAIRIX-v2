@@ -25,7 +25,8 @@
       "task_name": "SQL - Log Package Start",
       "task_type": "Microsoft.ExecuteSQLTask",
       "creation_name": "Microsoft.ExecuteSQLTask",
-      "ref_id": "Package\\SQL_LogStart"
+      "ref_id": "Package\\SQL_LogStart",
+      "parent_container": null
     },
     {
       "package_name": "Extract_Claims",
@@ -33,7 +34,8 @@
       "task_name": "DFT - Extract, Cleanse, Validate, Load claims",
       "task_type": "Microsoft.Pipeline",
       "creation_name": "Microsoft.Pipeline",
-      "ref_id": "Package\\DFT_Main"
+      "ref_id": "Package\\DFT_Main",
+      "parent_container": null
     },
     {
       "package_name": "Extract_Claims",
@@ -41,7 +43,17 @@
       "task_name": "SQL - Log Package End / Row Counts",
       "task_type": "Microsoft.ExecuteSQLTask",
       "creation_name": "Microsoft.ExecuteSQLTask",
-      "ref_id": "Package\\SQL_LogEnd"
+      "ref_id": "Package\\SQL_LogEnd",
+      "parent_container": null
+    },
+    {
+      "package_name": "Extract_Claims",
+      "task_id": "{62902F90-F23E-407A-BBFF-02787D3F81B1}",
+      "task_name": "SQL - Log Error to ETL_ERROR_LOG",
+      "task_type": "Microsoft.ExecuteSQLTask",
+      "creation_name": "Microsoft.ExecuteSQLTask",
+      "ref_id": "Package\\EH_LogError",
+      "parent_container": "OnError"
     }
   ],
   "components": [
