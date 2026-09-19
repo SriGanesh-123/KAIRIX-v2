@@ -26,10 +26,27 @@ _ACTIVE_TASKS: Dict[str, Dict[str, Any]] = {}
 _AGENT_SINGLETON = None
 _AGENT_LOCK = threading.Lock()
 
+# Bounded in-memory thread-safe query cache (max 100 entries, FIFO eviction)
+_QUERY_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_LOCK = threading.Lock()
+_CACHE_MAX_SIZE = 100
+
+
+def _normalize_query_cache_key(question: str) -> str:
+    """Normalize question into alphanumeric lowercase key for resilient caching."""
+    return re.sub(r"[^a-z0-9]", "", (question or "").lower())
+
+
+def clear_query_cache() -> None:
+    """Clears the investigation query cache."""
+    with _CACHE_LOCK:
+        _QUERY_CACHE.clear()
+
 
 def reset_cached_investigation_agent() -> None:
-    """Resets the singleton investigation agent instance."""
+    """Resets the singleton investigation agent instance and clears query cache."""
     global _AGENT_SINGLETON
+    clear_query_cache()
     with _AGENT_LOCK:
         if _AGENT_SINGLETON is not None:
             try:
@@ -74,6 +91,11 @@ class InvestigationService:
     @classmethod
     def reset_agent(cls) -> None:
         reset_cached_investigation_agent()
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Clear query cache."""
+        clear_query_cache()
 
     @classmethod
     def start_background_query(cls, question: str) -> str:
@@ -162,6 +184,16 @@ class InvestigationService:
                 "question": question,
             }
 
+        cache_key = _normalize_query_cache_key(clean_q)
+        if cache_key:
+            with _CACHE_LOCK:
+                cached_res = _QUERY_CACHE.get(cache_key)
+                if cached_res is not None:
+                    res_copy = dict(cached_res)
+                    res_copy["question"] = clean_q
+                    res_copy["cached"] = True
+                    return res_copy
+
         start_time = time.perf_counter()
         try:
             agent = _get_cached_investigation_agent()
@@ -186,7 +218,7 @@ class InvestigationService:
 
             elapsed = round(time.perf_counter() - start_time, 2)
 
-            return {
+            return_payload = {
                 "success": True,
                 "question": clean_q,
                 "raw_answer": raw_answer,
@@ -205,7 +237,17 @@ class InvestigationService:
                 "execution_time_sec": elapsed,
                 "model": getattr(agent.llm, "model", "NVIDIA NIM"),
                 "error": None,
+                "cached": False,
             }
+
+            if cache_key:
+                with _CACHE_LOCK:
+                    if len(_QUERY_CACHE) >= _CACHE_MAX_SIZE:
+                        first_key = next(iter(_QUERY_CACHE))
+                        _QUERY_CACHE.pop(first_key, None)
+                    _QUERY_CACHE[cache_key] = dict(return_payload)
+
+            return return_payload
 
         except Exception as e:
             elapsed = round(time.perf_counter() - start_time, 2)
@@ -287,9 +329,13 @@ class InvestigationService:
             if name == "ANSWER":
                 sections["answer"] = content
             elif name == "KEY POINTS":
+                # Normalize inline bullets (e.g., "- Point 1. - Point 2." -> separate lines)
+                # Ensure we only split if preceded by sentence end (.!?), semicolon, or newline,
+                # preserving hyphenated identifiers like WS-EARNED-DAYS.
+                norm_content = re.sub(r"(?<=[.!?;\n])\s*[-•*]\s+", "\n- ", content)
                 points = [
                     re.sub(r"^[\s*•\-]+", "", line).strip()
-                    for line in content.splitlines()
+                    for line in norm_content.splitlines()
                     if line.strip() and not line.strip().startswith("#")
                 ]
                 sections["key_points"] = [p for p in points if p]
@@ -316,8 +362,8 @@ class InvestigationService:
             if prefix:
                 sections["answer"] = prefix
 
-        # Fallback: If key_points is empty, auto-extract from answer bullets or sentences
-        if not sections.get("key_points"):
+        # Fallback: If key_points has fewer than 2 points, auto-supplement from answer bullets or sentences
+        if len(sections.get("key_points", [])) < 2:
             ans_text = sections.get("answer", "").strip()
             bullets = [
                 re.sub(r"^[\s*•\-\d\.\)]+", "", l).strip()
@@ -325,48 +371,69 @@ class InvestigationService:
                 if re.match(r"^[\s*•\-\d\.\)]+", l) and len(l.strip()) > 10 and not l.strip().startswith("#")
             ]
             if bullets:
-                sections["key_points"] = bullets[:4]
+                for b in bullets:
+                    if b not in sections["key_points"]:
+                        sections["key_points"].append(b)
             else:
                 sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", ans_text) if len(s.strip()) > 20 and not s.strip().startswith("#")]
-                if len(sentences) >= 2:
-                    sections["key_points"] = sentences[:4]
-                elif len(sentences) == 1:
-                    pts = [sentences[0]]
-                    if sections.get("sources"):
-                        pts.append(f"Core logic verified in: {', '.join(sections['sources'][:3])}")
-                    if sections.get("formula"):
-                        pts.append("Governed by verified mathematical transformations and capping rules.")
-                    sections["key_points"] = pts
+                for sent in sentences:
+                    if sent not in sections["key_points"]:
+                        sections["key_points"].append(sent)
+                    if len(sections["key_points"]) >= 3:
+                        break
 
-        # Fallback: If data_flow is empty, auto-construct from available context / sources
+        # Fallback: If data_flow is empty, auto-construct from key_points and available context / sources
         if not sections.get("data_flow"):
+            key_points = sections.get("key_points", [])
             sources = sections.get("sources", [])
             formula = sections.get("formula", "")
             ans_text = sections.get("answer", "")
             flow_steps = []
-            
-            # Check for files/paragraphs mentioned in answer or sources
-            found_entities = re.findall(r"\b([A-Z0-9_\-]{4,}\.(?:CBL|dtsx|sql))\b", ans_text, re.IGNORECASE)
-            found_paras = re.findall(r"\b([A-Z0-9_\-]{4,}-(?:EARNED|CALC|RESULT|LOAD|REPORT|SUMMARY|MAIN))\b", ans_text, re.IGNORECASE)
-            
-            flow_steps.append("Input Record & Parameters")
-            if found_entities:
-                for ent in list(dict.fromkeys(found_entities))[:2]:
-                    flow_steps.append(f"{ent.upper()} (primary program)")
-            elif sources:
-                for s in sources[:2]:
-                    flow_steps.append(f"{s} (processing component)")
-                    
-            if found_paras:
-                for p in list(dict.fromkeys(found_paras))[:2]:
-                    flow_steps.append(f"{p.upper()} paragraph execution")
-            elif formula:
-                flow_steps.append("Mathematical computation & rule evaluation")
-                
-            flow_steps.append("Output Result & Reporting Destination")
-            
-            if len(flow_steps) >= 3:
-                sections["data_flow"] = " ➔ ".join(flow_steps)
+
+            # 1. Prefer rich key_points to construct specific file-anchored execution hops
+            if key_points and len(key_points) >= 2:
+                for kp in key_points:
+                    m_paren = re.search(r'\(([^)]+\.(?:cbl|cob|cpy|dtsx|sql)[^)]*)\)\s*$', kp, re.IGNORECASE)
+                    if m_paren:
+                        ref = m_paren.group(1).strip()
+                        desc = kp[:m_paren.start()].strip()
+                        flow_steps.append(f"[{ref}] {desc}")
+                    else:
+                        m_file = re.search(r'\b([A-Za-z0-9_\-]+\.(?:CBL|cob|cpy|dtsx|sql))\b', kp, re.IGNORECASE)
+                        m_task = re.search(r'\b(T\d{1,4}|GET-[A-Z0-9_\-]+|VALIDATE-[A-Z0-9_\-]+|CALCULATE-[A-Z0-9_\-]+|OPEN-[A-Z0-9_\-]+)\b', kp, re.IGNORECASE)
+                        if m_file and m_task:
+                            flow_steps.append(f"[{m_file.group(1)}:{m_task.group(1)}] {kp}")
+                        elif m_file:
+                            flow_steps.append(f"[{m_file.group(1)}] {kp}")
+                        else:
+                            flow_steps.append(kp)
+
+                if flow_steps:
+                    sections["data_flow"] = " ➔ ".join(flow_steps)
+
+            # 2. Secondary fallback if key_points were insufficient
+            if not sections.get("data_flow"):
+                found_entities = re.findall(r"\b([A-Z0-9_\-]{4,}\.(?:CBL|cob|cpy|dtsx|sql))\b", ans_text, re.IGNORECASE)
+                found_paras = re.findall(r"\b([A-Z0-9_\-]{4,}-(?:EARNED|CALC|RESULT|LOAD|REPORT|SUMMARY|MAIN|VEHICLE|DATES))\b", ans_text, re.IGNORECASE)
+
+                flow_steps.append("Input Record & Parameters")
+                if found_entities:
+                    for ent in list(dict.fromkeys(found_entities))[:2]:
+                        flow_steps.append(f"{ent.upper()} (primary program)")
+                elif sources:
+                    for s in sources[:2]:
+                        flow_steps.append(f"{s} (processing component)")
+
+                if found_paras:
+                    for p in list(dict.fromkeys(found_paras))[:2]:
+                        flow_steps.append(f"{p.upper()} paragraph execution")
+                elif formula:
+                    flow_steps.append("Mathematical computation & rule evaluation")
+
+                flow_steps.append("Output Result & Reporting Destination")
+
+                if len(flow_steps) >= 3:
+                    sections["data_flow"] = " ➔ ".join(flow_steps)
 
         return sections
 

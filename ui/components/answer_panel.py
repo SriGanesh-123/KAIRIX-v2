@@ -48,9 +48,18 @@ KNOWN_AST_PROVENANCE = [
     (r"\b(?:PI-EFFECTIVE-DATE|PI-EXPIRY-DATE|PRI-CALCULATION-DATE)\b", "EARNPREM.CBL", "Line 88"),
 
     # COBOL PREMCALC.CBL
+    (r"\b(?:GET-VEHICLE|vehicle-record|vehicle\s+record|\bP002\b)\b", "PREMCALC.CBL", "Line 315"),
+    (r"\b(?:product-type|product\s+type.*AU|\bP004\b)\b", "PREMCALC.CBL", "Line 320"),
     (r"\b(?:WS-RATING-CONSTANTS|WS-HO-BASE|WS-AUTO-BASE)\b", "PREMCALC.CBL", "Line 115"),
-    (r"\b(?:PROCESS-POLICY|CALCULATE-PREMIUM)\b", "PREMCALC.CBL", "Line 320"),
+    (r"\b(?:PROCESS-POLICY|CALCULATE-PREMIUM)\b", "PREMCALC.CBL", "Line 302"),
     (r"\bPREMCALC\b", "PREMCALC.CBL", "Line 1"),
+
+    # SQL PolicyCenter & Commercial Auto Rating
+    (r"\b(?:pcx_ca7transaction|Transformation\s+T015|\bT015\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 129"),
+    (r"\b(?:ca7line|Commercial\s+Auto\s+Line|Transformation\s+T012|\bT012\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 53"),
+    (r"\b(?:CommercialPackage.*C\.P\.P\.|Transformation\s+T017|\bT017\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 265"),
+    (r"\bPolicyCenter_Monoline\b", "PolicyCenter_Monoline.sql", "Line 1"),
+    (r"\bPolicyCenter_CPP_Breakdown\b", "PolicyCenter_CPP_Breakdown.sql", "Line 1"),
 
     # COBOL RPTEXTRACT.CBL & KPICALC.CBL
     (r"\b(?:RPTEXTRACT|MAIN-PARA)\b", "RPTEXTRACT.CBL", "Line 140"),
@@ -130,25 +139,40 @@ def _render_data_flow(flow_text: str) -> str:
         return ""
 
     # Robust splitting on all arrow variants (➔, →, ➜, ➡, ->, -->, =>) and line breaks
-    steps = [s.strip() for s in re.split(r"\s*(?:➔|→|➜|➡|➤|->|-->|=>|\n+)\s*", flow_text) if s.strip()]
-    if len(steps) <= 1:
+    raw_steps = [s.strip() for s in re.split(r"\s*(?:➔|→|➜|➡|➤|->|-->|=>|\n+)\s*", flow_text) if s.strip()]
+    if len(raw_steps) <= 1:
         # Check if line-break or numbered step delimited
         lines = [l.strip() for l in re.split(r"(?:\n\s*(?:\d+[\.\)]|\-|\*)\s*|\n+)", flow_text) if l.strip()]
         if len(lines) > 1:
-            steps = lines
-        elif len(steps) == 1 and ";" in steps[0]:
-            steps = [s.strip() for s in steps[0].split(";") if s.strip()]
+            raw_steps = lines
+        elif len(raw_steps) == 1 and ";" in raw_steps[0]:
+            raw_steps = [s.strip() for s in raw_steps[0].split(";") if s.strip()]
 
-    if not steps:
+    # Intelligent merging: merge standalone bracket anchors like [EARNPREM.CBL:CALCULATE-EARNED] into the following action step
+    steps = []
+    idx = 0
+    while idx < len(raw_steps):
+        s = raw_steps[idx]
+        is_pure_anchor = bool(re.match(r"^\[[A-Za-z0-9_\-\.\s:]+\]$", s)) or (
+            len(s.split()) == 1 and any(ext in s.lower() for ext in [".cbl", ".cob", ".cpy", ".dtsx", ".sql"])
+        )
+        if is_pure_anchor and idx + 1 < len(raw_steps):
+            steps.append(f"{s} {raw_steps[idx+1]}")
+            idx += 2
+        else:
+            steps.append(s)
+            idx += 1
+
+    valid_steps = [s.strip() for s in steps if re.sub(r"^[\s*•\-\d\.\)]+", "", s).strip()]
+    if not valid_steps:
         return f"<div class='df-pipeline-wrapper'><div class='df-step-box'>{html.escape(flow_text)}</div></div>"
 
-    total_steps = len(steps)
+    total_steps = len(valid_steps)
     cards_html = []
     active_file_ctx = None
 
-    for i, raw_step in enumerate(steps, 1):
-        step_str = raw_step.strip()
-        step_str = re.sub(r"^[\s*•\-\d\.\)]+", "", step_str).strip()
+    for i, raw_step in enumerate(valid_steps, 1):
+        step_str = re.sub(r"^[\s*•\-\d\.\)]+", "", raw_step).strip()
         if not step_str:
             continue
 
@@ -160,13 +184,14 @@ def _render_data_flow(flow_text: str) -> str:
 
         # Categorize node
         lower = step_str.lower()
-        if any(ext in lower for ext in [".cbl", ".cob", ".cpy"]) or any(p in lower for p in ["paragraph", "calculate-", "write-", "read-", "process-", "main-", "cobol"]):
-            badge_class = "df-badge-cobol"
-            badge_label = "COBOL AST"
-        elif any(ext in lower for ext in [".dtsx", "ssis", "extract_"]) or re.search(r"\bt\d{1,4}\b", lower):
+        fn_lower = (file_name or "").lower()
+        if any(ext in fn_lower for ext in [".dtsx"]) or any(ext in lower for ext in [".dtsx", "ssis", "extract_"]) or re.search(r"\bt\d{1,4}\b", lower):
             badge_class = "df-badge-ssis"
             badge_label = "SSIS ETL"
-        elif any(ext in lower for ext in [".sql", "public.", "table", ".dat", "ksds", "vsam", "database"]) or "record" in lower:
+        elif any(ext in fn_lower for ext in [".cbl", ".cob", ".cpy"]) or any(ext in lower for ext in [".cbl", ".cob", ".cpy"]) or any(p in lower for p in ["paragraph", "calculate-", "write-", "read-", "process-", "main-", "cobol"]):
+            badge_class = "df-badge-cobol"
+            badge_label = "COBOL AST"
+        elif any(ext in fn_lower for ext in [".sql"]) or any(ext in lower for ext in [".sql", "public.", "table", ".dat", "ksds", "vsam", "database"]) or "record" in lower:
             badge_class = "df-badge-db"
             badge_label = "DATA STORE"
         elif any(w in lower for w in ["cap ", "guard", "if ", "rule", "floor", "zero", "businessrule"]):
@@ -278,9 +303,11 @@ def _render_data_flow(flow_text: str) -> str:
 
 def _render_formulas(formula_text: str) -> str:
     """Formats formula / calculation section with styled formula cards."""
-    lines = [l.strip() for l in formula_text.splitlines() if l.strip()]
+    # Split across both newlines and semicolons, so inline semicolon formulas become separate clean cards
+    raw_lines = re.split(r";\s*|\n+", formula_text or "")
+    lines = [l.strip() for l in raw_lines if l.strip()]
     if not lines:
-        return f"<div class='formula-card'>{html.escape(formula_text)}</div>"
+        return f"<div class='formula-card'>{html.escape(formula_text or '')}</div>"
 
     html_parts = ["<div class='formula-container'>"]
     for line in lines:
@@ -290,8 +317,11 @@ def _render_formulas(formula_text: str) -> str:
             continue
         
         # Format markdown bold & backticks in HTML
-        fmt_line = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", clean_line)
+        fmt_line = html.escape(clean_line)
+        fmt_line = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", fmt_line)
         fmt_line = re.sub(r"`([^`]+)`", r"<code class='eq-code'>\1</code>", fmt_line)
+        # Format variables / identifiers
+        fmt_line = re.sub(r"\b([A-Z0-9_\-]{3,}(?:\.[A-Z0-9_\-]+)?)\b", r"<code>\1</code>", fmt_line)
         
         # Highlight equal signs and math operators
         html_parts.append(f"<div class='formula-line'><span class='formula-bullet'></span> {fmt_line}</div>")

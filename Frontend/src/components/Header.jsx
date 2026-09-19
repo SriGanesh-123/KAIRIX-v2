@@ -26,10 +26,10 @@ export default function Header({ activeView, onViewChange }) {
         <div className="brand-zone" onClick={() => onViewChange('dashboard')} title="KAIRIX Enterprise Reverse Engineering Workbench">
           <div className="brand-logo-container">
             <img 
-              src="/kairix_emblem_transparent.png" 
+              src="/kairix_squircle_badge.png" 
               alt="KAIRIX Emblem" 
               className="brand-logo-img"
-              onError={(e) => { e.currentTarget.src = '/kairix_logo.svg'; }}
+              onError={(e) => { e.currentTarget.src = '/kairix_emblem_transparent.png'; }}
             />
           </div>
           <div>

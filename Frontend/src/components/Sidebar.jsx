@@ -27,10 +27,10 @@ export default function Sidebar({
       <div className="sidebar-brand" onClick={() => onViewChange('investigation')} style={{ cursor: 'pointer' }}>
         <div className="sidebar-logo-box">
           <img 
-            src="/kairix_emblem_transparent.png" 
+            src="/kairix_squircle_badge.png" 
             alt="KAIRIX" 
             className="sidebar-logo-img"
-            onError={(e) => { e.currentTarget.src = '/kairix_logo.svg'; }}
+            onError={(e) => { e.currentTarget.src = '/kairix_emblem_transparent.png'; }}
           />
         </div>
         <div className="sidebar-brand-text">

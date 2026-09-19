@@ -135,12 +135,13 @@ You must structure your final response exactly in the following Markdown format:
 - [Bullet 1: most important structural or architectural takeaway]
 - [Bullet 2: key program, file, table, or SSIS task role]
 - [Bullet 3: crucial business rule, date boundary, or capping logic]
+(MANDATORY: Output 3 to 4 concise bullet points. Every bullet point MUST start on a NEW line with a hyphen and space '- '. NEVER concatenate multiple bullets on the same line with inline hyphens.)
 
 **EXACT LOGIC / MATHEMATICAL FORMULA:**
-(The precise computational formula, capping logic, or conditional rules extracted from the graph/AST. If not applicable to this inquiry, output: N/A)
+(The precise computational formula, capping logic, or conditional rules extracted from the graph/AST. MANDATORY: Format as multi-line pseudo-code where each mathematical assignment, condition, or rule is placed on its own separate line. Do NOT combine statements with semicolons into a single line. If not applicable to this inquiry, output: N/A)
 
 **END-TO-END DATA FLOW (LINEAGE):**
-(Step-by-step trace of how the data moves through paragraphs, files, and systems using ➔ arrows. MANDATORY: For each step, include its source file and line or task reference in brackets if known, e.g. [EARNPREM.CBL:L559] CALCULATE-EARNED ➔ [EARNPREM.CBL:L611] WS-EARNED formula ➔ [Extract_Premium.dtsx:T6] Aggregate.)
+(Step-by-step trace of how the data moves through paragraphs, files, and systems using ➔ arrows. MANDATORY: Consolidate execution into 6 to 8 primary sequential steps. Do NOT emit micro-hops for temporary integer conversions or scratch calculations. Focus on key structural milestones: [Source File:Paragraph] ➔ [Transformation/Formula] ➔ [ETL Package:Task] ➔ [Target Database/Table]. For each step, include its source file and line or task reference in brackets if known, e.g. [EARNPREM.CBL:L559] CALCULATE-EARNED ➔ [EARNPREM.CBL:L611] WS-EARNED formula ➔ [Extract_Premium.dtsx:T6] Aggregate.)
 
 **VERIFIED SOURCES:**
 - [File Name] (Paragraph/Task/Rule Name)

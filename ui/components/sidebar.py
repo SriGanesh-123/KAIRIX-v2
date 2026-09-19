@@ -25,16 +25,16 @@ PAGES = [
 
 
 def _get_logo_html() -> str:
-    """Loads and encodes the official KAIRIX logo in base64 pinned to the top-left corner."""
+    """Loads and encodes the official KAIRIX squircle logo in base64 pinned to the top-left corner."""
     assets_dir = Path(__file__).resolve().parent.parent / "assets"
-    for candidate in ["kairix_emblem_transparent.png", "kairix_emblem.png", "kairix_logo.png"]:
+    for candidate in ["kairix_squircle_badge.png", "kairix_emblem_transparent.png", "kairix_emblem.png", "kairix_logo.png"]:
         logo_path = assets_dir / candidate
         if logo_path.exists():
             try:
                 b64 = base64.b64encode(logo_path.read_bytes()).decode("utf-8")
                 return f"""
                 <div style="display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; margin-top: -2.4rem; margin-bottom: 0.95rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB; width: 100%;">
-                    <div style="width: 42px; height: 42px; border-radius: 10px; background: #FFFFFF; border: 1px solid #D5DFEB; box-shadow: 0 2px 6px rgba(166, 180, 200, 0.25); display: flex; align-items: center; justify-content: center; padding: 4px; flex-shrink: 0;">
+                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                         <img src="data:image/png;base64,{b64}" style="width: 100%; height: 100%; object-fit: contain; display: block;" alt="KAIRIX Logo" />
                     </div>
                     <div style="display: flex; flex-direction: column; justify-content: center; text-align: left;">
@@ -45,6 +45,7 @@ def _get_logo_html() -> str:
                 """
             except Exception:
                 continue
+
 
     return """
     <div style="display: flex; flex-direction: column; align-items: flex-start; margin-top: -2.4rem; margin-bottom: 0.85rem; padding-bottom: 0.75rem; border-bottom: 1px solid #D5DFEB; width: 100%;">

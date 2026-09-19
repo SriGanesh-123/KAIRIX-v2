@@ -558,7 +558,7 @@ class InvestigationAgent:
         )
 
         try:
-            answer = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.1, max_tokens=2048).strip()
+            answer = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.0, max_tokens=2048).strip()
             # Clean any stray CoT/thinking blocks or drafting preambles if present
             if "<think>" in answer:
                 answer = re.sub(r"(?s)<think>.*?</think>", "", answer).strip()

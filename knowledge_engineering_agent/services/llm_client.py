@@ -64,6 +64,8 @@ JSON Schema:
         payload = {
             "model": self.model,
             "temperature": 0,
+            "seed": 42,
+            "top_p": 1.0,
             "messages": [
                 {
                     "role": "system",
@@ -193,7 +195,7 @@ JSON Schema:
     def complete(
         self,
         prompt: str,
-        temperature: float = 0.2,
+        temperature: float = 0.0,
         system_prompt: str = "You are a helpful assistant.",
         max_tokens: int = 2048,
     ) -> str:
@@ -221,6 +223,8 @@ JSON Schema:
             payload = {
                 "model": current_model,
                 "temperature": temperature,
+                "top_p": 1.0,
+                "seed": 42,
                 "max_tokens": max_tokens,
                 "messages": [
                     {"role": "system", "content": system_prompt},
