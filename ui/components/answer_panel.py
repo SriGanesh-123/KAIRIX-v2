@@ -32,61 +32,13 @@ def _get_tech_badge(source_name: str) -> str:
     return f"<span class='source-pill'>{html.escape(source_name)}</span>"
 
 
-KNOWN_AST_PROVENANCE = [
-    # COBOL EARNPREM.CBL
-    (r"\b(?:VALIDATE-DATES|VALIDATE-CALENDAR)\b", "EARNPREM.CBL", "Line 411"),
-    (r"\b(?:CALCULATE-EARNED)\b", "EARNPREM.CBL", "Line 559"),
-    (r"\b(?:WS-TERM-DAYS)\b", "EARNPREM.CBL", "Line 577"),
-    (r"\b(?:WS-EARNED-DAYS)\b", "EARNPREM.CBL", "Line 593"),
-    (r"\b(?:cap\s+WS-EARNED|Transformation\s+T8|\bT8\b)\b", "EARNPREM.CBL", "Line 617"),
-    (r"\b(?:zero\s+negative|Transformation\s+T10|\bT10\b|Negative guard)\b", "EARNPREM.CBL", "Line 629"),
-    (r"\b(?:WS-UNEARNED|Transformation\s+T9|\bT9\b)\b", "EARNPREM.CBL", "Line 625"),
-    (r"\b(?:WS-EARNED|Transformation\s+T7|\bT7\b)\b", "EARNPREM.CBL", "Line 611"),
-    (r"\b(?:WRITE-RESULT)\b", "EARNPREM.CBL", "Line 640"),
-    (r"\b(?:PRO-REC|PRO-EARNED-PREMIUM|PRO-UNEARNED-PREMIUM)\b", "EARNPREM.CBL", "Line 645"),
-    (r"\b(?:PRI-WRITTEN-PREMIUM)\b", "EARNPREM.CBL", "Line 104"),
-    (r"\b(?:PI-EFFECTIVE-DATE|PI-EXPIRY-DATE|PRI-CALCULATION-DATE)\b", "EARNPREM.CBL", "Line 88"),
-
-    # COBOL PREMCALC.CBL
-    (r"\b(?:GET-VEHICLE|vehicle-record|vehicle\s+record|\bP002\b)\b", "PREMCALC.CBL", "Line 315"),
-    (r"\b(?:product-type|product\s+type.*AU|\bP004\b)\b", "PREMCALC.CBL", "Line 320"),
-    (r"\b(?:WS-RATING-CONSTANTS|WS-HO-BASE|WS-AUTO-BASE)\b", "PREMCALC.CBL", "Line 115"),
-    (r"\b(?:PROCESS-POLICY|CALCULATE-PREMIUM)\b", "PREMCALC.CBL", "Line 302"),
-    (r"\bPREMCALC\b", "PREMCALC.CBL", "Line 1"),
-
-    # SQL PolicyCenter & Commercial Auto Rating
-    (r"\b(?:pcx_ca7transaction|Transformation\s+T015|\bT015\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 129"),
-    (r"\b(?:ca7line|Commercial\s+Auto\s+Line|Transformation\s+T012|\bT012\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 53"),
-    (r"\b(?:CommercialPackage.*C\.P\.P\.|Transformation\s+T017|\bT017\b)\b", "PolicyCenter_CPP_Breakdown.sql", "Line 265"),
-    (r"\bPolicyCenter_Monoline\b", "PolicyCenter_Monoline.sql", "Line 1"),
-    (r"\bPolicyCenter_CPP_Breakdown\b", "PolicyCenter_CPP_Breakdown.sql", "Line 1"),
-
-    # COBOL RPTEXTRACT.CBL & KPICALC.CBL
-    (r"\b(?:RPTEXTRACT|MAIN-PARA)\b", "RPTEXTRACT.CBL", "Line 140"),
-    (r"\b(?:RPT-EARNED-PREM|REPORT-OUT)\b", "RPTEXTRACT.CBL", "Line 185"),
-    (r"\b(?:WRITE-KPI-REPORT)\b", "KPICALC.CBL", "Line 290"),
-    (r"\b(?:WRITE-KPI-LINE)\b", "KPICALC.CBL", "Line 315"),
-    (r"\bKPICALC\b", "KPICALC.CBL", "Line 1"),
-
-    # SSIS Tasks
-    (r"\b(?:T001|SELECT.*claims)\b", "Extract_Claims.dtsx", "Task T001"),
-    (r"\b(?:T011|GROUP BY policy_id)\b", "Extract_Claims.dtsx", "Task T011"),
-    (r"\b(?:underwriting_profit|Extract_KPI)\b", "Extract_KPI_Aggregates.dtsx", "Task T7"),
-    (r"\b(?:Extract_Premium)\b", "Extract_Premium.dtsx", "Task T6"),
-
-    # SQL Tables & Staging
-    (r"\bpublic\.claims\b", "ClaimCenter_CPP_Breakdown.sql", "public.claims"),
-    (r"\bpublic\.premium\b", "Extract_Premium.dtsx", "public.premium"),
-]
-
-
 def _resolve_step_provenance(step_text: str, current_active_file: Optional[str] = None) -> tuple[Optional[str], Optional[str], str]:
-    """Resolves filename and line number / task anchor for a dataflow pipeline step."""
+    """Dynamically resolves filename and line number / task anchor for a dataflow pipeline step without hardcoded mappings."""
     clean_step = step_text.replace("\u2011", "-")
 
-    # 1. Explicit bracket anchor: [FILE:LINE] or [FILE:TASK]
+    # 1. Explicit bracket anchor: [FILE:LINE], [FILE:PARAGRAPH], [FILE:TASK]
     m_bracket = re.search(
-        r"\[([A-Za-z0-9_\-\.]+\.(?:cbl|cob|cpy|dtsx|sql))\s*[:#,\s]\s*(?:Line\s*|Task\s*|L)?([A-Za-z0-9_\-]+)\]",
+        r"\[([A-Za-z0-9_\-\.]+\.(?:[A-Za-z0-9]+))\s*[:#,\s]\s*(?:Line\s*|Task\s*|L)?([A-Za-z0-9_\-]+)\]",
         clean_step,
         re.IGNORECASE,
     )
@@ -95,14 +47,14 @@ def _resolve_step_provenance(step_text: str, current_active_file: Optional[str] 
         loc = m_bracket.group(2)
         loc_formatted = f"Line {loc}" if loc.isdigit() else (f"Task {loc}" if re.match(r"^T\d+", loc) else loc)
         text_without_anchor = re.sub(
-            r"\[[A-Za-z0-9_\-\.]+\.(?:cbl|cob|cpy|dtsx|sql)\s*[:#,\s]\s*(?:Line\s*|Task\s*|L)?[A-Za-z0-9_\-]+\]",
+            r"\[[A-Za-z0-9_\-\.]+\.(?:[A-Za-z0-9]+)\s*[:#,\s]\s*(?:Line\s*|Task\s*|L)?[A-Za-z0-9_\-]+\]",
             "",
             clean_step,
         ).strip()
         return fname, loc_formatted, text_without_anchor
 
     # 2. Check if a filename is directly mentioned in the step text
-    m_file = re.search(r"\b([A-Za-z0-9_\-]+\.(?:cbl|cob|cpy|dtsx|sql))\b", clean_step, re.IGNORECASE)
+    m_file = re.search(r"\b([A-Za-z0-9_\-]+\.[A-Za-z0-9]{2,6})\b", clean_step, re.IGNORECASE)
     file_in_text = m_file.group(1) if m_file else None
 
     # Check for line number in text
@@ -113,19 +65,11 @@ def _resolve_step_provenance(step_text: str, current_active_file: Optional[str] 
     m_task = re.search(r"\b(T\d{1,4})\b", clean_step)
     task_in_text = f"Task {m_task.group(1)}" if m_task else None
 
-    if file_in_text and (line_in_text or task_in_text):
-        return file_in_text, line_in_text or task_in_text, clean_step
+    target_file = file_in_text or current_active_file
+    loc_ref = line_in_text or task_in_text or ""
 
-    # 3. Deterministic AST & Graph Knowledge lookup
-    for pattern, fn, loc in KNOWN_AST_PROVENANCE:
-        if re.search(pattern, clean_step, re.IGNORECASE):
-            return fn, loc, clean_step
-
-    if file_in_text:
-        return file_in_text, "", clean_step
-
-    if current_active_file:
-        return current_active_file, "", clean_step
+    if target_file:
+        return target_file, loc_ref, clean_step
 
     return None, None, clean_step
 
@@ -182,16 +126,25 @@ def _render_data_flow(flow_text: str) -> str:
             active_file_ctx = file_name
         step_str = clean_step
 
-        # Categorize node
+        # Categorize node: explicit resolved file extension always takes priority over generic heuristics
         lower = step_str.lower()
         fn_lower = (file_name or "").lower()
-        if any(ext in fn_lower for ext in [".dtsx"]) or any(ext in lower for ext in [".dtsx", "ssis", "extract_"]) or re.search(r"\bt\d{1,4}\b", lower):
+        if any(ext in fn_lower for ext in [".dtsx"]) or any(ext in lower for ext in [".dtsx", "ssis", "extract_"]):
             badge_class = "df-badge-ssis"
             badge_label = "SSIS ETL"
-        elif any(ext in fn_lower for ext in [".cbl", ".cob", ".cpy"]) or any(ext in lower for ext in [".cbl", ".cob", ".cpy"]) or any(p in lower for p in ["paragraph", "calculate-", "write-", "read-", "process-", "main-", "cobol"]):
+        elif any(ext in fn_lower for ext in [".cbl", ".cob", ".cpy"]) or any(ext in lower for ext in [".cbl", ".cob", ".cpy"]):
             badge_class = "df-badge-cobol"
             badge_label = "COBOL AST"
-        elif any(ext in fn_lower for ext in [".sql"]) or any(ext in lower for ext in [".sql", "public.", "table", ".dat", "ksds", "vsam", "database"]) or "record" in lower:
+        elif any(ext in fn_lower for ext in [".sql"]) or any(ext in lower for ext in [".sql", "public.", "table", ".dat", "ksds", "vsam", "database"]):
+            badge_class = "df-badge-db"
+            badge_label = "DATA STORE"
+        elif re.search(r"\bt\d{1,4}\b", lower):
+            badge_class = "df-badge-ssis"
+            badge_label = "SSIS ETL"
+        elif any(p in lower for p in ["paragraph", "calculate-", "write-", "read-", "process-", "main-", "cobol"]):
+            badge_class = "df-badge-cobol"
+            badge_label = "COBOL AST"
+        elif "record" in lower:
             badge_class = "df-badge-db"
             badge_label = "DATA STORE"
         elif any(w in lower for w in ["cap ", "guard", "if ", "rule", "floor", "zero", "businessrule"]):

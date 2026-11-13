@@ -117,46 +117,27 @@ def render_node_details_panel(node: Dict[str, Any], connected_edges: Optional[Li
         props_dict["source_file"] = node.get("source_file")
     elif node.get("file_name"):
         props_dict["source_file"] = node.get("file_name")
-    elif "CALC-AU" in raw_id or "CALC-HO" in raw_id or "PREMCALC" in raw_id:
-        props_dict["source_file"] = "PREMCALC.CBL"
     else:
         props_dict["source_file"] = "Enterprise System"
 
     # Business Logic fields
-    if "CALC-AU" in raw_id and not node.get("expression"):
-        props_dict["rule_id"] = "CALC-AU"
-        props_dict["rule_type"] = "CALCULATION"
-        props_dict["expression"] = "WS-AU-PREM = WS-AU-BASE-PREM * WS-AU-COV-RATE * (1 - WS-AU-DISC-RATE)"
-    elif "CALC-HO" in raw_id and not node.get("expression"):
-        props_dict["rule_id"] = "CALC-HO"
-        props_dict["rule_type"] = "CALCULATION"
-        props_dict["expression"] = "WS-HO-PREM = WS-HO-BASE-PREM * WS-HO-COV-RATE * (1 - WS-HO-DISC-RATE)"
-    else:
-        if node.get("rule_id"):
-            props_dict["rule_id"] = str(node.get("rule_id"))
-        if node.get("rule_type"):
-            props_dict["rule_type"] = str(node.get("rule_type"))
-        if node.get("expression"):
-            props_dict["expression"] = str(node.get("expression"))
-        elif node.get("formula"):
-            props_dict["expression"] = str(node.get("formula"))
-        if node.get("formula"):
-            props_dict["formula"] = str(node.get("formula"))
-        if node.get("logic"):
-            props_dict["logic"] = str(node.get("logic"))
+    if node.get("rule_id"):
+        props_dict["rule_id"] = str(node.get("rule_id"))
+    if node.get("rule_type"):
+        props_dict["rule_type"] = str(node.get("rule_type"))
+    if node.get("expression"):
+        props_dict["expression"] = str(node.get("expression"))
+    elif node.get("formula"):
+        props_dict["expression"] = str(node.get("formula"))
+    if node.get("formula"):
+        props_dict["formula"] = str(node.get("formula"))
+    if node.get("logic"):
+        props_dict["logic"] = str(node.get("logic"))
 
     # Description / purpose
     desc = node.get("description") or node.get("purpose")
     if not desc or desc == "No detailed description recorded.":
-        if "CALC-AU" in raw_id:
-            desc = "Auto premium calculation routine (calculates auto earned and unearned premiums)."
-        elif "CALC-HO" in raw_id:
-            desc = "Homeowner premium calculation routine (calculates homeowner earned and unearned premiums)."
-        elif "EARNPREM" in raw_id:
-            desc = "Calculates earned and unearned premium amounts per policy."
-        elif "PREMCALC" in raw_id:
-            desc = "Master premium calculation driver routing policies to auto or homeowner logic."
-        elif node.get("data_type"):
+        if node.get("data_type"):
             desc = f"Field/column entity with data type {node.get('data_type')}."
         else:
             desc = f"Enterprise legacy system component ({entity_label})."

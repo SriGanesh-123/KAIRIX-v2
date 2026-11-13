@@ -224,16 +224,6 @@ def _get_local_packages_subgraph(
                 if tgt_id in nodes_dict:
                     if not nodes_dict[tgt_id].get("description") and edge_props.get("description"):
                         nodes_dict[tgt_id]["description"] = edge_props["description"]
-                    if "CALC-AU" in tgt_id:
-                        nodes_dict[tgt_id]["description"] = "Auto premium calculation routine (calculates auto earned and unearned premiums)."
-                        nodes_dict[tgt_id]["expression"] = "WS-AU-PREM = WS-AU-BASE-PREM * WS-AU-COV-RATE * (1 - WS-AU-DISC-RATE)"
-                        nodes_dict[tgt_id]["rule_id"] = "CALC-AU"
-                        nodes_dict[tgt_id]["rule_type"] = "CALCULATION"
-                    elif "CALC-HO" in tgt_id:
-                        nodes_dict[tgt_id]["description"] = "Homeowner premium calculation routine (calculates homeowner earned and unearned premiums)."
-                        nodes_dict[tgt_id]["expression"] = "WS-HO-PREM = WS-HO-BASE-PREM * WS-HO-COV-RATE * (1 - WS-HO-DISC-RATE)"
-                        nodes_dict[tgt_id]["rule_id"] = "CALC-HO"
-                        nodes_dict[tgt_id]["rule_type"] = "CALCULATION"
 
                 ek = f"{src_id}:{rel_type}:{tgt_id}"
                 if ek not in seen_edges and src_id in nodes_dict and tgt_id in nodes_dict:
@@ -280,39 +270,7 @@ def _get_local_packages_subgraph(
         if len(nodes_dict) >= max_nodes:
             break
 
-    # Add cross-system lineage bridges
-    cross_links = [
-        ("ARTIFACT:EARNPREM.CBL", "FEEDS_INTO", "ARTIFACT:KPICALC.CBL"),
-        ("ARTIFACT:PREMCALC.CBL", "FEEDS_INTO", "ARTIFACT:EARNPREM.CBL"),
-        ("ARTIFACT:Extract_Account.dtsx", "WRITES_TO", "ENTITY:PolicyCenter.Account"),
-        ("ARTIFACT:Extract_Policy.dtsx", "WRITES_TO", "ENTITY:PolicyCenter.Policy"),
-        ("ARTIFACT:Extract_Policy.dtsx", "FEEDS_INTO", "ARTIFACT:Load_FactPolicy.dtsx"),
-        ("ARTIFACT:PolicyCenter_CPP_Breakdown.sql", "READS_FROM", "ENTITY:PolicyCenter.Policy"),
-        ("ARTIFACT:KPI_Financial_Summary.sql", "READS_FROM", "ENTITY:PolicyCenter.Policy"),
-        ("ARTIFACT:Load_FactPolicy.dtsx", "TRANSFORMS", "ENTITY:FactPolicy"),
-    ]
-
-    for src, rel, tgt in cross_links:
-        if src in nodes_dict:
-            if tgt not in nodes_dict and len(nodes_dict) < max_nodes:
-                clean_name = tgt.split(":")[-1]
-                tgt_type = "Table" if "PolicyCenter" in clean_name or "Fact" in clean_name else ("Package" if ".dtsx" in clean_name else "Program")
-                elem_id = f"4:{abs(hash(tgt)) % 1000000000:08x}-c328-4253-be1c-03e3ef48b83a:{abs(hash(tgt)) % 1000}"
-                nodes_dict[tgt] = {
-                    "<id>": elem_id,
-                    "id": tgt,
-                    "name": clean_name,
-                    "entity_label": tgt_type,
-                    "entity_type": tgt_type,
-                    "source_file": clean_name if "." in clean_name else "Enterprise Data Model",
-                    "description": f"Cross-system dependency node ({clean_name})",
-                }
-            if tgt in nodes_dict:
-                ek = f"{src}:{rel}:{tgt}"
-                if ek not in seen_edges:
-                    seen_edges.add(ek)
-                    edges_list.append({"source": src, "target": tgt, "type": rel})
-
+    # Cross-system lineage bridges are dynamically loaded from graph_edges in knowledge packages or live Neo4j
     return {"nodes": list(nodes_dict.values()), "edges": edges_list, "error": None}
 
 
@@ -998,30 +956,7 @@ class GraphService:
 
             desc_val = n.get("description") or n.get("purpose")
             if not desc_val or desc_val == "No detailed description recorded.":
-                if "CALC-AU" in node_id:
-                    desc_val = "Auto premium calculation routine (calculates auto earned and unearned premiums)."
-                    if not expr_val:
-                        node_props_export["expression"] = "WS-AU-PREM = WS-AU-BASE-PREM * WS-AU-COV-RATE * (1 - WS-AU-DISC-RATE)"
-                        node_props_export["rule_id"] = "CALC-AU"
-                        node_props_export["rule_type"] = "CALCULATION"
-                        expr_val = node_props_export["expression"]
-                        rule_id_val = "CALC-AU"
-                        rule_type_val = "CALCULATION"
-                elif "CALC-HO" in node_id:
-                    desc_val = "Homeowner premium calculation routine (calculates homeowner earned and unearned premiums)."
-                    if not expr_val:
-                        node_props_export["expression"] = "WS-HO-PREM = WS-HO-BASE-PREM * WS-HO-COV-RATE * (1 - WS-HO-DISC-RATE)"
-                        node_props_export["rule_id"] = "CALC-HO"
-                        node_props_export["rule_type"] = "CALCULATION"
-                        expr_val = node_props_export["expression"]
-                        rule_id_val = "CALC-HO"
-                        rule_type_val = "CALCULATION"
-                elif "EARNPREM" in node_id:
-                    desc_val = "Calculates earned and unearned premium amounts per policy."
-                elif "PREMCALC" in node_id:
-                    desc_val = "Master premium calculation driver routing policies to auto or homeowner logic."
-                else:
-                    desc_val = f"Enterprise legacy system component ({node_type})."
+                desc_val = f"Enterprise legacy system component ({node_type})."
             node_props_export["description"] = desc_val
 
             if n.get("data_type") and n.get("data_type") != "—":

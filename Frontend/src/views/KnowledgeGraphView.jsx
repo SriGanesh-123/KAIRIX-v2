@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Database, 
   Search, 
@@ -13,12 +13,15 @@ import {
   Code,
   Copy,
   Info,
-  Maximize2
+  Maximize2,
+  RefreshCw,
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
-import SpatialCard from '../components/SpatialCard';
-import { MOCK_GRAPH_DATA, SOURCE_FILES } from '../data/mockData';
-import { ACTUAL_GRAPH_DATA } from '../data/actualData';
-import { ApiService } from '../services/api';
+import GraphView from '../components/GraphView';
+import { getNodeColor } from '../utils/graphTheme';
+import { useGraphData } from '../hooks/useGraphData';
+import { SOURCE_FILES } from '../data/mockData';
 
 const SCHEMA_LEGEND = [
   { name: "Program (COBOL)", border: "#1D4ED8", bg: "#DBEAFE" },
@@ -30,14 +33,34 @@ const SCHEMA_LEGEND = [
 ];
 
 export default function KnowledgeGraphView() {
-  const [nodes, setNodes] = useState(MOCK_GRAPH_DATA.nodes || []);
-  const [links, setLinks] = useState(MOCK_GRAPH_DATA.links || []);
-  const [selectedNode, setSelectedNode] = useState(MOCK_GRAPH_DATA.nodes?.[0] || null);
+  const {
+    nodes,
+    links,
+    schema,
+    isLoading,
+    error,
+    loadingProgress,
+    reloadGraph,
+    expandNodeNeighbors,
+  } = useGraphData();
+
+  const [viewLayer, setViewLayer] = useState('architecture'); // 'architecture' (clean ~471 nodes) | 'full' (all 1,827 AST nodes)
+  const [selectedNode, setSelectedNode] = useState(null);
   const [selectedScope, setSelectedScope] = useState('Full System Graph (All 21 Files)');
   const [filterType, setFilterType] = useState('(All Types)');
   const [searchQuery, setSearchQuery] = useState('');
   const [lineageFocusId, setLineageFocusId] = useState(null);
   const [copiedCypher, setCopiedCypher] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Set default selected node once nodes load
+  useEffect(() => {
+    if (!selectedNode && nodes.length > 0) {
+      // Prefer an interesting entity like EARNPREM.CBL or CALCULATE-EARNED if present
+      const preferred = nodes.find(n => n.label?.includes('EARNPREM') || n.label?.includes('PREMCALC')) || nodes[0];
+      setSelectedNode(preferred);
+    }
+  }, [nodes, selectedNode]);
 
   const scopeOptions = [
     'Full System Graph (All 21 Files)',
@@ -47,15 +70,27 @@ export default function KnowledgeGraphView() {
     ...SOURCE_FILES.map(f => `File: ${f.name}`)
   ];
 
-  const typeOptions = [
-    '(All Types)',
-    'Program',
-    'Package',
-    'Table',
-    'Column',
-    'BusinessRule',
-    'Transformation'
-  ];
+  // Derive dynamic type filter options from schema labels + standard labels
+  const typeOptions = useMemo(() => {
+    const base = ['(All Types)'];
+    const labelSet = new Set(['Program', 'Package', 'Table', 'Column', 'BusinessRule', 'Transformation']);
+    if (schema?.labels) {
+      for (const l of schema.labels) labelSet.add(l);
+    }
+    return [...base, ...Array.from(labelSet)];
+  }, [schema]);
+
+  // Compute count of architectural nodes (Artifacts, Rules, Transforms, CodeBlocks, Tables)
+  const archCount = useMemo(() => {
+    return nodes.filter(n => 
+      n.type === 'Artifact' || n.labels?.includes('Artifact') ||
+      n.type === 'BusinessRule' || n.labels?.includes('BusinessRule') ||
+      n.type === 'Transformation' || n.labels?.includes('Transformation') ||
+      n.type === 'CodeBlock' || n.labels?.includes('CodeBlock') ||
+      n.type === 'Table' || n.labels?.includes('Table') ||
+      n.type === 'View' || n.labels?.includes('View')
+    ).length;
+  }, [nodes]);
 
   // Refresh graph to default
   const handleRefreshGraph = () => {
@@ -63,61 +98,112 @@ export default function KnowledgeGraphView() {
     setSearchQuery('');
     setFilterType('(All Types)');
     setSelectedScope('Full System Graph (All 21 Files)');
-    setSelectedNode(nodes[0]);
+    setViewLayer('architecture');
+    if (nodes.length > 0) setSelectedNode(nodes[0]);
+    reloadGraph();
   };
 
-  // Filter visible nodes
-  const visibleNodes = nodes.filter(n => {
-    if (lineageFocusId) {
-      const isSelf = n.id === lineageFocusId;
-      const isNeighbor = links.some(l => 
-        (l.source === lineageFocusId && l.target === n.id) ||
-        (l.target === lineageFocusId && l.source === n.id)
-      );
-      return isSelf || isNeighbor;
-    }
+  // Filter visible nodes based on Scope, Type, Lineage Focus, Search, and Abstraction Layer
+  const visibleNodes = useMemo(() => {
+    return nodes.filter(n => {
+      // Lineage neighborhood focus takes precedence
+      if (lineageFocusId) {
+        const isSelf = n.id === lineageFocusId;
+        const isNeighbor = links.some(l => {
+          const s = typeof l.source === 'object' ? l.source.id : l.source;
+          const t = typeof l.target === 'object' ? l.target.id : l.target;
+          return (s === lineageFocusId && t === n.id) || (t === lineageFocusId && s === n.id);
+        });
+        return isSelf || isNeighbor;
+      }
 
-    if (filterType !== '(All Types)' && n.type?.toLowerCase() !== filterType.toLowerCase()) {
-      return false;
-    }
+      // Filter by Node Type / Label
+      if (filterType !== '(All Types)') {
+        const nodeTypeMatches = n.type?.toLowerCase() === filterType.toLowerCase() ||
+          (n.labels && n.labels.some(lbl => lbl.toLowerCase() === filterType.toLowerCase()));
+        if (!nodeTypeMatches) return false;
+      }
 
-    if (selectedScope.includes('COBOL') && !(n.system?.toLowerCase().includes('cobol') || n.type === 'Program')) return false;
-    if (selectedScope.includes('SQL') && !(n.system?.toLowerCase().includes('sql') || n.type === 'Table' || n.type === 'Script')) return false;
-    if (selectedScope.includes('SSIS') && !(n.system?.toLowerCase().includes('ssis') || n.type === 'Package')) return false;
-    if (selectedScope.startsWith('File: ')) {
-      const targetFile = selectedScope.replace('File: ', '').trim().toLowerCase();
-      if (!(n.file?.toLowerCase().includes(targetFile) || n.label?.toLowerCase().includes(targetFile))) return false;
-    }
+      // Scope filters
+      const sys = (n.system || '').toLowerCase();
+      const lbl = (n.label || '').toLowerCase();
+      const typ = (n.type || '').toLowerCase();
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (n.label || '').toLowerCase().includes(q) || 
-             (n.type || '').toLowerCase().includes(q) || 
-             (n.system || '').toLowerCase().includes(q) ||
-             (n.file || '').toLowerCase().includes(q);
-    }
-    return true;
-  });
+      if (selectedScope.includes('COBOL') && !(sys.includes('cobol') || typ === 'program' || n.labels?.includes('COBOL') || n.file?.toLowerCase().endsWith('.cbl'))) {
+        return false;
+      }
+      if (selectedScope.includes('SQL') && !(sys.includes('sql') || typ === 'table' || typ === 'script' || n.labels?.includes('Table') || n.file?.toLowerCase().endsWith('.sql'))) {
+        return false;
+      }
+      if (selectedScope.includes('SSIS') && !(sys.includes('ssis') || typ === 'package' || n.labels?.includes('Package') || n.file?.toLowerCase().endsWith('.dtsx'))) {
+        return false;
+      }
+      if (selectedScope.startsWith('File: ')) {
+        const targetFile = selectedScope.replace('File: ', '').trim().toLowerCase();
+        const matchesFile = (n.file || '').toLowerCase().includes(targetFile) || lbl.includes(targetFile);
+        if (!matchesFile) return false;
+      }
 
-  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
-  const visibleLinks = links.filter(l => 
-    visibleNodeIds.has(l.source) && visibleNodeIds.has(l.target)
-  );
+      // Search query (overrides abstraction layer so searched AST items are always discovered)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return lbl.includes(q) || 
+               typ.includes(q) || 
+               sys.includes(q) ||
+               (n.file || '').toLowerCase().includes(q) ||
+               (n.id || '').toLowerCase().includes(q);
+      }
 
-  const getNodeColor = (type) => {
-    switch(type) {
-      case 'Program': return '#1D4ED8';
-      case 'Package': return '#047857';
-      case 'Table': return '#6D28D9';
-      case 'Column': return '#0891B2';
-      case 'BusinessRule': return '#D97706';
-      case 'Transformation': return '#EA580C';
-      default: return '#2563EB';
-    }
-  };
+      // Abstraction Layer Filter:
+      // When in 'architecture' mode (and not drilled into a specific single file),
+      // keep only high-level architecture: Artifacts (files), BusinessRules, Transformations, CodeBlocks, and Tables/Views.
+      // This filters out 1,200 micro-AST variables so the architecture is immediately clean, readable, and structured.
+      if (viewLayer === 'architecture' && !selectedScope.startsWith('File: ')) {
+        const isCoreArtifact = n.type === 'Artifact' || n.labels?.includes('Artifact');
+        const isRule = n.type === 'BusinessRule' || n.labels?.includes('BusinessRule');
+        const isTransform = n.type === 'Transformation' || n.labels?.includes('Transformation');
+        const isBlock = n.type === 'CodeBlock' || n.labels?.includes('CodeBlock');
+        const isTable = n.type === 'Table' || n.labels?.includes('Table') || n.type === 'View' || n.labels?.includes('View');
+        const isBridge = (n.degree && n.degree >= 2);
+
+        if (!isCoreArtifact && !isRule && !isTransform && !isBlock && !isTable && !isBridge) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [nodes, links, lineageFocusId, filterType, selectedScope, searchQuery, viewLayer]);
+
+  // Derive visible links whose source and target both exist in visibleNodes
+  const visibleLinks = useMemo(() => {
+    const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+    return links.filter(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return visibleNodeIds.has(s) && visibleNodeIds.has(t);
+    });
+  }, [visibleNodes, links]);
 
   // Connected edges for selected node
-  const connectedEdges = selectedNode ? links.filter(l => l.source === selectedNode.id || l.target === selectedNode.id) : [];
+  const connectedEdges = useMemo(() => {
+    if (!selectedNode) return [];
+    return links.filter(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return s === selectedNode.id || t === selectedNode.id;
+    });
+  }, [selectedNode, links]);
+
+  // Exact search node match for centering
+  const searchMatchId = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase();
+    const exact = visibleNodes.find(n => n.label?.toLowerCase() === q || n.id?.toLowerCase() === q);
+    if (exact) return exact.id;
+    const partial = visibleNodes.find(n => n.label?.toLowerCase().includes(q));
+    return partial?.id || null;
+  }, [searchQuery, visibleNodes]);
 
   const handleCopyCypher = () => {
     if (!selectedNode) return;
@@ -125,6 +211,10 @@ export default function KnowledgeGraphView() {
     navigator.clipboard.writeText(cypher);
     setCopiedCypher(true);
     setTimeout(() => setCopiedCypher(false), 2000);
+  };
+
+  const handleExpandNode = async (nodeId) => {
+    await expandNodeNeighbors(nodeId);
   };
 
   return (
@@ -138,8 +228,9 @@ export default function KnowledgeGraphView() {
           </p>
         </div>
 
-        <button className="btn btn-secondary btn-refresh-graph" onClick={handleRefreshGraph}>
-          <RotateCcw size={14} /> Refresh Graph
+        <button className="btn btn-secondary btn-refresh-graph" onClick={handleRefreshGraph} disabled={isLoading}>
+          <RotateCcw size={14} className={isLoading ? "spin-icon" : ""} /> 
+          <span>{isLoading ? 'Loading Aura...' : 'Refresh Graph'}</span>
         </button>
       </div>
 
@@ -157,6 +248,39 @@ export default function KnowledgeGraphView() {
               <span className="legend-name">{item.name}</span>
             </span>
           ))}
+        </div>
+      </div>
+
+      {/* Abstraction View Layer Segmented Control */}
+      <div className="kg-view-layer-selector">
+        <div className="view-layer-tabs">
+          <button 
+            type="button"
+            className={`view-layer-tab ${viewLayer === 'architecture' ? 'active' : ''}`}
+            onClick={() => setViewLayer('architecture')}
+            title="Clean, high-level architecture with programs, ETL packages, business rules, and transformations"
+          >
+            <Sparkles size={14} className="tab-icon" />
+            <span className="tab-title">Architecture & Rules</span>
+            <span className="tab-badge">{archCount > 0 ? `${archCount} Nodes` : '471'}</span>
+          </button>
+          <button 
+            type="button"
+            className={`view-layer-tab ${viewLayer === 'full' ? 'active' : ''}`}
+            onClick={() => setViewLayer('full')}
+            title="Complete compiler AST graph including granular variables, statements, loops, and branches"
+          >
+            <Layers size={14} className="tab-icon" />
+            <span className="tab-title">Full AST Graph (All Nodes)</span>
+            <span className="tab-badge">{nodes.length > 0 ? `${nodes.length.toLocaleString()}` : '1,827'}</span>
+          </button>
+        </div>
+        <div className="view-layer-hint">
+          {viewLayer === 'architecture' ? (
+            <span>✨ Showing high-level topology: Programs, SSIS packages, SQL scripts, business rules & transformations</span>
+          ) : (
+            <span>🔬 Showing deep compiler AST: All codeblocks, statements, branches, loops & variables</span>
+          )}
         </div>
       </div>
 
@@ -214,12 +338,19 @@ export default function KnowledgeGraphView() {
 
       {/* Main Workspace: Interactive Graph Canvas + Bloom-style Inspector */}
       <div className="kg-workspace-grid">
-        {/* Left Side: Interactive Canvas */}
+        {/* Left Side: Interactive Force-Directed Canvas */}
         <div className="kg-canvas-container glass-panel">
           <div className="canvas-header-bar">
-            <span className="canvas-stats font-mono">
-              Displaying {visibleNodes.length} Nodes • {visibleLinks.length} Relationships
-            </span>
+            <div className="canvas-header-left">
+              <span className="kg-live-badge">
+                <span className="kg-live-dot" />
+                Neo4j Aura Live
+              </span>
+              <span className="canvas-stats font-mono">
+                Displaying {visibleNodes.length.toLocaleString()} Nodes • {visibleLinks.length.toLocaleString()} Relationships
+                {nodes.length > 0 && ` (Total: ${nodes.length.toLocaleString()} nodes in DB)`}
+              </span>
+            </div>
             {lineageFocusId && (
               <button 
                 className="btn-clear-focus"
@@ -230,114 +361,65 @@ export default function KnowledgeGraphView() {
             )}
           </div>
 
-          {/* Interactive SVG Canvas */}
-          <svg className="kg-svg-canvas" viewBox="0 0 850 560">
-            <defs>
-              <marker id="arrow" viewBox="0 -5 10 10" refX="28" refY="0" markerWidth="6" markerHeight="6" orient="auto">
-                <path d="M0,-5L10,0L0,5" fill="#94A3B8" />
-              </marker>
-              <marker id="arrow-active" viewBox="0 -5 10 10" refX="28" refY="0" markerWidth="6" markerHeight="6" orient="auto">
-                <path d="M0,-5L10,0L0,5" fill="#2563EB" />
-              </marker>
-            </defs>
+          {/* Progressive Streaming Loading Banner */}
+          {isLoading && nodes.length > 0 && (
+            <div className="kg-progressive-load-strip font-mono">
+              <span>Streaming graph: {loadingProgress.loadedNodes.toLocaleString()} / {loadingProgress.totalNodes.toLocaleString()} nodes ({loadingProgress.percentage}%)</span>
+              <div className="kg-mini-progress">
+                <div className="kg-mini-fill" style={{ width: `${loadingProgress.percentage}%` }} />
+              </div>
+            </div>
+          )}
 
-            {/* Render Links */}
-            {visibleLinks.map((link, idx) => {
-              const src = visibleNodes.find(n => n.id === link.source);
-              const tgt = visibleNodes.find(n => n.id === link.target);
-              if (!src || !tgt) return null;
-
-              const isSelectedLink = selectedNode && (link.source === selectedNode.id || link.target === selectedNode.id);
-              const midX = (src.x + tgt.x) / 2;
-              const midY = (src.y + tgt.y) / 2;
-
-              return (
-                <g key={idx} className="graph-link-group">
-                  <line
-                    x1={src.x}
-                    y1={src.y}
-                    x2={tgt.x}
-                    y2={tgt.y}
-                    stroke={isSelectedLink ? '#2563EB' : '#CBD5E1'}
-                    strokeWidth={isSelectedLink ? 2.2 : 1.4}
-                    strokeDasharray={isSelectedLink ? 'none' : '3 3'}
-                    markerEnd={isSelectedLink ? "url(#arrow-active)" : "url(#arrow)"}
-                  />
-                  {isSelectedLink && link.label && (
-                    <text 
-                      x={midX} 
-                      y={midY - 5} 
-                      className="edge-label-text font-mono"
-                      textAnchor="middle"
-                    >
-                      {link.label}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-
-            {/* Render Nodes */}
-            {visibleNodes.map((node) => {
-              const isSelected = selectedNode?.id === node.id;
-              const color = getNodeColor(node.type);
-
-              return (
-                <g 
-                  key={node.id} 
-                  className={`graph-node-group ${isSelected ? 'node-selected' : ''}`}
-                  onClick={() => setSelectedNode(node)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* Outer pulse circle when selected */}
-                  {isSelected && (
-                    <circle
-                      cx={node.x}
-                      cy={node.y}
-                      r={30}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={2.5}
-                      opacity={0.6}
-                      className="pulse-circle"
-                    />
-                  )}
-
-                  {/* Base Circle */}
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={22}
-                    fill={color}
-                    stroke="#FFFFFF"
-                    strokeWidth={3}
-                    style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}
-                  />
-
-                  {/* Node Label Text */}
-                  <text
-                    x={node.x}
-                    y={node.y + 36}
-                    className="graph-node-label"
-                    textAnchor="middle"
-                  >
-                    {node.label}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+          {/* Canvas or Initial Loading / Error States */}
+          {isLoading && nodes.length === 0 ? (
+            <div className="kg-loading-overlay">
+              <div className="kg-spinner" />
+              <h4 className="kg-loading-title">Connecting to Neo4j Aura Cloud...</h4>
+              <p className="kg-loading-subtitle">Querying AST nodes, business rules, and multi-tier lineage</p>
+              <div className="kg-progress-bar-track">
+                <div 
+                  className="kg-progress-bar-fill" 
+                  style={{ width: `${loadingProgress.percentage}%` }} 
+                />
+              </div>
+              <div className="kg-progress-text font-mono">
+                {loadingProgress.phase}
+              </div>
+            </div>
+          ) : error && nodes.length === 0 ? (
+            <div className="kg-error-overlay">
+              <AlertTriangle size={36} className="text-amber" />
+              <h4>Neo4j Aura Connection Error</h4>
+              <p className="error-message-text">{error}</p>
+              <button className="btn btn-primary" onClick={reloadGraph}>
+                <RotateCcw size={14} /> Retry Connection
+              </button>
+            </div>
+          ) : (
+            <GraphView
+              nodes={visibleNodes}
+              links={visibleLinks}
+              selectedNode={selectedNode}
+              onSelectNode={setSelectedNode}
+              onExpandNode={handleExpandNode}
+              lineageFocusId={lineageFocusId}
+              focusSearchId={searchMatchId}
+              isPaused={isPaused}
+              onTogglePause={setIsPaused}
+            />
+          )}
         </div>
 
         {/* Right Side: Neo4j Bloom-styled Node Details Inspector */}
         <div className="kg-inspector-panel glass-panel">
           {selectedNode ? (
             <div className="inspector-content">
-              {/* Header with Label & Element ID */}
+              {/* Header with Label & Type */}
               <div className="inspector-header">
                 <div>
                   <span className="inspector-tag-pill" style={{ background: getNodeColor(selectedNode.type) }}>
-                    {selectedNode.type}
+                    {selectedNode.type || 'Entity'}
                   </span>
                   <h3 className="inspector-node-name">{selectedNode.label}</h3>
                 </div>
@@ -351,7 +433,7 @@ export default function KnowledgeGraphView() {
               </div>
 
               <div className="inspector-element-id font-mono">
-                Neo4j Element ID: <code>4:{absHash(selectedNode.id)}-c328-4253:1</code>
+                Neo4j ID: <code>{selectedNode.id}</code>
               </div>
 
               {/* Key-Value Properties Table matching Neo4j Bloom */}
@@ -367,26 +449,36 @@ export default function KnowledgeGraphView() {
                       <td className="prop-key">type</td>
                       <td className="prop-val">{selectedNode.type}</td>
                     </tr>
-                    <tr>
-                      <td className="prop-key">file_origin</td>
-                      <td className="prop-val text-cyan">{selectedNode.file || selectedNode.label}</td>
-                    </tr>
-                    <tr>
-                      <td className="prop-key">system_layer</td>
-                      <td className="prop-val">{selectedNode.system || 'Enterprise Core'}</td>
-                    </tr>
-                    {selectedNode.lines && (
+                    {selectedNode.file && (
                       <tr>
-                        <td className="prop-key">line_anchor</td>
-                        <td className="prop-val text-emerald">{selectedNode.lines}</td>
+                        <td className="prop-key">source_file</td>
+                        <td className="prop-val text-cyan">{selectedNode.file}</td>
                       </tr>
                     )}
-                    {selectedNode.formula && (
+                    {selectedNode.system && (
                       <tr>
-                        <td className="prop-key">extracted_formula</td>
-                        <td className="prop-val text-purple">{selectedNode.formula}</td>
+                        <td className="prop-key">system_layer</td>
+                        <td className="prop-val">{selectedNode.system}</td>
                       </tr>
                     )}
+                    {selectedNode.degree !== undefined && (
+                      <tr>
+                        <td className="prop-key">connected_degree</td>
+                        <td className="prop-val text-emerald">{selectedNode.degree} links</td>
+                      </tr>
+                    )}
+                    {/* Render any additional dynamic Neo4j properties */}
+                    {Object.entries(selectedNode.properties || {})
+                      .filter(([k]) => !['name', 'label', 'type', 'id', 'system', 'system_layer', 'source_file', 'file'].includes(k))
+                      .slice(0, 10)
+                      .map(([k, v]) => (
+                        <tr key={k}>
+                          <td className="prop-key">{k}</td>
+                          <td className="prop-val text-purple">
+                            {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -397,23 +489,38 @@ export default function KnowledgeGraphView() {
                   Connected Lineage Edges ({connectedEdges.length})
                 </div>
                 <div className="connected-edges-list">
-                  {connectedEdges.map((edge, idx) => {
-                    const isOutgoing = edge.source === selectedNode.id;
-                    const otherNodeId = isOutgoing ? edge.target : edge.source;
-                    const otherNode = nodes.find(n => n.id === otherNodeId);
+                  {connectedEdges.length === 0 ? (
+                    <div className="empty-edges-notice font-mono">No connected edges in current scope</div>
+                  ) : (
+                    connectedEdges.slice(0, 25).map((edge, idx) => {
+                      const s = typeof edge.source === 'object' ? edge.source.id : edge.source;
+                      const t = typeof edge.target === 'object' ? edge.target.id : edge.target;
+                      const isOutgoing = s === selectedNode.id;
+                      const otherNodeId = isOutgoing ? t : s;
+                      const otherNode = nodes.find(n => n.id === otherNodeId);
 
-                    return (
-                      <div key={idx} className="edge-item font-mono">
-                        <span className={`edge-direction-badge ${isOutgoing ? 'outgoing' : 'incoming'}`}>
-                          {isOutgoing ? 'OUTGOING ➔' : 'INCOMING ⬅'}
-                        </span>
-                        <span className="edge-name-text">[:{edge.label || 'CONNECTS_TO'}]</span>
-                        <span className="edge-target-text" onClick={() => otherNode && setSelectedNode(otherNode)}>
-                          {otherNode?.label || otherNodeId}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div key={idx} className="edge-item font-mono">
+                          <span className={`edge-direction-badge ${isOutgoing ? 'outgoing' : 'incoming'}`}>
+                            {isOutgoing ? 'OUTGOING ➔' : 'INCOMING ⬅'}
+                          </span>
+                          <span className="edge-name-text">[:{edge.label || edge.type || 'CONNECTS_TO'}]</span>
+                          <span 
+                            className="edge-target-text" 
+                            onClick={() => otherNode && setSelectedNode(otherNode)}
+                            title="Click to select target node"
+                          >
+                            {otherNode?.label || otherNodeId}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                  {connectedEdges.length > 25 && (
+                    <div className="more-edges-indicator font-mono">
+                      + {connectedEdges.length - 25} more relationships
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -436,13 +543,4 @@ export default function KnowledgeGraphView() {
       </div>
     </div>
   );
-}
-
-function absHash(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16).padStart(8, '0');
 }

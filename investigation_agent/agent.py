@@ -129,6 +129,7 @@ class InvestigationAgent:
         self.top_k_vectors = top_k_vectors
         self.max_graph_results = max_graph_results
         self.extractor = StructuredExtractionEngine()
+        self._live_schema: Optional[Dict[str, Any]] = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -187,28 +188,49 @@ class InvestigationAgent:
         if on_progress:
             on_progress("intent_done", f"1. Intent Classification: Identified intent as '{intent.upper()}' ({t_intent:.2f}s)")
 
-        # ── Step 2: Graph retrieval (Neo4j) ──────────────────────────────────
+        # ── Step 2: Vector seed retrieval (Pinecone) ──────────────────────────
         t_ret_start = time.perf_counter()
+        chunks: List[Dict[str, Any]] = []
+        summaries: List[Dict[str, Any]] = []
+        query_vec: Optional[List[float]] = None
+        try:
+            chunks, summaries, query_vec = self._vector_retrieve_with_vec(question)
+            if on_progress:
+                on_progress("vector_done", f"2. Vector Space: Retrieved {len(chunks)} code chunks & {len(summaries)} summaries")
+        except Exception as e:
+            logger.debug("Vector retrieval error: %s", e)
+            chunks, summaries = [], []
+
+        vector_seed_files = self._extract_files_from_hits(chunks + summaries)
+
+        # ── Step 3: Dynamic Graph retrieval + Bidirectional traversal (Neo4j) ─
         cypher = ""
         records: List[Dict[str, Any]] = []
         try:
-            cypher, records = self._graph_retrieve(question)
+            cypher, records = self._graph_retrieve(
+                question,
+                vector_seed_files=vector_seed_files,
+                intent=intent,
+            )
             if on_progress:
-                on_progress("graph_done", f"2. Knowledge Graph: Extracted {len(records)} verified records from Neo4j (Entities, Rules, Lineage)")
+                on_progress("graph_done", f"3. Knowledge Graph: Traversed & extracted {len(records)} verified records from Neo4j")
         except Exception as e:
             logger.debug("Graph retrieval error: %s", e)
             records = []
 
-        # ── Step 3: Vector retrieval (Pinecone) ──────────────────────────────
-        chunks: List[Dict[str, Any]] = []
-        summaries: List[Dict[str, Any]] = []
-        try:
-            chunks, summaries = self._vector_retrieve(question)
-            if on_progress:
-                on_progress("vector_done", f"3. Vector Space: Retrieved {len(chunks)} code chunks & {len(summaries)} summaries from Pinecone")
-        except Exception as e:
-            logger.debug("Vector retrieval error: %s", e)
-            chunks, summaries = [], []
+        # ── Step 4: Bilateral Graph → Vector expansion ────────────────────────
+        graph_discovered_files = self._extract_files_from_records(records)
+        if query_vec is not None and graph_discovered_files:
+            try:
+                extra_chunks, extra_summaries = self._bilateral_vector_expand(
+                    query_vec=query_vec,
+                    discovered_files=graph_discovered_files,
+                    existing_files=vector_seed_files,
+                )
+                chunks = self._merge_unique_hits(chunks, extra_chunks)
+                summaries = self._merge_unique_hits(summaries, extra_summaries)
+            except Exception as e:
+                logger.debug("Bilateral vector expansion error: %s", e)
 
         t_retrieval = time.perf_counter() - t_ret_start
 
@@ -216,25 +238,27 @@ class InvestigationAgent:
         trace.append(f"Cypher: {cypher}")
         for rec in records:
             graph_evidence.append(json.dumps(rec, default=str))
-            for v in rec.values():
-                if isinstance(v, str) and any(
-                    v.endswith(ext) for ext in (".sql", ".dtsx", ".cbl", ".cpy")
-                ):
-                    source_files.add(v)
-        trace.append(f"Graph returned {len(records)} records")
+            for fname in self._extract_files_from_records([rec]):
+                source_files.add(fname)
+        trace.append(f"Graph returned {len(records)} records (bilateral + traversal)")
 
         # Process vector evidence
+        seen_vec_keys = set()
         for hit in chunks + summaries:
             pay = hit.get("payload", {})
             excerpt = pay.get("text", "")[:500]
             file_ref = pay.get("file_name", "")
             score = hit.get("score", 0.0)
+            vkey = (file_ref, excerpt[:120])
+            if vkey in seen_vec_keys:
+                continue
+            seen_vec_keys.add(vkey)
             vector_evidence.append(
                 f"[{file_ref} | score={score:.3f}]\n{excerpt}"
             )
             if file_ref:
                 source_files.add(file_ref)
-        trace.append(f"Vector search returned {len(chunks)} chunks + {len(summaries)} summaries")
+        trace.append(f"Vector search returned {len(chunks)} chunks + {len(summaries)} summaries (retrieval {t_retrieval:.2f}s)")
 
         # ── Step 4: Evidence correlation ──────────────────────────────────────
         if on_progress:
@@ -255,7 +279,7 @@ class InvestigationAgent:
         trace.append(f"Answer synthesised ({t_synth:.2f}s)")
 
         # Also extract any source file names referenced in the synthesized answer text
-        all_ext_files = re.findall(r"[A-Za-z0-9_\-]+\.(?:cbl|cob|cpy|dtsx|sql|xml|py)", answer, re.IGNORECASE)
+        all_ext_files = re.findall(r"\b[A-Za-z0-9_\-]+\.(?:cbl|cob|cpy|dtsx|sql|xml|py)\b", answer, re.IGNORECASE)
         for f in all_ext_files:
             source_files.add(f)
 
@@ -287,9 +311,14 @@ class InvestigationAgent:
     # ── Step implementations ───────────────────────────────────────────────────
 
     def _classify_intent(self, question: str) -> str:
-        """Classifies inquiry intent using fast heuristics first, with LLM fallback."""
+        """Classifies inquiry intent using domain-agnostic linguistic heuristics, with LLM fallback."""
         q_lower = (question or "").lower().strip()
-        if any(w in q_lower for w in ["calculate", "formula", "computation", "how is", "sum", "math", "earned premium", "written premium"]):
+        if any(w in q_lower for w in [
+            "how many", "count", "list all", "all files", "inventory",
+            "consume", "which program", "which file", "who creates", "where is", "find program",
+        ]):
+            return "source_lookup"
+        if any(w in q_lower for w in ["calculate", "formula", "computation", "how is", "sum", "math"]):
             return "calculation"
         if any(w in q_lower for w in ["trace", "data flow", "flow from", "where does", "writes", "reads", "producer", "source of", "feed", "populate", "pipeline"]):
             return "lineage"
@@ -297,13 +326,11 @@ class InvestigationAgent:
             return "impact_analysis"
         if any(w in q_lower for w in ["relate", "connect", "between", "link", "tie", "dependency", "dependencies"]):
             return "relationship"
-        if any(w in q_lower for w in ["consume", "which program", "which file", "who creates", "where is", "find program", "which ssis", "which sql", "which cobol", "packages", "package"]):
-            return "source_lookup"
         if any(w in q_lower for w in ["what is", "define", "meaning", "definition"]):
             return "definition"
         if any(w in q_lower for w in ["differ", "compare", "versus", "vs"]):
             return "comparison"
-        if any(w in q_lower for w in ["business rule", "commercial auto", "rating rule", "valid", "check", "rule", "constraint", "validation", "error code"]):
+        if any(w in q_lower for w in ["business rule", "valid", "check", "rule", "constraint", "validation", "error code"]):
             return "validation"
 
         valid_intents = {
@@ -329,167 +356,418 @@ class InvestigationAgent:
 
         return "semantic"
 
+    def _get_live_schema(self) -> Dict[str, Any]:
+        """Dynamically introspects Neo4j labels, relationship types, and artifact catalog."""
+        if self._live_schema is not None:
+            return self._live_schema
+
+        schema: Dict[str, Any] = {
+            "labels": [],
+            "rel_types": [],
+            "artifacts": [],
+            "source_type_counts": {},
+            "source_types": set(),
+        }
+        try:
+            lbl_rows = self.neo4j.run_query("CALL db.labels() YIELD label RETURN collect(label) AS labels")
+            if lbl_rows:
+                schema["labels"] = lbl_rows[0].get("labels") or []
+            rel_rows = self.neo4j.run_query("CALL db.relationshipTypes() YIELD relationshipType RETURN collect(relationshipType) AS rels")
+            if rel_rows:
+                schema["rel_types"] = rel_rows[0].get("rels") or []
+            art_rows = self.neo4j.run_query(
+                "MATCH (a:Artifact) "
+                "RETURN a.file_name AS file_name, toLower(coalesce(a.source_type, '')) AS source_type, "
+                "coalesce(a.business_domain, '') AS business_domain, a.total_lines AS total_lines, "
+                "coalesce(a.purpose, '') AS purpose "
+                "ORDER BY source_type, file_name"
+            )
+            counts: Dict[str, int] = {}
+            for row in art_rows or []:
+                st = str(row.get("source_type") or "").strip().lower()
+                if st:
+                    counts[st] = counts.get(st, 0) + 1
+                    schema["source_types"].add(st)
+            schema["artifacts"] = art_rows or []
+            schema["source_type_counts"] = counts
+        except Exception as e:
+            logger.debug("Live schema introspection note: %s", e)
+
+        if schema["labels"] or schema["artifacts"]:
+            self._live_schema = schema
+        return schema
+
+    @staticmethod
+    def _extract_query_terms(question: str) -> List[str]:
+        """Extracts meaningful search tokens using only universal grammar stopwords."""
+        grammar_stop = {
+            "what", "when", "where", "which", "who", "whom", "whose", "this", "that",
+            "these", "those", "from", "with", "into", "each", "about", "how", "many",
+            "much", "have", "has", "had", "been", "being", "will", "would", "could",
+            "should", "does", "done", "doing", "the", "are", "was", "were", "for",
+            "and", "but", "not", "why", "can", "all", "any", "our", "your", "show",
+            "tell", "give", "list", "find", "explain", "describe", "there", "here",
+        }
+        raw_words = re.findall(r"[A-Za-z0-9_\-\.]+", (question or "").lower())
+        terms = [w for w in raw_words if len(w) >= 3 and w not in grammar_stop]
+        if not terms:
+            terms = [w for w in raw_words if len(w) >= 2]
+        return list(dict.fromkeys(terms))
+
+    @staticmethod
+    def _extract_files_from_hits(hits: List[Dict[str, Any]]) -> set:
+        """Extracts distinct file names from vector hit payloads."""
+        files = set()
+        for hit in hits:
+            fname = (hit.get("payload") or {}).get("file_name", "")
+            if fname:
+                files.add(str(fname))
+        return files
+
+    @staticmethod
+    def _extract_files_from_records(records: List[Dict[str, Any]]) -> set:
+        """Extracts distinct artifact/source filenames from arbitrary Neo4j records."""
+        files = set()
+        file_pattern = re.compile(r"\b[A-Za-z0-9_\-]+\.[A-Za-z0-9]{1,6}\b")
+        for rec in records:
+            for k, v in rec.items():
+                if isinstance(v, str):
+                    if k in ("file", "file_name", "source_file", "target_file") and v.strip():
+                        files.add(v.strip())
+                    else:
+                        for m in file_pattern.findall(v):
+                            files.add(m)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, str):
+                            for m in file_pattern.findall(item):
+                                files.add(m)
+        return files
+
+    @staticmethod
+    def _merge_unique_hits(primary: List[Dict[str, Any]], extra: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Merges vector hit lists while preserving order and deduplicating by id/excerpt."""
+        merged = list(primary)
+        seen = set()
+        for h in primary:
+            pay = h.get("payload") or {}
+            seen.add((h.get("id"), pay.get("file_name"), str(pay.get("text", ""))[:80]))
+        for h in extra:
+            pay = h.get("payload") or {}
+            key = (h.get("id"), pay.get("file_name"), str(pay.get("text", ""))[:80])
+            if key not in seen:
+                seen.add(key)
+                merged.append(h)
+        return merged
+
+    def _retrieve_artifact_inventory(
+        self,
+        question: str,
+        terms: List[str],
+        intent: str,
+    ) -> List[Dict[str, Any]]:
+        """Dynamically queries Neo4j :Artifact catalog when inquiry touches files, counts, or live source types."""
+        schema = self._get_live_schema()
+        artifacts = schema.get("artifacts") or []
+        if not artifacts:
+            return []
+
+        q_low = (question or "").lower()
+        live_source_types = schema.get("source_types") or set()
+        inventory_cues = {"how many", "count", "list", "all ", "files", "artifacts", "programs", "packages", "scripts", "inventory"}
+        asks_inventory = intent == "source_lookup" or any(cue in q_low for cue in inventory_cues)
+        matched_types = {st for st in live_source_types if st in q_low or any(st in t for t in terms)}
+        matched_files = [
+            a for a in artifacts
+            if any(
+                t in (a.get("file_name") or "").lower()
+                or t in (a.get("business_domain") or "").lower()
+                for t in terms
+            )
+        ]
+
+        if not (asks_inventory or matched_types or matched_files):
+            return []
+
+        results: List[Dict[str, Any]] = []
+        if matched_types:
+            filtered = [a for a in artifacts if a.get("source_type") in matched_types]
+        elif matched_files:
+            filtered = matched_files
+        else:
+            filtered = artifacts
+
+        files_by_type: Dict[str, List[str]] = {}
+        for a in artifacts:
+            st = a.get("source_type") or "unknown"
+            files_by_type.setdefault(st, []).append(a.get("file_name", ""))
+
+        results.append({
+            "node_type": "ArtifactInventorySummary",
+            "total_artifacts_in_neo4j": len(artifacts),
+            "counts_by_source_type": schema.get("source_type_counts", {}),
+            "files_by_source_type": files_by_type,
+        })
+        for a in filtered[:25]:
+            results.append({
+                "node_type": "Artifact",
+                "file": a.get("file_name"),
+                "source_type": a.get("source_type"),
+                "business_domain": a.get("business_domain"),
+                "total_lines": a.get("total_lines"),
+                "purpose": a.get("purpose"),
+            })
+        return results
+
+    def _traverse_bidirectional(
+        self,
+        anchor_names: List[str],
+        anchor_files: List[str],
+    ) -> List[Dict[str, Any]]:
+        """
+        Executes multi-hop bidirectional Neo4j traversal (*1..2 upstream and downstream)
+        starting from discovered entity anchors and vector-seeded files.
+        """
+        traversed: List[Dict[str, Any]] = []
+        seen_paths = set()
+        clean_anchors = [a.lower() for a in anchor_names if a and len(a) >= 2][:10]
+
+        schema = self._get_live_schema()
+        artifacts = schema.get("artifacts") or []
+        stem_to_artifact = {
+            (a.get("file_name") or "").rsplit(".", 1)[0].lower(): a.get("file_name")
+            for a in artifacts
+            if a.get("file_name")
+        }
+
+        normalized_files = []
+        for f in anchor_files:
+            if not f:
+                continue
+            fl = f.lower()
+            if fl.endswith("_summary.md"):
+                stem = fl[:-len("_summary.md")]
+                mapped = stem_to_artifact.get(stem)
+                if mapped and mapped not in normalized_files:
+                    normalized_files.append(mapped)
+            elif f not in normalized_files:
+                normalized_files.append(f)
+        clean_files = normalized_files[:8]
+
+        excluded_leaf_rels = {
+            "CONTAINS", "CONTAINS_STATEMENT", "CONTAINS_BRANCH", "CONTAINS_LOOP",
+            "HAS_FIELD", "HAS_RECORD", "HAS_STORAGE", "DECLARES_FILE",
+        }
+        live_rels = [
+            r for r in (schema.get("rel_types") or [])
+            if r not in excluded_leaf_rels and re.match(r"^[A-Za-z0-9_]+$", r)
+        ]
+        rel_filter = "|".join(live_rels)
+
+        # 1. Multi-hop upstream & downstream traversal from anchor entities/blocks
+        if clean_anchors and rel_filter:
+            for direction, cypher in [
+                (
+                    "UPSTREAM",
+                    f"MATCH path = (src)-[:{rel_filter}*1..2]->(anchor) "
+                    "WHERE toLower(coalesce(anchor.name, anchor.id, '')) IN $anchors "
+                    "RETURN [n IN nodes(path) | coalesce(n.name, n.file_name, n.id) + coalesce(' [' + n.source_file + ']', '')] AS nodes, "
+                    "[r IN relationships(path) | type(r)] AS rels, "
+                    "[n IN nodes(path) | coalesce(n.source_file, n.file_name, '')] AS files "
+                    "LIMIT 12",
+                ),
+                (
+                    "DOWNSTREAM",
+                    f"MATCH path = (anchor)-[:{rel_filter}*1..2]->(tgt) "
+                    "WHERE toLower(coalesce(anchor.name, anchor.id, '')) IN $anchors "
+                    "RETURN [n IN nodes(path) | coalesce(n.name, n.file_name, n.id) + coalesce(' [' + n.source_file + ']', '')] AS nodes, "
+                    "[r IN relationships(path) | type(r)] AS rels, "
+                    "[n IN nodes(path) | coalesce(n.source_file, n.file_name, '')] AS files "
+                    "LIMIT 12",
+                ),
+            ]:
+                try:
+                    for row in self.neo4j.run_query(cypher, {"anchors": clean_anchors}):
+                        p_nodes = row.get("nodes") or []
+                        p_rels = row.get("rels") or []
+                        if len(p_nodes) < 2:
+                            continue
+                        parts = [p_nodes[0]]
+                        for idx, r_type in enumerate(p_rels):
+                            if idx + 1 < len(p_nodes):
+                                parts.append(f"-[:{r_type}]-> {p_nodes[idx + 1]}")
+                        path_str = " ".join(parts)
+                        if path_str not in seen_paths:
+                            seen_paths.add(path_str)
+                            traversed.append({
+                                "node_type": f"TraversalPath_{direction}",
+                                "path": path_str,
+                                "files": [f for f in (row.get("files") or []) if f],
+                            })
+                except Exception as e:
+                    logger.debug("Bidirectional %s traversal note: %s", direction, e)
+
+        # 2. Vector -> Graph bilateral file expansion (pull rules, transformations & cross-file edges)
+        if clean_files:
+            q_file_ctx = (
+                "MATCH (a:Artifact)-[r:HAS_RULE|HAS_TRANSFORMATION]->(n) "
+                "WHERE a.file_name IN $files "
+                "RETURN labels(n)[0] AS node_type, a.file_name AS file, "
+                "coalesce(n.rule_id, '') AS rule_id, coalesce(n.expression, '') AS expression, "
+                "coalesce(n.description, '') AS description "
+                "LIMIT 15"
+            )
+            try:
+                for row in self.neo4j.run_query(q_file_ctx, {"files": clean_files}):
+                    key = (row.get("node_type"), row.get("file"), row.get("rule_id"), row.get("description"))
+                    if key not in seen_paths:
+                        seen_paths.add(key)
+                        traversed.append(row)
+            except Exception as e:
+                logger.debug("Bilateral file context note: %s", e)
+
+        return traversed
+
+    def _run_schema_aware_cypher(self, question: str) -> Tuple[str, List[Dict[str, Any]]]:
+        """Generates Cypher using live Neo4j schema, with automatic CYPHER_REPAIR_PROMPT retry."""
+        schema = self._get_live_schema()
+        schema_note = (
+            f"\nLIVE DATABASE VALUES:\n"
+            f"- Node labels: {schema.get('labels')}\n"
+            f"- Relationship types: {schema.get('rel_types')}\n"
+            f"- Distinct lowercase Artifact.source_type values: {sorted(schema.get('source_types', []))}\n"
+            f"- Note: Properties like source_type are stored lowercase (use toLower(...)).\n"
+        )
+        sys_prompt = (
+            "You are a Neo4j Cypher expert. Output ONLY a valid Cypher query executable in Neo4j. "
+            "Do NOT write any introduction, thinking, explanation, or markdown fences. Just the raw Cypher query."
+        )
+        prompt = CYPHER_GENERATION_PROMPT.format(question=question) + schema_note
+        raw_cypher = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.0, max_tokens=1000).strip()
+        clean_cypher = _clean_cypher_query(raw_cypher)
+        if not clean_cypher or ("MATCH" not in clean_cypher.upper() and "RETURN" not in clean_cypher.upper()):
+            return "", []
+
+        try:
+            return clean_cypher, self.neo4j.run_query(clean_cypher)
+        except Exception as first_err:
+            logger.debug("Generated Cypher failed (%s), invoking repair prompt...", first_err)
+            try:
+                repair_prompt = CYPHER_REPAIR_PROMPT.format(cypher=clean_cypher, error=str(first_err))
+                repaired_raw = self.llm.complete(repair_prompt, system_prompt=sys_prompt, temperature=0.0, max_tokens=800).strip()
+                repaired_cypher = _clean_cypher_query(repaired_raw)
+                if repaired_cypher:
+                    return repaired_cypher, self.neo4j.run_query(repaired_cypher)
+            except Exception as repair_err:
+                logger.debug("Cypher repair note: %s", repair_err)
+        return clean_cypher, []
+
     def _graph_retrieve(
-        self, question: str
+        self,
+        question: str,
+        vector_seed_files: Optional[set] = None,
+        intent: Optional[str] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         """
-        Retrieves graph evidence from Neo4j using high-speed multi-label graph
-        extraction with intelligent Cypher generation fallback.
+        Retrieves graph evidence dynamically from Neo4j using:
+          1. Live schema & :Artifact inventory lookup
+          2. Multi-label anchor matching (question terms + vector-seeded files)
+          3. Bidirectional multi-hop (*1..2) upstream & downstream traversal
+          4. Schema-aware LLM Cypher + CYPHER_REPAIR fallback if seeds are sparse
         """
         records: List[Dict[str, Any]] = []
         cypher = ""
         seen = set()
 
-        meta_stop_words = {
-            "what", "when", "where", "which", "who", "whom", "this", "that", "these", "those",
-            "from", "with", "into", "each", "show", "tell", "explain", "trace", "does", "done",
-            "will", "have", "been", "about", "how", "is", "the", "are", "for", "and", "why",
-            "key", "tables", "table", "business", "rules", "rule", "calculation", "calculate",
-            "system", "code", "file", "files", "find", "give", "list", "query", "check",
-            "data", "flow", "report", "reporting", "column", "columns", "field", "fields",
-            "program", "programs", "package", "packages", "model", "models", "between",
-            "versus", "output", "apply", "used", "uses", "using", "work", "works"
-        }
-        raw_words = re.findall(r"[A-Za-z0-9_\-]+", question.lower())
-        domain_terms = [w for w in raw_words if len(w) >= 3 and w not in meta_stop_words]
+        def _add_record(row: Dict[str, Any], key: Any) -> None:
+            if key not in seen:
+                seen.add(key)
+                records.append(row)
 
-        if not domain_terms:
-            basic_stop = {"what", "where", "which", "how", "is", "the", "are", "for", "and", "why", "from", "with"}
-            domain_terms = [w for w in raw_words if len(w) >= 3 and w not in basic_stop]
+        unique_terms = self._extract_query_terms(question)
 
-        # Identify key domain phrases
-        phrases = []
-        q_low = question.lower()
-        for phrase in [
-            "written premium",
-            "earned premium",
-            "policycenter",
-            "commercial auto",
-            "loss ratio",
-            "rating rule",
-            "data flow",
-            "guidewire",
-        ]:
-            if phrase in q_low:
-                phrases.append(phrase)
+        # 1. Dynamic :Artifact inventory / metadata match
+        inv_rows = self._retrieve_artifact_inventory(question, unique_terms, intent or "")
+        for row in inv_rows:
+            _add_record(row, ("inv", row.get("node_type"), row.get("file")))
 
-        search_terms = phrases + domain_terms
-        unique_terms = list(dict.fromkeys(search_terms))
+        # 2. Multi-label Neo4j anchor search using dynamic query tokens
+        anchor_names: List[str] = []
+        anchor_files: List[str] = sorted(vector_seed_files) if vector_seed_files else []
 
-        # Strategy 1: High-Speed Multi-Label Neo4j Extraction (Sub-second)
-        for t in unique_terms[:8]:
-            # 1a. Business Rules
-            q_rules = (
-                "MATCH (r:BusinessRule) "
-                "WHERE toLower(r.description) CONTAINS toLower($term) "
-                "RETURN labels(r)[0] AS node_type, r.source_file AS file, r.description AS rule "
-                "LIMIT 10"
+        # Strip generic inventory tokens only for entity/rule name matching
+        entity_terms = [t for t in unique_terms if t not in {"file", "files", "program", "programs", "package", "packages", "script", "scripts"}]
+        for t in entity_terms[:6]:
+            queries = [
+                (
+                    "rule",
+                    "MATCH (r:BusinessRule) WHERE toLower(r.description) CONTAINS toLower($term) "
+                    "RETURN labels(r)[0] AS node_type, r.source_file AS file, r.description AS rule LIMIT 8",
+                ),
+                (
+                    "trans",
+                    "MATCH (t_node:Transformation) "
+                    "WHERE toLower(t_node.description) CONTAINS toLower($term) OR toLower(t_node.expression) CONTAINS toLower($term) OR toLower(t_node.rule_id) CONTAINS toLower($term) "
+                    "RETURN labels(t_node)[0] AS node_type, t_node.source_file AS file, t_node.rule_id AS rule_id, t_node.rule_type AS rule_type, t_node.expression AS expression, t_node.description AS detail LIMIT 8",
+                ),
+                (
+                    "ent",
+                    "MATCH (e:Entity) WHERE toLower(e.name) CONTAINS toLower($term) "
+                    "RETURN labels(e)[0] AS node_type, e.source_file AS file, e.name AS name, e.entity_type AS entity_type LIMIT 8",
+                ),
+                (
+                    "stmt",
+                    "MATCH (b:CodeBlock)-[:CONTAINS_STATEMENT]->(s:Statement) WHERE toLower(s.expression) CONTAINS toLower($term) "
+                    "RETURN 'Statement' AS node_type, s.source_file AS file, b.name AS paragraph, s.statement_type AS stmt_type, s.expression AS expression, s.start_line AS start_line LIMIT 6",
+                ),
+            ]
+            for kind, q_str in queries:
+                try:
+                    for row in self.neo4j.run_query(q_str, {"term": t}):
+                        key = (kind, row.get("file"), row.get("rule") or row.get("rule_id") or row.get("name") or row.get("expression"))
+                        _add_record(row, key)
+                        if row.get("name"):
+                            anchor_names.append(str(row["name"]))
+                        if row.get("paragraph"):
+                            anchor_names.append(str(row["paragraph"]))
+                        if row.get("file") and row["file"] not in anchor_files:
+                            anchor_files.append(str(row["file"]))
+                except Exception:
+                    pass
+
+        # 3. Bidirectional *1..2 traversal from discovered entity anchors + vector-seeded files
+        if anchor_names or anchor_files:
+            trav_rows = self._traverse_bidirectional(
+                anchor_names=list(dict.fromkeys(anchor_names)),
+                anchor_files=anchor_files,
             )
-            try:
-                for row in self.neo4j.run_query(q_rules, {"term": t}):
-                    k = ("rule", row.get("file"), row.get("rule"))
-                    if k not in seen:
-                        seen.add(k)
-                        records.append(row)
-            except Exception:
-                pass
-
-            # 1b. Transformations
-            q_trans = (
-                "MATCH (t_node:Transformation) "
-                "WHERE toLower(t_node.description) CONTAINS toLower($term) OR toLower(t_node.expression) CONTAINS toLower($term) OR toLower(t_node.rule_id) CONTAINS toLower($term) "
-                "RETURN labels(t_node)[0] AS node_type, t_node.source_file AS file, t_node.rule_id AS rule_id, t_node.rule_type AS rule_type, t_node.expression AS expression, t_node.description AS detail "
-                "LIMIT 10"
-            )
-            try:
-                for row in self.neo4j.run_query(q_trans, {"term": t}):
-                    k = ("trans", row.get("file"), row.get("rule_id"), row.get("expression"))
-                    if k not in seen:
-                        seen.add(k)
-                        records.append(row)
-            except Exception:
-                pass
-
-            # 1c. Entities (Tables, Columns, Programs, Variables, Records)
-            q_ent = (
-                "MATCH (e:Entity) "
-                "WHERE toLower(e.name) CONTAINS toLower($term) "
-                "RETURN labels(e)[0] AS node_type, e.source_file AS file, e.name AS name, e.entity_type AS entity_type "
-                "LIMIT 10"
-            )
-            try:
-                for row in self.neo4j.run_query(q_ent, {"term": t}):
-                    k = ("ent", row.get("file"), row.get("name"))
-                    if k not in seen:
-                        seen.add(k)
-                        records.append(row)
-            except Exception:
-                pass
-
-            # 1d. AST Statements (COMPUTE, READ, WRITE with parent paragraph)
-            q_stmt = (
-                "MATCH (b:CodeBlock)-[:CONTAINS_STATEMENT]->(s:Statement) "
-                "WHERE toLower(s.expression) CONTAINS toLower($term) "
-                "RETURN 'Statement' AS node_type, s.source_file AS file, b.name AS paragraph, s.statement_type AS stmt_type, s.expression AS expression, s.start_line AS start_line "
-                "LIMIT 10"
-            )
-            try:
-                for row in self.neo4j.run_query(q_stmt, {"term": t}):
-                    k = ("stmt", row.get("file"), row.get("paragraph"), row.get("expression"))
-                    if k not in seen:
-                        seen.add(k)
-                        records.append(row)
-            except Exception:
-                pass
-
-            # 1e. Connected Lineage Relationships
-            q_rel = (
-                "MATCH (src:Entity)-[r]->(tgt:Entity) "
-                "WHERE toLower(src.name) CONTAINS toLower($term) OR toLower(tgt.name) CONTAINS toLower($term) "
-                "RETURN type(r) AS relationship, src.name AS source, tgt.name AS target, r.source_file AS file "
-                "LIMIT 10"
-            )
-            try:
-                for row in self.neo4j.run_query(q_rel, {"term": t}):
-                    k = ("rel", row.get("source"), row.get("relationship"), row.get("target"))
-                    if k not in seen:
-                        seen.add(k)
-                        records.append(row)
-            except Exception:
-                pass
+            for row in trav_rows:
+                key = ("trav", row.get("node_type"), row.get("path") or row.get("rule_id") or row.get("description"))
+                _add_record(row, key)
 
         if records:
-            cypher = f"MATCH (n) WHERE toLower(n.name/description) CONTAINS '{unique_terms[0] if unique_terms else 'term'}' RETURN n LIMIT {len(records)}"
+            cypher = f"Dynamic Bilateral + Bidirectional Neo4j Traversal (terms={entity_terms[:4]}, seed_files={anchor_files[:4]})"
 
-        # Strategy 2: If deterministic search found no records, fallback to LLM Cypher generation
+        # 4. Schema-aware LLM Cypher fallback if deterministic + traversal retrieval is sparse
         if len(records) < 3:
-            sys_prompt = (
-                "You are a Neo4j Cypher expert. Output ONLY a valid Cypher query executable in Neo4j. "
-                "Do NOT write any introduction, thinking, explanation, or markdown fences. Just the raw Cypher query."
-            )
             try:
-                prompt = CYPHER_GENERATION_PROMPT.format(question=question)
-                raw_cypher = self.llm.complete(prompt, system_prompt=sys_prompt, temperature=0.0, max_tokens=1000).strip()
-                clean_cypher = _clean_cypher_query(raw_cypher)
-                if clean_cypher and ("MATCH" in clean_cypher.upper() or "RETURN" in clean_cypher.upper()):
-                    cypher = clean_cypher
-                    llm_records = self.neo4j.run_query(cypher)
-                    for r in llm_records:
-                        k = tuple(sorted(str(v) for v in r.values()))
-                        if k not in seen:
-                            seen.add(k)
-                            records.append(r)
+                gen_cypher, llm_records = self._run_schema_aware_cypher(question)
+                if gen_cypher:
+                    cypher = gen_cypher
+                for r in llm_records:
+                    _add_record(r, tuple(sorted((str(k), str(v)) for k, v in r.items())))
             except Exception as e:
-                logger.debug("LLM Cypher generation note: %s", e)
+                logger.debug("LLM Cypher fallback note: %s", e)
 
-        return cypher, records[: self.max_graph_results]
+        cap = max(self.max_graph_results, 30)
+        return cypher, records[:cap]
 
-    def _vector_retrieve(
+    def _vector_retrieve_with_vec(
         self, question: str
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Embed question and search Pinecone namespaces."""
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[List[float]]]:
+        """Embeds question once and returns Pinecone hits along with the query vector."""
         if not self.vector_client:
-            return [], []
+            return [], [], None
         query_vec = self.embedder.embed_one(question)
         try:
             chunks = self.vector_client.search(
@@ -503,7 +781,58 @@ class InvestigationAgent:
             )
         except Exception:
             summaries = []
+        return chunks, summaries, query_vec
+
+    def _vector_retrieve(
+        self, question: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Embed question and search Pinecone namespaces."""
+        chunks, summaries, _ = self._vector_retrieve_with_vec(question)
         return chunks, summaries
+
+    def _bilateral_vector_expand(
+        self,
+        query_vec: List[float],
+        discovered_files: set,
+        existing_files: set,
+        max_extra_files: int = 4,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Bilateral Graph → Vector expansion: fetches summaries and top chunks for files
+        discovered during Neo4j graph traversal that were missed by initial vector top_k.
+        """
+        if not self.vector_client or not query_vec:
+            return [], []
+
+        extra_chunks: List[Dict[str, Any]] = []
+        extra_summaries: List[Dict[str, Any]] = []
+        missing_files = sorted(f for f in discovered_files if f and f not in existing_files)
+
+        for fname in missing_files[:max_extra_files]:
+            stem = fname.rsplit(".", 1)[0] if "." in fname else fname
+            summary_filter_candidates = [f"{stem}_summary.md", fname]
+            for s_name in summary_filter_candidates:
+                try:
+                    hits = self.vector_client.search(
+                        COLLECTION_SUMMARIES, query_vec, top_k=1, filter_file=s_name
+                    )
+                    if hits:
+                        extra_summaries.extend(hits)
+                        break
+                except TypeError:
+                    break
+                except Exception:
+                    pass
+            try:
+                c_hits = self.vector_client.search(
+                    COLLECTION_CHUNKS, query_vec, top_k=1, filter_file=fname
+                )
+                if c_hits:
+                    extra_chunks.extend(c_hits)
+            except (TypeError, Exception):
+                pass
+
+        return extra_chunks, extra_summaries
 
     def _get_local_fallback_evidence(self, question: str) -> List[str]:
         """Fallback to retrieve context from local summaries and knowledge packages."""
@@ -535,10 +864,10 @@ class InvestigationAgent:
                 vector_evidence.extend(fallback_docs)
 
         graph_text = (
-            "\n".join(graph_evidence[:15]) if graph_evidence else "No graph evidence found."
+            "\n".join(graph_evidence[:30]) if graph_evidence else "No graph evidence found."
         )
         vector_text = (
-            "\n\n---\n\n".join(vector_evidence[:8])
+            "\n\n---\n\n".join(vector_evidence[:12])
             if vector_evidence
             else "No semantic evidence found."
         )
